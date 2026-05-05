@@ -224,7 +224,7 @@ mod tests {
     async fn test_sampling_client_request_response() {
         let (tx, mut rx) = mpsc::channel::<OutgoingRequest>(10);
         let client = SamplingClient::with_sender(5, tx.clone());
-        let pending = client.pending_requests();
+        let _pending = client.pending_requests();
 
         let handle = tokio::spawn(async move {
             let client = SamplingClient::new(5);

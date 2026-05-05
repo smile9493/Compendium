@@ -568,11 +568,11 @@ mod tests {
 title: "Entry A"
 domain: "IT"
 tags: ["rust", "systems"]
-level: L1
+level: l1
 status: compiled
 created: 2026-01-01T00:00:00Z
 updated: 2026-01-01T00:00:00Z
-related: ["wiki/it/[IT] Entry_B.md"]
+related: ["it/[IT] Entry_B.md"]
 ---
 
 Body A"#;
@@ -580,11 +580,11 @@ Body A"#;
 title: "Entry B"
 domain: "IT"
 tags: ["rust", "async"]
-level: L1
+level: l1
 status: compiled
 created: 2026-01-01T00:00:00Z
 updated: 2026-01-01T00:00:00Z
-related: ["wiki/it/[IT] Entry_A.md"]
+related: ["it/[IT] Entry_A.md"]
 ---
 
 Body B"#;

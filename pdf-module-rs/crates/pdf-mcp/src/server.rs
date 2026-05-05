@@ -15,21 +15,30 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 #[derive(Debug, Default)]
-#[allow(dead_code)]
 pub struct ToolMetric {
     pub calls: AtomicU64,
     pub latency_ms: AtomicU64,
     pub errors: AtomicU64,
 }
 
-#[allow(dead_code)]
 impl ToolMetric {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        let calls = self.calls.load(Ordering::Relaxed);
+        let latency = self.latency_ms.load(Ordering::Relaxed);
+        let errors = self.errors.load(Ordering::Relaxed);
+        serde_json::json!({
+            "calls": calls,
+            "latency_ms": latency,
+            "errors": errors,
+            "avg_latency_ms": if calls > 0 { latency / calls } else { 0 }
+        })
+    }
 }
 
-#[allow(dead_code)]
 pub struct ToolStats {
     pub total_calls: AtomicU64,
     pub total_latency_ms: AtomicU64,
@@ -39,7 +48,6 @@ pub struct ToolStats {
     metrics: HashMap<&'static str, ToolMetric>,
 }
 
-#[allow(dead_code)]
 impl ToolStats {
     pub fn new() -> Self {
         let metrics = HashMap::from([
@@ -102,29 +110,39 @@ impl ToolStats {
         }
     }
 
-    pub fn total_calls(&self) -> u64 {
-        self.total_calls.load(Ordering::Relaxed)
+    pub fn uptime_secs(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("System time is before UNIX epoch")
+            .as_secs()
+            - self.start_time
     }
 
-    pub fn avg_latency(&self) -> u64 {
+    pub fn to_json(&self) -> serde_json::Value {
         let total = self.total_calls.load(Ordering::Relaxed);
-        if total == 0 {
-            return 0;
-        }
-        self.total_latency_ms.load(Ordering::Relaxed) / total
-    }
-
-    pub fn success_rate(&self) -> f64 {
-        let total = self.total_calls.load(Ordering::Relaxed);
-        if total == 0 {
-            return 100.0;
-        }
         let errors = self.total_errors.load(Ordering::Relaxed);
-        ((total - errors) as f64 / total as f64) * 100.0
-    }
+        let latency = self.total_latency_ms.load(Ordering::Relaxed);
 
-    pub fn get_metric(&self, tool: &str) -> Option<&ToolMetric> {
-        self.metrics.get(tool)
+        let tools_json: serde_json::Map<String, serde_json::Value> = self
+            .metrics
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), v.to_json()))
+            .collect();
+
+        serde_json::json!({
+            "uptime_secs": self.uptime_secs(),
+            "total_calls": total,
+            "total_errors": errors,
+            "total_latency_ms": latency,
+            "avg_latency_ms": if total > 0 { latency / total } else { 0 },
+            "success_rate_pct": if total > 0 {
+                ((total - errors) as f64 / total as f64 * 100.0).round()
+            } else {
+                100.0
+            },
+            "files_processed": self.files_processed.load(Ordering::Relaxed),
+            "tools": tools_json
+        })
     }
 }
 
@@ -138,6 +156,7 @@ impl Default for ToolStats {
 pub async fn run_stdio(pipeline: Arc<McpPdfPipeline>) -> anyhow::Result<()> {
     info!("MCP server listening on stdio");
 
+    let stats = Arc::new(ToolStats::new());
     let shutdown_token = CancellationToken::new();
     let shutdown_token_clone = shutdown_token.clone();
 
@@ -233,7 +252,7 @@ pub async fn run_stdio(pipeline: Arc<McpPdfPipeline>) -> anyhow::Result<()> {
                     }
                 };
 
-                let response = handle_request(&ctx, request).await;
+                let response = handle_request(&ctx, &stats, request).await;
                 if let Some(resp) = response {
                     info!("Sending response for id={:?}", resp.id);
                     write_response(&mut stdout_lock, &resp)?;
@@ -272,9 +291,10 @@ fn write_response(
     Ok(())
 }
 
-#[tracing::instrument(skip(ctx, request), fields(method = %request.method))]
+#[tracing::instrument(skip(ctx, stats, request), fields(method = %request.method))]
 pub async fn handle_request(
     ctx: &tools::ToolContext,
+    stats: &Arc<ToolStats>,
     request: JsonRpcRequest,
 ) -> Option<JsonRpcResponse> {
     if request.method.starts_with("notifications/") {
@@ -282,9 +302,9 @@ pub async fn handle_request(
     }
 
     let response = match request.method.as_str() {
-        "initialize" => handle_initialize(&request),
+        "initialize" => handle_initialize(stats, &request),
         "tools/list" => handle_tools_list(&request),
-        "tools/call" => handle_tools_call(ctx, &request).await,
+        "tools/call" => handle_tools_call(ctx, stats, &request).await,
         "resources/list" => tools::handle_resources_list(&request),
         "resources/read" => tools::handle_resources_read(&request),
         _ => JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(&request.method)),
@@ -292,7 +312,8 @@ pub async fn handle_request(
     Some(response)
 }
 
-fn handle_initialize(request: &JsonRpcRequest) -> JsonRpcResponse {
+fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRpcResponse {
+    let stats_json = stats.to_json();
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "serverInfo": {
@@ -308,7 +329,8 @@ fn handle_initialize(request: &JsonRpcRequest) -> JsonRpcResponse {
                 "messageTypes": ["text", "image"]
             }
         },
-        "instructions": "Knowledge engine with 25 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, incremental_compile, recompile_entry, aggregate_entries, check_quality. Indexing: search_knowledge, rebuild_index, get_entry_context, find_orphans, suggest_links, export_concept_map. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status."
+        "instructions": "Knowledge engine with 25 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, incremental_compile, recompile_entry, aggregate_entries, check_quality. Indexing: search_knowledge, rebuild_index, get_entry_context, find_orphans, suggest_links, export_concept_map. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status.",
+        "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)
 }
@@ -318,9 +340,10 @@ fn handle_tools_list(request: &JsonRpcRequest) -> JsonRpcResponse {
     JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "tools": tools }))
 }
 
-#[tracing::instrument(skip(ctx, request), fields(tool = ?request.params.get("name")))]
+#[tracing::instrument(skip(ctx, stats, request), fields(tool = ?request.params.get("name")))]
 async fn handle_tools_call(
     ctx: &tools::ToolContext,
+    stats: &Arc<ToolStats>,
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
     let params = &request.params;
@@ -340,16 +363,24 @@ async fn handle_tools_call(
         .cloned()
         .unwrap_or(serde_json::json!({}));
 
+    let start = std::time::Instant::now();
     let result = tools::dispatch_tool(ctx, tool_name, &arguments).await;
+    let latency_ms = start.elapsed().as_millis() as u64;
 
     match result {
-        Ok(content) => JsonRpcResponse::success(
-            request.id.clone(),
-            serde_json::json!({ "content": content }),
-        ),
-        Err(e) => JsonRpcResponse::error(
-            request.id.clone(),
-            JsonRpcError::internal_error(&e.to_string()),
-        ),
+        Ok(content) => {
+            stats.record_success(tool_name, latency_ms);
+            JsonRpcResponse::success(
+                request.id.clone(),
+                serde_json::json!({ "content": content }),
+            )
+        }
+        Err(e) => {
+            stats.record_error(tool_name);
+            JsonRpcResponse::error(
+                request.id.clone(),
+                JsonRpcError::internal_error(&e.to_string()),
+            )
+        }
     }
 }

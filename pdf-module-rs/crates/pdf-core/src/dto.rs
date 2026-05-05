@@ -21,6 +21,32 @@ pub struct LineInfo {
     pub text: String,
 }
 
+/// Bounding box for text region
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BoundingBox {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Text region with type and bounding box
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextRegion {
+    pub region_type: String,
+    pub bbox: BoundingBox,
+    pub text: String,
+}
+
+/// Page data with text and optional regions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageData {
+    pub page_number: u32,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regions: Option<Vec<TextRegion>>,
+}
+
 /// Page metadata with text and layout information
 /// Corresponds to Python: PageMetadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +56,8 @@ pub struct PageMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bbox: Option<(f64, f64, f64, f64)>,
     pub lines: Vec<LineInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regions: Option<Vec<TextRegion>>,
 }
 
 /// Text extraction result
@@ -39,6 +67,8 @@ pub struct TextExtractionResult {
     pub extracted_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extraction_metadata: Option<TextExtractionMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// File information
@@ -74,6 +104,8 @@ pub struct StructuredExtractionResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extraction_metadata: Option<TextExtractionMetadata>,
     pub file_info: FileInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Keyword match information
@@ -440,6 +472,7 @@ mod tests {
         let result = TextExtractionResult {
             extracted_text: "Hello World".to_string(),
             extraction_metadata: None,
+            metadata: None,
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("Hello World"));
@@ -456,6 +489,7 @@ mod tests {
                 text: "Test".to_string(),
                 bbox: Some((0.0, 0.0, 100.0, 100.0)),
                 lines: vec![],
+                regions: None,
             }],
             extraction_metadata: None,
             file_info: FileInfo {
@@ -463,6 +497,7 @@ mod tests {
                 file_size: 1024,
                 file_size_mb: 0.0,
             },
+            metadata: None,
         };
         let json = serde_json::to_string(&result).unwrap();
         let parsed: StructuredExtractionResult = serde_json::from_str(&json).unwrap();

@@ -46,11 +46,11 @@ pub struct CacheEntry {
     pub last_compiled: String,
     /// SHA-256 of the compilation instructions (e.g., `schema/CLAUDE.md`).
     /// When this changes, entries may need recompilation even if source PDF is unchanged.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub instruction_hash: Option<String>,
     /// Identifier of the AI model used for compilation (e.g., "claude-sonnet-4").
     /// Tracks provenance for quality drift detection.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub model_id: Option<String>,
 }
 

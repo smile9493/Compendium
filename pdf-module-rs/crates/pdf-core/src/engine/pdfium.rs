@@ -64,6 +64,7 @@ impl PdfiumEngine {
             pages: parts.pages,
             extraction_metadata: None,
             file_info,
+            metadata: None,
         })
     }
 
@@ -117,6 +118,7 @@ impl PdfiumEngine {
                     text: text_str.trim().to_string(),
                     bbox: Some((0.0, 0.0, width, height)),
                     lines: vec![],
+                    regions: None,
                 });
                 all_text.push_str(&text_str);
                 all_text.push('\n');
@@ -172,6 +174,7 @@ impl PdfEngine for PdfiumEngine {
         Ok(TextExtractionResult {
             extracted_text: text,
             extraction_metadata: None,
+            metadata: None,
         })
     }
 
@@ -189,6 +192,7 @@ impl PdfEngine for PdfiumEngine {
             pages: parts.pages,
             extraction_metadata: None,
             file_info,
+            metadata: None,
         })
     }
 

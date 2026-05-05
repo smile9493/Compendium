@@ -346,6 +346,7 @@ mod tests {
             text: String::new(),
             bbox: Some((0.0, 0.0, 612.0, 792.0)),
             lines: vec![],
+            regions: None,
         };
         assert_eq!(pipeline.estimate_layout_confidence(&page), 0.0);
 
@@ -359,6 +360,7 @@ mod tests {
                     text: format!("line {i}"),
                 })
                 .collect(),
+            regions: None,
         };
         assert!(pipeline.estimate_layout_confidence(&page) > 0.8);
     }
