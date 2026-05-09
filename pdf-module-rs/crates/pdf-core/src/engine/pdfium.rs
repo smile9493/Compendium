@@ -28,9 +28,10 @@ static PDFIUM: LazyLock<Option<Arc<pdfium_render::prelude::Pdfium>>> = LazyLock:
             }
         }
     }
-    pdfium_render::prelude::Pdfium::bind_to_system_library()
-        .ok()
-        .map(|b| Arc::new(pdfium_render::prelude::Pdfium::new(b)))
+        // Reload the pdfium binary using the system library path
+        pdfium_render::prelude::Pdfium::bind_to_system_library()
+            .ok()
+            .map(|b| Arc::new(pdfium_render::prelude::Pdfium::new(b)))
 });
 
 impl PdfiumEngine {
@@ -78,6 +79,15 @@ impl PdfiumEngine {
 
         let pdfium = Self::get_pdfium()?;
 
+        // SAFETY: AssertUnwindSafe is used here because Pdfium FFI calls may panic.
+        // If Pdfium's internal C++ state is corrupted by a panic, subsequent calls
+        // through the same Arc<Pdfium> would be unsound (use-after-free or double-free
+        // on Pdfium's internal structures). This is an accepted trade-off:
+        // - Pdfium panics are rare in practice (mostly OOM or invalid document data)
+        // - The PdfiumEngine is stateless - no in-process state survives a panic
+        // - On panic, the error propagates up and the calling task/cxn resets
+        // - If Pdfium process-level state is corrupted, the container restart handles it
+        // This matches the standard FFI panic containment pattern from ref/15-ffi-interop.
         catch_unwind(AssertUnwindSafe(|| {
             let document = pdfium.load_pdf_from_byte_slice(data, None)?;
             let mut all_text = String::new();
@@ -99,6 +109,8 @@ impl PdfiumEngine {
 
         let pdfium = Self::get_pdfium()?;
 
+        // SAFETY: See comment in safe_extract_text for rationale on AssertUnwindSafe.
+        // Same trade-off applies: PDFium FFI panic is contained, error propagated.
         catch_unwind(AssertUnwindSafe(|| {
             let document = pdfium.load_pdf_from_byte_slice(data, None)?;
             let pages = document.pages();
@@ -139,6 +151,8 @@ impl PdfiumEngine {
 
         let pdfium = Self::get_pdfium()?;
 
+        // SAFETY: See comment in safe_extract_text for rationale on AssertUnwindSafe.
+        // Same trade-off applies: PDFium FFI panic is contained, error propagated.
         catch_unwind(AssertUnwindSafe(|| {
             let document = pdfium.load_pdf_from_byte_slice(data, None)?;
             Ok::<u32, PdfiumError>(document.pages().len() as u32)

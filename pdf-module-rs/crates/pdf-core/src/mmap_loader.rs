@@ -1,3 +1,13 @@
+//! Memory-mapped PDF loader — zero-copy file access via `memmap2`.
+//!
+//! Maps PDF files into virtual memory for page-level random access without
+//! explicit heap allocation. Includes PDF quality classification (Text/Searchable/
+//! Scanned/Corrupted) based on font and image presence.
+//!
+//! ## Safety
+//! Uses `unsafe { Mmap::map() }` with documented preconditions (valid file handle,
+//! read-only workflow, bounded lifetime).
+
 use memmap2::Mmap;
 use std::fs::File;
 use std::path::Path;

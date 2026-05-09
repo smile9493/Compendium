@@ -1,50 +1,64 @@
 # rsut-pdf-mcp Architecture
 
-AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pattern + fulltext search + knowledge graph. Pure Rust, single binary.
+AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pattern + fulltext search + knowledge graph + vector embeddings. Pure Rust, single binary.
 
 ## Design Principles
 
 1. **Karpathy Compiler Mode**: Knowledge pre-compiled to structured Markdown. Markdown is the single source of truth.
 2. **AI-Agent as UI**: No external GUI. All interaction via MCP tool calls from AI clients.
-3. **Rebuildable Indexes**: All indexes (Tantivy, petgraph) can be fully reconstructed from wiki Markdown files. Zero data risk.
+3. **Rebuildable Indexes**: All indexes (Tantivy, petgraph, TF-IDF vectors) can be fully reconstructed from wiki Markdown files. Zero data risk.
 4. **FFI Safety**: `catch_unwind` levee isolates C++ pdfium panics from Rust.
 5. **Pure Rust**: Single binary, zero external services, no database.
+6. **Dual-Protocol**: stdio (MCP) + HTTP (Wiki), oneshot signal for reliable co-bootstrap.
+7. **Breakwater Architecture**: Facade/Core layered separation — pdf-mcp absorbs protocol chaos, pdf-core maintains deterministic extraction.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────┐
 │            AI Client (Claude / Cursor)            │
-│            20 MCP tools via JSON-RPC              │
-└──────────────────────┬───────────────────────────┘
-                       │ stdio
-                       ▼
-┌──────────────────────────────────────────────────┐
-│                 pdf-mcp (server)                  │
-│  server.rs → handle_request() → tool dispatch    │
-├──────────────────────────────────────────────────┤
-│                                                  │
-│  ┌─── PDF Extraction (6 tools) ─────────────────┐│
-│  │  extract_text / extract_structured           ││
-│  │  get_page_count / search_keywords            ││
-│  │  extrude_to_server_wiki                      ││
-│  │  extrude_to_agent_payload                    ││
-│  └──────────────────────────────────────────────┘│
-│                                                  │
-│  ┌─── Knowledge Engine (6 tools) ───────────────┐│
-│  │  compile_to_wiki / incremental_compile       ││
-│  │  recompile_entry / aggregate_entries         ││
-│  │  check_quality / micro_compile               ││
-│  │  hypothesis_test                             ││
-│  └──────────────────────────────────────────────┘│
-│                                                  │
-│  ┌─── Cognitive Index (6 tools) ────────────────┐│
-│  │  search_knowledge (Tantivy + CJK n-gram)    ││
-│  │  rebuild_index                               ││
-│  │  get_entry_context / find_orphans            ││
-│  │  suggest_links / export_concept_map          ││
-│  └──────────────────────────────────────────────┘│
-└──────────────────────┬───────────────────────────┘
+│            23 MCP tools via JSON-RPC              │
+└──────────────┬───────────────┬───────────────────┘
+               │ stdio         │ HTTP
+               ▼               ▼
+┌──────────────────────┐ ┌──────────────────┐
+│   pdf-mcp (server)   │ │  Wiki HTTP       │
+│   JSON-RPC dispatch  │ │  axum + embed    │
+├──────────────────────┤ └──────────────────┘
+│                      │
+│  ┌── PDF Extraction (6) ─────────────────┐
+│  │  extract_text / extract_structured     │
+│  │  get_page_count / search_keywords      │
+│  │  extrude_to_server_wiki                │
+│  │  extrude_to_agent_payload              │
+│  └────────────────────────────────────────┘
+│
+│  ┌── Knowledge Engine (7) ───────────────┐
+│  │  compile_to_wiki / incremental_compile │
+│  │  recompile_entry / aggregate_entries   │
+│  │  check_quality / micro_compile         │
+│  │  hypothesis_test                       │
+│  └────────────────────────────────────────┘
+│
+│  ┌── Cognitive Index (6) ────────────────┐
+│  │  search_knowledge (Tantivy + CJK)     │
+│  │  rebuild_index                         │
+│  │  get_entry_context / find_orphans      │
+│  │  suggest_links / export_concept_map    │
+│  └────────────────────────────────────────┘
+│
+│  ┌── Management (5) ─────────────────────┐
+│  │  get_config / set_config               │
+│  │  get_health_report                     │
+│  │  trigger_incremental_compile           │
+│  │  get_compile_status / show_wiki_browser│
+│  └────────────────────────────────────────┘
+│
+│  ┌── Resources (2) ──────────────────────┐
+│  │  dashboard (rust_embed)                │
+│  │  wiki-browser (rust_embed)             │
+│  └────────────────────────────────────────┘
+└──────────────────────┬──────────────────────┘
                        │
         ┌──────────────┴──────────────┐
         ▼                             ▼
@@ -54,6 +68,43 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 │  FFI levee    │         │  GPT-4o / Claude  │
 └───────────────┘         │  GLM-4.6v / OCR  │
                           └───────────────────┘
+         │                        │
+         ▼                        ▼
+┌──────────────────────────────────────────────────┐
+│              Knowledge Engine                    │
+│  Tantivy │ petgraph │ TF-IDF Vector │ bincode   │
+│  hash_cache │ cache_db │ community │ tokenizer  │
+└──────────────────────────────────────────────────┘
+```
+
+## Breakwater Layers
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Application Layer                                    │
+│  pdf-cli (CLI entry)                                  │
+│  pdf-mcp main.rs (entry point + HTTP co-bootstrap)    │
+├──────────────────────────────────────────────────────┤
+│  Facade Layer (MCP)                                   │
+│  pdf-mcp server.rs (protocol dispatch)                │
+│  pdf-mcp tools/*.rs (handler functions → anyhow)      │
+│  pdf-mcp sampling/ (VLM sampling client)              │
+│  pdf-mcp http.rs (HTTP server with oneshot signal)    │
+├──────────────────────────────────────────────────────┤
+│  Facade Layer (Web UI)                                │
+│  pdf-dashboard (Web dashboard server)                 │
+│  pdf-web (Web frontend, Yew)                          │
+│  pdf-mcp resources.rs (embedded HTML via rust_embed)  │
+├──────────────────────────────────────────────────────┤
+│  Core Layer                                           │
+│  pdf-core (extraction, knowledge, parallel)           │
+│  pdf-common (shared types, errors, DTOs)              │
+│  pdf-wasm (WASM compilation target, IRON-01~04)       │
+│  vlm-visual-gateway (VLM/OCR engine)                  │
+├──────────────────────────────────────────────────────┤
+│  Metaprogramming Layer                                │
+│  pdf-macros (derive macros)                           │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## Knowledge Base Layout
@@ -67,22 +118,24 @@ knowledge_base/
 │   ├── .versions/         # Backup before recompile (v{N}.md)
 │   └── <domain>/          # L1/L2/L3 entries
 ├── schema/                # Compilation instructions
-├── .hash_cache            # Merkle hash for incremental compile
-└── .rsut_index/           # Rebuildable indexes
-    └── tantivy/           # Fulltext search index
+├── .hash_cache/           # Merkle hash for incremental compile (JSON)
+├── .rsut_index/           # Rebuildable indexes
+│   ├── tantivy/           # Fulltext search index
+│   └── graph.bin          # Knowledge graph persistence (bincode)
+└── .cache_db/             # Entry cache
 ```
 
 ## Crates
 
-| Crate | 职责 |
-|-------|------|
-| `pdf-common` | 统一错误、DTO、配置、traits |
-| `pdf-macros` | 过程宏 `#[derive(Builder)]` |
-| `pdf-core` | PdfiumEngine + FileValidator + VlmPipeline + **KnowledgeEngine** + **FulltextIndex** + **GraphIndex** |
-| `pdf-mcp` | MCP stdio 入口 (JSON-RPC) — 20 tools |
-| `vlm-visual-gateway` | VLM 条件升级网关 |
-| `pdf-dashboard` | HTTP 监控面板 |
-| `pdf-wasm` | WASM 引擎 |
+| Crate | 职责 | 关键能力 |
+|-------|------|----------|
+| `pdf-common` | 统一错误、DTO、配置、traits | `PdfError` (23 variants), `ToolContext`, `AppConfig` |
+| `pdf-macros` | 过程宏 | `#[derive(Builder)]` |
+| `pdf-core` | PdfiumEngine + FileValidator + VlmPipeline + **KnowledgeEngine** + **FulltextIndex** + **GraphIndex** + **VectorIndex** | TF-IDF embedding, batch_embed_all, community detection |
+| `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 23 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
+| `vlm-visual-gateway` | VLM 条件升级网关 | `catch_unwind` FFI levee, Semaphore rate-limiting, exponential backoff |
+| `pdf-dashboard` | HTTP 监控面板 | System health, metrics |
+| `pdf-wasm` | WASM 引擎 | `WasmSlice` zero-copy, `bumpalo` arena, `talc` allocator |
 
 ## Knowledge Engine Module (`pdf-core::knowledge`)
 
@@ -90,13 +143,16 @@ knowledge_base/
 |--------|------|----------|
 | `entry` | 统一 front matter 规范 | `KnowledgeEntry`, `EntryLevel`, `CompileStatus` |
 | `hash_cache` | Merkle 增量变更检测 | `HashCache` |
-| `engine` | 编译调度核心 | `KnowledgeEngine`, `CompileResult`, `RecompileResult` |
-| `quality` | 质量分析 | `QualityReport`, `QualityIssue` |
+| `engine` | 编译调度核心 | `KnowledgeEngine`, `CompileResult`, `RecompileResult`, `CollectContext`, `AggregationCandidate` |
+| `renderer` | Markdown → HTML 渲染 | `RenderedEntry`, `TreeNode` |
+| `cache_db` | 条目缓存 | `CacheDb` |
 | `index::fulltext` | Tantivy 全文检索 (CJK-aware) | `FulltextIndex`, `SearchHit` |
-| `index::graph` | petgraph 知识图谱 | `GraphIndex`, `NeighborInfo`, `LinkSuggestion` |
+| `index::graph` | petgraph 知识图谱 + 磁盘持久化 | `GraphIndex`, `GraphSnapshot`, `NeighborInfo`, `LinkSuggestion` |
+| `index::vector` | TF-IDF 向量嵌入 | `VectorIndex`, `IndexedEntry` |
+| `index::community` | 标签社区检测 | `LouvainCluster` |
 | `index::tokenizer` | CJK n-gram 分词器 | `register_cjk_tokenizer()` |
 
-## MCP Tool Inventory (20 tools)
+## MCP Tool Inventory (23 tools)
 
 ### PDF Extraction (6)
 | Tool | Description |
@@ -106,7 +162,7 @@ knowledge_base/
 | `get_page_count` | 页数查询 |
 | `search_keywords` | 关键词搜索 (正则 + 二分页定位) |
 | `extrude_to_server_wiki` | 提取到 server wiki |
-| `extrude_to_agent_payload` | 提取 + 返回 Agent 编译提示 |
+| `extrude_to_agent_payload` | 提取 + 返回 Agent payload 到对话 |
 
 ### Compilation (7)
 | Tool | Description |
@@ -123,11 +179,27 @@ knowledge_base/
 | Tool | Description |
 |------|-------------|
 | `search_knowledge` | Tantivy 全文搜索 (CJK n-gram) |
-| `rebuild_index` | 完全重建 Tantivy + petgraph |
+| `rebuild_index` | 完全重建 Tantivy + petgraph + vector |
 | `get_entry_context` | N 跳邻居发现 |
 | `find_orphans` | 孤立条目检测 |
 | `suggest_links` | Jaccard 相似度链接建议 |
 | `export_concept_map` | Mermaid.js 概念图导出 |
+
+### Management (5)
+| Tool | Description |
+|------|-------------|
+| `get_config` | 获取当前配置 |
+| `set_config` | 更新配置项 |
+| `get_health_report` | 系统健康报告 |
+| `trigger_incremental_compile` | 批量增量编译 |
+| `get_compile_status` | 编译状态查询 |
+| `show_wiki_browser` | Wiki 浏览器入口 |
+
+### Resources (2)
+| Resource | Description |
+|----------|-------------|
+| `rust-pdf://dashboard` | 嵌入式仪表板 (rust_embed) |
+| `rust-pdf://wiki-browser` | 嵌入式 Wiki 浏览器 (rust_embed) |
 
 ## Entry Format (YAML Front Matter)
 
@@ -172,8 +244,13 @@ L0  Raw Extraction      (原始提取，PDF → text)
 | `pdfium-render` | 0.8 | PDF text extraction (FFI) |
 | `sha2` | 0.10 | Content hashing (incremental compile) |
 | `serde_yaml` | 0.9 | Front matter serialization |
+| `bincode` | 2.0 | Graph index disk persistence |
+| `bumpalo` | 3.17 | Arena allocation (WASM + pixel buffers) |
 | `tokio` | 1.x | Async runtime |
+| `axum` | 0.8 | HTTP server (wiki browsing) |
+| `rust_embed` | 8.x | Embedded static assets |
 | `memmap2` | 0.9 | Zero-copy PDF loading |
+| `pulldown_cmark` | 0.12 | Markdown → HTML rendering |
 
 ## FFI Levee
 
@@ -186,3 +263,24 @@ pub fn safe_extract_text(data: &[u8]) -> PdfResult<String> {
     .map_err(|e| PdfModuleError::Extraction(format!("Pdfium: {}", e)))
 }
 ```
+
+## VLM Gateway
+
+```rust
+// Semaphore rate-limiting + exponential backoff + retry classification
+let permit = gateway.semaphore.acquire().await?;
+let result = retry_loop(gateway, request).await;
+drop(permit); // release before metrics to avoid holding semaphore
+gateway.metrics.observe(result);
+```
+
+## WASM Compliance
+
+| Rule | Status |
+|------|--------|
+| IRON-01 Binary size | `opt-level='z'`, `lto`, `codegen-units=1`, `panic='abort'`, `strip` |
+| IRON-02 Zero-copy boundary | `WasmSlice` + `OwnedSlice` safe encapsulation |
+| IRON-03 Memory partitioning | Arena per-frame lifecycle (`bumpalo` + `reset()`) |
+| IRON-04 Cross-origin isolation | N/A (no SharedArrayBuffer) |
+| Forbid unsafe_op | `#![forbid(unsafe_op_in_unsafe_fn)]` |
+| No wee_alloc | Uses `talc::TalckWasm` |

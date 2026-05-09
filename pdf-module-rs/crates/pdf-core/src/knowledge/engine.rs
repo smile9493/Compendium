@@ -15,7 +15,7 @@ use crate::extractor::McpPdfPipeline;
 use crate::knowledge::entry::{CompileStatus, EntryLevel, KnowledgeEntry};
 use crate::knowledge::hash_cache::HashCache;
 use crate::knowledge::index::vector::VectorHit;
-use crate::knowledge::index::VectorIndex;
+use crate::knowledge::index::{GraphIndex, VectorIndex};
 use crate::knowledge::quality::{self, QualityReport};
 use crate::wiki::WikiStorage;
 
@@ -185,7 +185,7 @@ impl KnowledgeEngine {
             .knowledge_base
             .join("raw")
             .join(format!("{}.compile_prompt.md", source_name));
-        fs::write(&prompt_path, &prompt).map_err(|e| {
+        tokio::fs::write(&prompt_path, &prompt).await.map_err(|e| {
             PdfModuleError::Storage(format!("Failed to write compile prompt: {}", e))
         })?;
 
@@ -289,7 +289,7 @@ impl KnowledgeEngine {
         entry: &KnowledgeEntry,
         extraction: &StructuredExtractionResult,
     ) -> String {
-        format!(
+        let mut prompt = format!(
             r#"# 知识编译任务
 
 ## 文档元数据
@@ -312,9 +312,9 @@ impl KnowledgeEngine {
 - 每个概念应该是一个独立、可复用的知识单元
 
 ### 2. 存量检查
-- 检查 `wiki/` 目录中是否已存在相关词条
+- 查看下方 **已有知识库上下文** 表格，判断新内容与哪些已有条目相关
 - 若概念已存在：将新见解**融合**到现有词条，更新 `related` 和 `updated` 字段
-- 若概念不存在：创建新词条
+- 若概念不存在：创建新词条，在 `related` 字段中引用已有条目路径
 
 ### 3. 条目格式规范
 每个条目必须使用如下 YAML front matter：
@@ -343,14 +343,7 @@ related: ["wiki/other/concept.md"]
 ### 5. 完成后
 - 更新 `wiki/index.md`（添加新条目到对应领域分组）
 - 更新 `wiki/log.md`（记录本次编译操作）
-
----
-
-# 提取内容
-
-以下内容已保存到 `raw/{}.md`：
-
-{}
+- **关键**：如果新条目引用了已有条目为 `related`，必须更新被引用条目的 `related` 字段建立反向链接
 "#,
             entry.title,
             entry.domain,
@@ -360,9 +353,69 @@ related: ["wiki/other/concept.md"]
             Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
             entry.domain,
             entry.domain.to_lowercase().replace(' ', "_"),
-            entry.title,
-            extraction.extracted_text,
-        )
+        );
+
+        // ── 上下文注入 1: 已有知识库条目清单 ──
+        if let Ok(existing) = self.collect_wiki_entries() {
+            if !existing.is_empty() {
+                prompt.push_str("\n\n## 已有知识库上下文\n\n");
+                prompt.push_str("以下是 `wiki/` 中已存在的所有知识条目，用于判断新内容的相关性：\n\n");
+                prompt.push_str("| # | 标题 | 领域 | 路径 | 标签 |\n");
+                prompt.push_str("|---|------|------|------|------|\n");
+                for (i, (path, e)) in existing.iter().enumerate() {
+                    prompt.push_str(&format!(
+                        "| {} | {} | {} | `{}` | {} |\n",
+                        i + 1,
+                        e.title,
+                        e.domain,
+                        path,
+                        e.tags.join(", ")
+                    ));
+                }
+                prompt.push_str(&format!(
+                    "\n**共 {} 条已有条目**。如果新提取的内容与以上任何条目相关，请在 `related` 字段中引用其路径。\n",
+                    existing.len()
+                ));
+            }
+        }
+
+        // ── 上下文注入 2: 标签 Jaccard 相似度建议 ──
+        if !entry.tags.is_empty() {
+            let wiki_dir = self.wiki_dir();
+            let mut graph = GraphIndex::new();
+            if graph.rebuild(&wiki_dir).is_ok() && graph.node_count() > 0 {
+                let suggestions = graph.suggest_links_by_tags(&entry.tags, 5);
+                if !suggestions.is_empty() {
+                    prompt.push_str("\n\n## 标签关联建议\n\n");
+                    prompt.push_str("以下条目与新内容的标签高度重叠（Jaccard 相似度），可能语义相关：\n\n");
+                    for s in &suggestions {
+                        prompt.push_str(&format!(
+                            "- `{}` — score={:.2} — {}\n",
+                            s.to, s.score, s.reason
+                        ));
+                    }
+                    prompt.push_str("\n**指令**：以上为算法建议，请根据实际语义判断是否在 `related` 中引用。只引用确实相关的条目。\n");
+                }
+            }
+        }
+
+        // ── 上下文注入 3: AGENTS.md 行为规则 ──
+        let agents_path = self.knowledge_base.join("schema").join("AGENTS.md");
+        if let Ok(rules) = fs::read_to_string(&agents_path) {
+            if !rules.trim().is_empty() {
+                prompt.push_str("\n\n## 行为规则 (schema/AGENTS.md)\n\n");
+                prompt.push_str(&rules);
+                prompt.push_str("\n\n**以上规则必须严格遵守，违反规则视为编译失败。**\n");
+            }
+        }
+
+        // ── 提取内容（始终位于 prompt 末尾）──
+        prompt.push_str(&format!(
+            "\n\n---\n\n# 提取内容\n\n以下内容已保存到 `raw/{}.md`：\n\n{}",
+            entry.title, extraction.extracted_text,
+        ));
+
+        prompt
     }
 
     /// Re-read and re-analyze a single wiki entry.
@@ -829,6 +882,55 @@ related: ["wiki/other/concept.md"]
                         results.push((rel, entry.title, entry.domain, body));
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Collect all wiki entries as (relative_path, KnowledgeEntry) pairs for prompt context.
+    fn collect_wiki_entries(&self) -> PdfResult<Vec<(String, KnowledgeEntry)>> {
+        let wiki_dir = self.wiki_dir();
+        if !wiki_dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut paths = Vec::new();
+        Self::scan_wiki_files(&wiki_dir, &wiki_dir, &mut paths)?;
+        let mut results = Vec::new();
+        for path in paths {
+            let rel = path
+                .strip_prefix(&wiki_dir)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .to_string();
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                    results.push((rel, entry));
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    /// Walk wiki/ directory, collecting all .md file paths (excluding index/log/.hidden).
+    #[allow(clippy::only_used_in_recursion)]
+    fn scan_wiki_files(base: &Path, dir: &Path, result: &mut Vec<PathBuf>) -> PdfResult<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(dir)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read dir: {}", e)))?
+        {
+            let entry = entry
+                .map_err(|e| PdfModuleError::Storage(format!("Failed to read entry: {}", e)))?;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "index.md" || name == "log.md" {
+                continue;
+            }
+            if path.is_dir() {
+                Self::scan_wiki_files(base, &path, result)?;
+            } else if path.extension().map(|e| e == "md").unwrap_or(false) {
+                result.push(path);
             }
         }
         Ok(())

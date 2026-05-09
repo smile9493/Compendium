@@ -7,14 +7,16 @@
 //! - P3 Performance: 零拷贝、Arena分配
 
 #![forbid(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::all)]
-#![warn(clippy::await_holding_lock)]
-#![warn(clippy::await_holding_refcell_ref)]
-#![warn(clippy::large_stack_frames)]
-#![warn(clippy::undocumented_unsafe_blocks)]
-#![warn(clippy::todo)]
-#![warn(clippy::dbg_macro)]
+#![deny(clippy::all)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::await_holding_refcell_ref)]
+#![deny(clippy::large_stack_frames)]
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(test, allow(clippy::undocumented_unsafe_blocks))]
+#![deny(clippy::todo)]
+#![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod config;
 pub mod dto;
@@ -33,5 +35,5 @@ pub mod wiki;
 
 pub use config::ServerConfig;
 pub use extractor::McpPdfPipeline;
-pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine};
+pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};
 pub use validator::{FileValidator, PathValidationConfig};

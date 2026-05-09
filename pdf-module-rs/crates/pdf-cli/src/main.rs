@@ -6,7 +6,14 @@
 //! requiring a running server or AI client.
 
 #![forbid(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::all)]
+#![deny(clippy::all)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::await_holding_refcell_ref)]
+#![deny(clippy::large_stack_frames)]
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(clippy::todo)]
+#![deny(clippy::dbg_macro)]
+#![deny(clippy::unwrap_used)]
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};

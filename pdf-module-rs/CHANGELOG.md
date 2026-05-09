@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.5.0] - 2026-05-09
+
+### 重大变更：架构强化 + 仓库整理
+
+P0-P1 级工程加固，提升安全性、可维护性和文档完整性。
+
+### Changed - 架构强化
+
+- **错误类型统一**: `pdf-core::PdfModuleError` 合并为 `pdf_common::PdfError` 类型别名，消除 900+ 行重复维护
+- **`#[tracing::instrument]` 全覆盖**: 所有 26 个 MCP 工具 handler 函数 + `dispatch_tool` 均已添加结构化日志
+- **Async 隔离**: `fs::write()` → `tokio::fs::write()`，`std::fs::read_to_string()` → `tokio::fs::read_to_string()`
+- **启动竞态消除**: HTTP 服务器启动检测从 `sleep(500ms)` 改为 `oneshot` 信号 + `timeout(3s)`
+- **轮询反模式消除**: `server.rs` 中的 `sleep(100ms)` polling 替换为 `CancellationToken::cancelled()` 事件驱动
+- **正则 panic 消除**: `Regex::new().expect()` → `.map_err()` 错误传播
+
+### Changed - 工程配置
+
+- **`rust-toolchain.toml`**: 锁定 Rust 1.95.0 + `wasm32-unknown-unknown` target
+- **`panic='abort'`**: `[profile.release]` 启用 abort 策略
+- **Clippy 零警告**: 修复 10+ 警告 (collapsible_match, unnecessary_sort_by, manual_checked_ops 等)
+
+### Added - 新功能
+
+- **MCP Resources 协议**: `resources/list` + `resources/read`，通过 `rust_embed` 编译时嵌入 dashboard/wiki-browser
+- **图索引持久化**: `graph.bin` bincode 序列化，启动时反序列化或重建
+- **TF-IDF 向量嵌入**: `batch_embed_all()`, `embed_entry()`, `VectorIndex`
+- **知识库快照**: `CollectContext`, `AggregationCandidate`, `scan_wiki_files()`
+- **版本备份**: `.versions/v{N}.md` 重编译前自动备份
+
+### Changed - 仓库结构
+
+- **前端移除**: `web/` Vue.js 目录完整移除 (-14,000 行)，简化至 Pure Rust monorepo
+- **`.gitignore` 完善**: 新增 50+ 模式覆盖构建产物、运行时数据、IDE/OS 文件
+- **根目录清理**: 测试脚本迁移至 `scripts/`，审查报告已删除
+- **文档更新**: README.md/README.en.md 反映 23 tools，ARCHITECTURE.md 扩展至 280+ 行含断水堤分层
+
+### Fixed
+
+- 拼写错误: `"rsut-pdf-mcp"` → `"rust-pdf-mcp"`
+- 死代码: 移除未使用 `NaiveDate` 导入，添加 `#[allow(dead_code)]` 用于 serde 引用函数
+- 文档警告: 2 个 cargo doc 链接/HTML 标签问题已修复
+
+---
+
 ## [0.4.0] - 2026-05-04
 
 ### 重大变更：AI 原生知识编译引擎

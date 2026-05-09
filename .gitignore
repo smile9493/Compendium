@@ -1,147 +1,76 @@
-# ==================== Git Repository Info ====================
-# This is the root .gitignore for a multi-project monorepo
-# Contains: pdf-module-rs (Rust), pdf-web-ui (Web), unstract (Reference)
+# ─── Rust ───────────────────────────────────────
+**/target/
+**/Cargo.lock
 
-# ==================== Rust - Build Artifacts ====================
-# Note: target/ is ignored in pdf-module-rs/.gitignore
-**/*.rs.bk           # Rust backup files
-*.pdb                # Debug symbols
-
-# Root-level compiled binaries (use leading / to avoid matching subdirectories)
-/pdf-mcp
-/pdf-rest
-
-# ==================== Python ====================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
+# ─── Build Artifacts ────────────────────────────
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-*.cover
-.hypothesis/
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pytype/
-.pylintrc
+*.tar.gz
+*.zip
 
-# ==================== Environment & Secrets ====================
+# ─── Compiled Binaries ──────────────────────────
+pdf-mcp
+pdf-mcp-cli
+pdf-dashboard
+libpdfium.so
+*.so
+*.dylib
+*.dll
+
+# ─── Environment ────────────────────────────────
 .env
 .env.local
 .env.*.local
-*.env
-*.pem
-*.key
-*.crt
-secrets/
-.secrets/
 
-# ==================== IDE & Editors ====================
-.idea/
-.vscode/
+# ─── Logs ───────────────────────────────────────
+logs/
+*.log
+
+# ─── Temporary / Generated Files ────────────────
+1.md
 *.swp
 *.swo
 *~
-.project
-.pydevproject
-.settings/
-*.sublime-workspace
-*.sublime-project
-
-# ==================== Operating System ====================
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-Desktop.ini
 
-# ==================== Logs ====================
-*.log
-logs/
-*.log.*
+# ─── Python ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/
 
-# ==================== Data & Cache ====================
-data/
-cache/
-*.cache
-.npm/
-.yarn/
+# ─── Test Artifacts ─────────────────────────────
+test_mcp_*.py
+test_raw_response*.py
+test_nginx_wiki.py
 
-# ==================== Wiki (AI Agent 产物) ====================
+# ─── Generated Docs / Reports ───────────────────
+RUST_ARCHITECTURE_REVIEW.md
+RUST_DEEP_DIVE_REVIEW.md
+NGINX_WIKI_BUILD_REPORT.md
+SETUP_PDFIUM_ENV.md
+CSS_REFACTOR_SUMMARY.md
+
+# ─── Knowledge Base (runtime data) ──────────────
+nginx-wiki/
 wiki/
+data/
+.rsut_index/
+.hash_cache
 
-# ==================== CLI Binary ====================
-pdf-mcp-cli
+# ─── IDE ────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.history/
+*.sublime-*
 
-# ==================== Docker ====================
-.docker/
+# ─── OS ─────────────────────────────────────────
+.directory
+desktop.ini
 
-# ==================== Build Artifacts ====================
-# PDF files (except documentation and test fixtures)
-*.pdf
-*.PDF
-!docs/**/*.pdf
-!**/tests/fixtures/**/*.pdf
-!**/test_data/**/*.pdf
-
-# Archives (except release artifacts)
-*.zip
-*.tar.gz
-*.tgz
-*.rar
-!.github/releases/**
-
-# ==================== Temporary Files ====================
-tmp/
-temp/
-*.tmp
-*.temp
-*.bak
-*.backup
-
-# ==================== Database ====================
-*.db
-*.sqlite
-*.sqlite3
-
-# ==================== Jupyter Notebooks ====================
-.ipynb_checkpoints/
-
-# ==================== Node.js ====================
-node_modules/
-
-# ==================== Tool-specific ====================
-.arts/
-.codeartsdoer/
-
-# ==================== C/C++ Headers ====================
-# pdfium C headers (not tracked, avoids GitHub Linguist stat inflation)
-include/
-
-# ==================== Reference Projects ====================
-# unstract is a reference project, not part of our codebase
-unstract/
+# ─── WASM Build ─────────────────────────────────
+**/pkg/
+*.wasm

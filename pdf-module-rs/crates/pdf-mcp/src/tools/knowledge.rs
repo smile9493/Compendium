@@ -131,6 +131,7 @@ pub async fn handle_compile_to_wiki(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_incremental_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -143,6 +144,7 @@ pub async fn handle_incremental_compile(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_micro_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -230,6 +232,7 @@ fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
     pages
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_aggregate_entries(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -252,6 +255,7 @@ pub async fn handle_aggregate_entries(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_hypothesis_test(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -266,7 +270,7 @@ pub async fn handle_hypothesis_test(
     let mut enriched = Vec::new();
     for mut pair in contradictions {
         let path_b = wiki_dir.join(&pair.entry_b);
-        if let Ok(content) = std::fs::read_to_string(&path_b) {
+        if let Ok(content) = tokio::fs::read_to_string(&path_b).await {
             if let Some(entry) = pdf_core::knowledge::KnowledgeEntry::from_markdown(&content) {
                 pair.title_b = entry.title;
             }
@@ -286,6 +290,7 @@ pub async fn handle_hypothesis_test(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_recompile_entry(
     ctx: &ToolContext,
     args: &serde_json::Value,

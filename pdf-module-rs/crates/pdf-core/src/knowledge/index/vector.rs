@@ -24,6 +24,7 @@ use jieba_rs::Jieba;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tracing::{debug, info};
@@ -133,8 +134,12 @@ impl TfidfModel {
     }
 
     fn hash_to_bucket(term: &str, dim: usize) -> usize {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        // DEVIATION: P0-determinism - Using stable FNV-1a hash algorithm for deterministic
+        // feature hashing across Rust versions. DefaultHasher is explicitly documented as
+        // NOT portable across Rust versions, which would corrupt saved bincode vectors.
+        // FNV-1a is a well-defined, version-independent algorithm.
+        // Mode: standard, Review: not-required
+        let mut hasher = fnv::FnvHasher::default();
         term.hash(&mut hasher);
         (hasher.finish() as usize) % dim
     }
@@ -417,7 +422,7 @@ mod tests {
     #[test]
     fn test_tfidf_model_dimensions() {
         let mut model = TfidfModel::new(128);
-        model.train(&vec![
+        model.train(&[
             "Rust programming language systems".into(),
             "Python machine learning AI".into(),
             "Rust memory safety".into(),

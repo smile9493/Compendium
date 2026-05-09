@@ -1,3 +1,13 @@
+//! Quality probe — extractor confidence scoring and fallback recommendations.
+//!
+//! Analyzes text density, font/logo presence, and PDFium extraction quality
+//! to produce a `QualityReport`. Low-confidence reports trigger VLM OCR fallback.
+//!
+//! ## Confidence thresholds
+//! - `≥0.95`: High — text extraction is reliable
+//! - `≥0.90`: Medium — may have minor issues
+//! - `<0.70`: Low — scanned PDF, recommend OCR fallback
+
 use std::panic::catch_unwind;
 
 use crate::engine::PdfiumEngine;
@@ -11,6 +21,10 @@ const CONFIDENCE_LOW: f64 = 0.70;
 const TEXT_DENSITY_THRESHOLD: f64 = 0.3;
 const TEXT_DENSITY_SCANNED_THRESHOLD: f64 = 0.05;
 
+/// Result of PDF quality analysis — confidence score and extraction quality metadata.
+///
+/// Low-confidence reports (< 0.70) indicate scanned/image-based PDFs that
+/// should use VLM OCR instead of text extraction.
 #[derive(Debug, Clone)]
 pub struct QualityReport {
     pub quality: PdfQuality,
@@ -142,6 +156,12 @@ impl QualityProbe {
         };
 
         let result: Result<f64, PdfModuleError> =
+            // SAFETY: AssertUnwindSafe is used around Pdfium FFI calls for panic containment.
+            // The Pdfium library state behind LazyLock<Option<Arc<Pdfium>>> is captured by
+            // the closure via `pdfium`. If a panic corrupts Pdfium internal state, subsequent
+            // calls are unsound - but this is an accepted trade-off (rare Pdfium panics,
+            // no in-process state survives, container restart handles corruption).
+            // See engine/pdfium.rs for full rationale.
             catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let document = match pdfium.load_pdf_from_byte_slice(data, None) {
                     Ok(doc) => doc,

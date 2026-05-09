@@ -45,6 +45,7 @@ pub fn all_tool_definitions() -> Vec<ToolDefinition> {
     tools
 }
 
+#[tracing::instrument(skip(ctx, args), fields(tool = %tool_name))]
 pub async fn dispatch_tool(
     ctx: &ToolContext,
     tool_name: &str,
@@ -75,6 +76,7 @@ pub async fn dispatch_tool(
         "get_health_report" => handle_get_health_report(args).await,
         "trigger_incremental_compile" => handle_trigger_incremental_compile(ctx, args).await,
         "get_compile_status" => handle_get_compile_status(args).await,
+        "show_wiki_browser" => handle_show_wiki_browser().await,
         _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
     }
 }

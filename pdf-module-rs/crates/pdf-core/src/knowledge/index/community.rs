@@ -118,7 +118,7 @@ pub fn detect_communities(
         })
         .collect();
 
-    communities.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
+    communities.sort_by_key(|b| std::cmp::Reverse(b.members.len()));
 
     // Keep multi-member communities; if all are single-member, return empty
     if communities.iter().all(|c| c.members.len() < 2) {

@@ -1,9 +1,16 @@
 use std::panic::catch_unwind;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use tracing::{error, warn};
 
 use crate::error::{PdfiumGuardError, PdfiumGuardResult};
+
+/// Global serialization lock for Pdfium FFI calls.
+///
+/// Pdfium's C++ library is NOT thread-safe. All FFI calls must be serialized.
+/// This global mutex provides serialization for the standalone `catch_pdfium()`
+/// function when a `PdfiumGuard` instance is not available.
+static PDFIUM_GLOBAL_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 /// Pdfium FFI safety guard.
 ///
@@ -49,15 +56,31 @@ impl Default for PdfiumGuard {
     }
 }
 
-/// Convenience: wrap a Pdfium render call with catch_unwind.
+/// Convenience: wrap a Pdfium render call with catch_unwind and global mutex serialization.
 ///
 /// This is the primary public helper that callers should use for one-shot
 /// FFI calls without needing to hold a `PdfiumGuard` reference.
+///
+/// Uses a global `Mutex<()>` to serialize all Pdfium FFI access, since Pdfium's
+/// C++ library is NOT thread-safe. Without this serialization, concurrent FFI
+/// calls would cause data corruption or UB (P0 violation per ref/15-ffi-interop).
 pub fn catch_pdfium<F, R>(f: F) -> PdfiumGuardResult<R>
 where
     F: FnOnce() -> R + std::panic::UnwindSafe,
 {
-    catch_unwind(f).map_err(|_| {
+    // SAFETY: We must hold the global lock before entering Pdfium FFI.
+    // If the lock is poisoned (a previous panic in Pdfium FFI), we return
+    // an error instead of proceeding, which would be UB on corrupted state.
+    let guard = PDFIUM_GLOBAL_LOCK.lock().map_err(|_| {
+        error!("Pdfium global mutex poisoned - lock is contaminated");
+        PdfiumGuardError::LockPoisoned
+    })?;
+
+    let result = catch_unwind(f);
+
+    drop(guard);
+
+    result.map_err(|_| {
         error!("Pdfium FFI call panicked");
         PdfiumGuardError::Panic
     })

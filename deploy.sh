@@ -125,9 +125,6 @@ download_binaries() {
     echo -e "${CYAN}  下载: $BINARY_NAME${NC}"
     curl -fsSL -o "pdf-mcp.tar.gz" "$DOWNLOAD_URL"
     
-    echo -e "${CYAN}  下载: web-dist.tar.gz${NC}"
-    curl -fsSL -o "web-dist.tar.gz" "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/web-dist.tar.gz"
-    
     echo -e "${GREEN}✓ 二进制下载完成${NC}"
 }
 
@@ -163,13 +160,6 @@ extract_binaries() {
         tar -xzf pdf-mcp.tar.gz
         rm pdf-mcp.tar.gz
         echo -e "${GREEN}✓ pdf-mcp 解压完成${NC}"
-    fi
-    
-    if [[ -f "web-dist.tar.gz" ]]; then
-        mkdir -p web
-        tar -xzf web-dist.tar.gz -C web
-        rm web-dist.tar.gz
-        echo -e "${GREEN}✓ Web 前端解压完成${NC}"
     fi
     
     chmod +x "$INSTALL_DIR/pdf-mcp" 2>/dev/null || true
@@ -209,7 +199,6 @@ VLM_ENDPOINT=https://open.bigmodel.cn/api/paas/v4/chat/completions
 
 # Dashboard 配置
 DASHBOARD_PORT=8000
-DASHBOARD_WEB_DIR=/opt/pdf-module/web/dist
 
 # 存储配置
 STORAGE_TYPE=local

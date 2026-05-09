@@ -82,7 +82,7 @@ impl AdaptiveScheduler {
         }
 
         // Sort by priority ascending so pop() returns highest priority
-        tasks.sort_by(|a, b| a.priority.cmp(&b.priority));
+        tasks.sort_by_key(|a| a.priority);
     }
 
     /// Find the next task for a worker: try global queue, then steal from other workers.

@@ -5,6 +5,7 @@
 
 use super::client::{SamplingClient, SamplingClientConfig};
 use super::{SamplingRequest, SamplingResponse};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -49,7 +50,11 @@ pub struct SamplingManager {
     active_requests: Arc<AtomicUsize>,
     max_requests: usize,
     outgoing_tx: Option<mpsc::Sender<OutgoingRequest>>,
+    pending: PendingRequests,
 }
+
+type PendingRequests =
+    Arc<tokio::sync::RwLock<HashMap<u64, tokio::sync::oneshot::Sender<Result<SamplingResponse, SamplingError>>>>>;
 
 #[allow(dead_code)]
 impl SamplingManager {
@@ -88,6 +93,7 @@ impl SamplingManager {
             active_requests,
             max_requests,
             outgoing_tx: None,
+            pending: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
     }
 
@@ -106,6 +112,8 @@ impl SamplingManager {
 
         let outgoing_tx_clone = outgoing_tx.clone();
         let request_id_counter = Arc::new(AtomicU64::new(1));
+        let pending_map: PendingRequests = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
+        let pending_clone = Arc::clone(&pending_map);
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -113,6 +121,7 @@ impl SamplingManager {
                         let outgoing_tx = outgoing_tx_clone.clone();
                         let active = Arc::clone(&active_requests_clone);
                         let id_counter = Arc::clone(&request_id_counter);
+                        let pending = Arc::clone(&pending_clone);
                         tokio::spawn(async move {
                             let req_id = id_counter.fetch_add(1, Ordering::Relaxed);
 
@@ -127,9 +136,28 @@ impl SamplingManager {
                                 return;
                             }
 
+                            // Store the response sender in the pending map and wait
+                            // for the response or timeout, whichever comes first.
+                            let (response_tx_2, response_rx) = tokio::sync::oneshot::channel();
+                            {
+                                let mut p = pending.write().await;
+                                p.insert(req_id, response_tx_2);
+                            }
+
                             let timeout_duration = std::time::Duration::from_secs(timeout_secs);
-                            tokio::time::sleep(timeout_duration).await;
-                            let _ = task.response_tx.send(Err(SamplingError::ResponseTimeout));
+                            match tokio::time::timeout(timeout_duration, response_rx).await {
+                                Ok(Ok(Ok(response))) => {
+                                    let _ = task.response_tx.send(Ok(response));
+                                }
+                                Ok(Ok(Err(e))) => {
+                                    let _ = task.response_tx.send(Err(e));
+                                }
+                                Ok(Err(_)) | Err(_) => {
+                                    let mut p = pending.write().await;
+                                    p.remove(&req_id);
+                                    let _ = task.response_tx.send(Err(SamplingError::ResponseTimeout));
+                                }
+                            }
                             active.fetch_sub(1, Ordering::Relaxed);
                         });
                     }
@@ -149,6 +177,7 @@ impl SamplingManager {
                 active_requests,
                 max_requests,
                 outgoing_tx: Some(outgoing_tx),
+                pending: pending_map,
             },
             outgoing_rx,
         )
@@ -192,6 +221,7 @@ impl SamplingManager {
             active_requests,
             max_requests,
             outgoing_tx: None,
+            pending: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
     }
 

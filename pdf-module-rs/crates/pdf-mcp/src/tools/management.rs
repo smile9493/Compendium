@@ -3,6 +3,7 @@ use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::management::{ConfigManager, HealthReporter};
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
+use tracing::instrument;
 
 pub fn management_tool_definitions() -> Vec<ToolDefinition> {
     vec![
@@ -84,9 +85,19 @@ pub fn management_tool_definitions() -> Vec<ToolDefinition> {
                 "required": ["knowledge_base"]
             }),
         },
+        ToolDefinition {
+            name: "show_wiki_browser".to_string(),
+            description: "Open the interactive wiki browser as an MCP App. Returns a resource reference to ui://wiki/browser which the client renders as an iframe. The browser provides tree navigation, full-text search, concept maps, and backlinks for the knowledge base.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
     ]
 }
 
+#[instrument(skip(args))]
 pub async fn handle_get_config(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let mut cm = ConfigManager::new(&kb_path);
@@ -102,6 +113,7 @@ pub async fn handle_get_config(args: &serde_json::Value) -> anyhow::Result<Vec<C
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_set_config(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let key = args["key"]
@@ -126,6 +138,7 @@ pub async fn handle_set_config(args: &serde_json::Value) -> anyhow::Result<Vec<C
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_get_health_report(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let reporter = HealthReporter::new(&kb_path);
@@ -150,6 +163,7 @@ pub async fn handle_get_health_report(args: &serde_json::Value) -> anyhow::Resul
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_trigger_incremental_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -161,7 +175,7 @@ pub async fn handle_trigger_incremental_compile(
 
     let status_path = kb_path.join(".rsut_index").join("compile_status.json");
     if let Some(parent) = status_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = tokio::fs::create_dir_all(parent).await;
     }
     let status = serde_json::json!({
         "running": false,
@@ -172,14 +186,15 @@ pub async fn handle_trigger_incremental_compile(
         "entries_skipped": result.skipped,
         "message": format!("Incremental compile: {} compiled, {} skipped", result.compiled, result.skipped),
     });
-    let _ = std::fs::write(
+    let _ = tokio::fs::write(
         &status_path,
         serde_json::to_string_pretty(&status).unwrap_or_default(),
-    );
+    ).await;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_get_compile_status(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let status_path = kb_path.join(".rsut_index").join("compile_status.json");
@@ -197,10 +212,19 @@ pub async fn handle_get_compile_status(args: &serde_json::Value) -> anyhow::Resu
         return Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)]);
     }
 
-    let content = std::fs::read_to_string(&status_path)
+    let content = tokio::fs::read_to_string(&status_path).await
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
     let status: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| anyhow::anyhow!("Failed to parse compile status: {}", e))?;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&status)?)])
+}
+
+#[instrument]
+pub async fn handle_show_wiki_browser() -> anyhow::Result<Vec<Content>> {
+    Ok(vec![Content::text(serde_json::json!({
+        "type": "resource",
+        "uri": "ui://wiki/browser",
+        "message": "Wiki browser opened. The client should render ui://wiki/browser as an MCP App iframe."
+    }).to_string())])
 }

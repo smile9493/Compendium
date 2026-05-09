@@ -120,6 +120,10 @@ pub enum PdfError {
     #[error("Invalid parameter type: {0}")]
     ParameterType(String),
 
+    // === Catch-all ===
+    #[error("Unknown error: {0}")]
+    Unknown(String),
+
     // === External Error Conversions ===
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -162,6 +166,7 @@ impl PdfError {
             Self::LLM(_) => 500,
             Self::Io(_) => 500,
             Self::Json(_) => 500,
+            Self::Unknown(_) => 500,
         }
     }
 
@@ -199,6 +204,7 @@ impl PdfError {
             Self::Http(_) => ErrorCategory::Network,
             Self::Database(_) => ErrorCategory::Database,
             Self::LLM(_) => ErrorCategory::LLM,
+            Self::Unknown(_) => ErrorCategory::Extraction,
         }
     }
 
@@ -232,6 +238,7 @@ impl PdfError {
             Self::ParameterType(_) => "ParameterTypeError",
             Self::Io(_) => "IoError",
             Self::Json(_) => "JsonError",
+            Self::Unknown(_) => "UnknownError",
         }
     }
 
@@ -261,6 +268,12 @@ pub type Result<T> = std::result::Result<T, PdfError>;
 impl From<PdfError> for std::io::Error {
     fn from(err: PdfError) -> Self {
         std::io::Error::other(err.to_string())
+    }
+}
+
+impl From<serde_yaml::Error> for PdfError {
+    fn from(err: serde_yaml::Error) -> Self {
+        Self::Storage(format!("YAML error: {}", err))
     }
 }
 

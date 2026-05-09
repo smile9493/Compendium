@@ -1,3 +1,12 @@
+//! MCP JSON-RPC 2.0 server over stdin/stdout.
+//!
+//! Implements the Model Context Protocol transport layer with `tokio::select!`
+//! for concurrent stdin reading and response writing. Handles `initialize`,
+//! `tools/list`, `tools/call`, `resources/list`, `resources/read`, and
+//! `sampling/createMessage` requests.
+//!
+//! Uses `CancellationToken` for graceful shutdown on SIGTERM/SIGINT.
+
 use crate::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
 use crate::sampling::{
     create_sampling_jsonrpc_request, parse_sampling_response, OutgoingRequest, SamplingClient,
@@ -34,7 +43,7 @@ impl ToolMetric {
             "calls": calls,
             "latency_ms": latency,
             "errors": errors,
-            "avg_latency_ms": if calls > 0 { latency / calls } else { 0 }
+            "avg_latency_ms": latency.checked_div(calls).unwrap_or(0)
         })
     }
 }
@@ -134,7 +143,7 @@ impl ToolStats {
             "total_calls": total,
             "total_errors": errors,
             "total_latency_ms": latency,
-            "avg_latency_ms": if total > 0 { latency / total } else { 0 },
+            "avg_latency_ms": latency.checked_div(total).unwrap_or(0),
             "success_rate_pct": if total > 0 {
                 ((total - errors) as f64 / total as f64 * 100.0).round()
             } else {
@@ -267,10 +276,8 @@ pub async fn run_stdio(pipeline: Arc<McpPdfPipeline>) -> anyhow::Result<()> {
                 stdout_lock.flush()?;
             }
 
-            _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
-                if shutdown_token.is_cancelled() {
-                    break;
-                }
+            _ = shutdown_token.cancelled() => {
+                break;
             }
         }
     }
@@ -317,7 +324,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "serverInfo": {
-            "name": "rsut-pdf-mcp",
+            "name": "rust-pdf-mcp",
             "version": "0.6.0",
             "description": "AI-native knowledge compilation engine — PDF extraction, Karpathy compiler pattern, Tantivy fulltext search (CJK-aware), petgraph knowledge graph, hierarchical compilation, dynamic reasoning. Pure Rust, single binary."
         },

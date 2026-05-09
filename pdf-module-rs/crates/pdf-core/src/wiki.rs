@@ -1,3 +1,9 @@
+//! Wiki knowledge base — extraction metadata, raw storage, and log management.
+//!
+//! Manages the wiki file system: saves extracted data as YAML metadata,
+//! writes raw extraction outputs, maintains versioned hashes for incremental
+//! compilation, and keeps an audit log.
+
 use std::fs::{self, File};
 use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
@@ -9,6 +15,10 @@ use sha2::{Digest, Sha256};
 use crate::dto::StructuredExtractionResult;
 use crate::error::{PdfModuleError, PdfResult};
 
+/// Extraction metadata stored alongside each raw extraction.
+///
+/// Includes source file information, SHA-256 hash for incremental detection,
+/// and quality scoring for VLM fallback decisions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionMetadata {
     pub source_file: String,
@@ -19,6 +29,12 @@ pub struct ExtractionMetadata {
     pub quality_score: f64,
 }
 
+/// Wiki file system storage — manages raw/, wiki/, schema/ and log.md.
+///
+/// Operations:
+/// - `save_raw()` / `load_raw()` — YAML-serialized extraction data
+/// - `save_metadata()` / `load_metadata()` — per-file extraction provenance
+/// - `log()` / `read_log()` — human-readable audit log
 pub struct WikiStorage {
     base_path: PathBuf,
 }

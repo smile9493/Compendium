@@ -6,7 +6,6 @@ on:
     paths:
       - 'pdf-module-rs/**'
       - 'pdf-mcp-installer/**'
-      - 'web/**'
       - '.github/workflows/build.yml'
       - 'install.sh'
       - 'deploy.sh'
@@ -17,7 +16,6 @@ on:
     paths:
       - 'pdf-module-rs/**'
       - 'pdf-mcp-installer/**'
-      - 'web/**'
       - '.github/workflows/build.yml'
       - 'install.sh'
       - 'deploy.sh'
@@ -25,10 +23,12 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  PDFIUM_CHROMIUM_VERSION: "7825"
 
 jobs:
   test-rust:
@@ -43,27 +43,16 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            pdf-module-rs/target
-            pdf-mcp-installer/target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Clean up advisory database from cache
-        run: |
-          rm -rf ~/.cargo/advisory-db
-          rm -rf ~/.cargo/git/checkouts/advisory-db
+          workspaces: "pdf-module-rs -> target"
 
       - name: Download PDFium
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-linux-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.so" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/lib:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
 
       - name: Run tests (pdf-module-rs)
         run: |
@@ -105,17 +94,19 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Clean up advisory database cache
-        run: |
-          rm -rf ~/.cargo/advisory-db
-          rm -rf ~/.cargo/git/checkouts/advisory-db
-
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
 
-      - name: Security audit with cargo-deny
+      - name: Security audit with cargo-deny (pdf-module-rs)
         run: |
           cd pdf-module-rs
+          cargo deny check advisories
+
+      - name: Security audit with cargo-deny (pdf-mcp-installer)
+        run: |
+          cd pdf-mcp-installer
           cargo deny check advisories
 
   code-coverage:
@@ -131,14 +122,20 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
 
       - name: Download PDFium
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-linux-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.so" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/lib:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
 
       - name: Generate coverage
         run: |
@@ -148,59 +145,35 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: lcov.info
+          files: pdf-module-rs/lcov.info
           fail_ci_if_error: false
 
-  web-build:
-    name: Build Web
+  wasm-build:
+    name: WASM Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: '20'
+          targets: wasm32-unknown-unknown
 
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
+          workspaces: "pdf-module-rs -> target"
 
-      - name: Install dependencies
+      - name: Build WASM (pdf-wasm)
         run: |
-          cd web
-          npm ci
+          cd pdf-module-rs
+          cargo build --target wasm32-unknown-unknown --package pdf-wasm --release
 
-      - name: Type Check
+      - name: Package WASM artifacts
         run: |
-          cd web
-          npm run type-check
-
-      - name: Lint
-        run: |
-          cd web
-          npm run lint
-
-      - name: Build
-        run: |
-          cd web
-          npm run build
-
-      - name: Package
-        run: |
-          cd web
-          tar -czvf ../web-dist.tar.gz dist
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: web-dist.tar.gz
+          mkdir -p wasm-dist
+          cp pdf-module-rs/target/wasm32-unknown-unknown/release/*.wasm wasm-dist/ 2>/dev/null || true
+          echo "WASM build completed (package: pdf-wasm)"
 
   build-mcp:
     name: MCP (${{ matrix.target }})
@@ -260,15 +233,9 @@ jobs:
         run: |
           rustup target add aarch64-apple-darwin
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            pdf-module-rs/target
-            pdf-mcp-installer/target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: "pdf-module-rs -> target"
 
       - name: Setup environment for cross-compilation
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -281,51 +248,56 @@ jobs:
       - name: Download PDFium (Linux x64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-linux-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.so" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
 
       - name: Download PDFium (Linux ARM64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-linux-arm64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-arm64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.so" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
 
       - name: Download PDFium (Linux musl x64)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-linux-musl-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-musl-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.so" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
 
       - name: Download PDFium (macOS x64)
         if: matrix.target == 'x86_64-apple-darwin'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-mac-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-mac-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.dylib" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.dylib" >> $GITHUB_ENV
 
       - name: Download PDFium (macOS ARM64)
         if: matrix.target == 'aarch64-apple-darwin'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-mac-arm64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-mac-arm64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/libpdfium.dylib" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.dylib" >> $GITHUB_ENV
 
       - name: Download PDFium (Windows x64)
         if: matrix.target == 'x86_64-pc-windows-msvc'
         run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7825/pdfium-win-x64.tgz"
+          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-win-x64.tgz"
           tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=$GITHUB_WORKSPACE/lib/pdfium.dll" >> $GITHUB_ENV
+          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/pdfium.dll" >> $GITHUB_ENV
 
       - name: Build MCP Server
         run: |
           cd pdf-module-rs
           cargo build --release --target ${{ matrix.target }} --bin pdf-mcp
 
-      - name: Build CLI
+      - name: Build pdf-cli
+        run: |
+          cd pdf-module-rs
+          cargo build --release --target ${{ matrix.target }} --bin pdf-cli
+
+      - name: Build pdf-mcp-cli (installer)
         run: |
           cd pdf-mcp-installer
           cargo build --release --target ${{ matrix.target }} --bin pdf-mcp-cli
@@ -337,6 +309,8 @@ jobs:
           STRIP="${STRIP_CMD:-strip}"
           $STRIP pdf-mcp
           ls -lh pdf-mcp
+          $STRIP pdf-cli
+          ls -lh pdf-cli
           cd $GITHUB_WORKSPACE/pdf-mcp-installer/target/${{ matrix.target }}/release
           $STRIP pdf-mcp-cli
           ls -lh pdf-mcp-cli
@@ -347,6 +321,8 @@ jobs:
           cd pdf-module-rs/target/${{ matrix.target }}/release
           strip pdf-mcp.exe
           dir pdf-mcp.exe
+          strip pdf-cli.exe
+          dir pdf-cli.exe
           cd ${{ github.workspace }}/pdf-mcp-installer/target/${{ matrix.target }}/release
           strip pdf-mcp-cli.exe
           dir pdf-mcp-cli.exe
@@ -356,6 +332,7 @@ jobs:
         run: |
           mkdir -p package
           cp pdf-module-rs/target/${{ matrix.target }}/release/pdf-mcp package/
+          cp pdf-module-rs/target/${{ matrix.target }}/release/pdf-cli package/
           cp pdf-mcp-installer/target/${{ matrix.target }}/release/pdf-mcp-cli package/
           tar -czvf $GITHUB_WORKSPACE/${{ matrix.artifact }}.tar.gz -C package .
 
@@ -364,6 +341,7 @@ jobs:
         run: |
           mkdir package
           copy pdf-module-rs/target/${{ matrix.target }}/release/pdf-mcp.exe package/
+          copy pdf-module-rs/target/${{ matrix.target }}/release/pdf-cli.exe package/
           copy pdf-mcp-installer/target/${{ matrix.target }}/release/pdf-mcp-cli.exe package/
           7z a ${{ github.workspace }}/${{ matrix.artifact }}.zip ./package/*
 
@@ -375,9 +353,59 @@ jobs:
             ${{ matrix.artifact }}.tar.gz
             ${{ matrix.artifact }}.zip
 
+  docker-build:
+    name: Docker Image
+    needs: [test-rust, security-audit]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ github.repository_owner }}/pdf-mcp
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   release:
     name: Release
-    needs: [build-mcp, web-build]
+    needs: [build-mcp, wasm-build, docker-build]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -385,7 +413,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download MCP artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
@@ -401,32 +429,28 @@ jobs:
           name: Release ${{ steps.version.outputs.VERSION }}
           body: |
             ## PDF Module MCP Server ${{ steps.version.outputs.VERSION }}
-            
+
             ### MCP Server + CLI (多平台)
             - `pdf-mcp-linux-x64.tar.gz` - Linux x64
             - `pdf-mcp-linux-arm64.tar.gz` - Linux ARM64
+            - `pdf-mcp-linux-x64-musl.tar.gz` - Linux x64 (musl)
             - `pdf-mcp-macos-x64.tar.gz` - macOS x64
             - `pdf-mcp-macos-arm64.tar.gz` - macOS ARM64
             - `pdf-mcp-windows-x64.zip` - Windows x64
-            
+
             每个包包含：
             - `pdf-mcp` - MCP 服务端
-            - `pdf-mcp-cli` - CLI 配置管理工具
-            
-            ### Web Frontend
-            - `web-dist.tar.gz` - Vue 3 前端静态文件
-            
+            - `pdf-cli` - 知识库管理 CLI
+            - `pdf-mcp-cli` - 配置管理 CLI
+
             ### Docker Images
             ```bash
-            # MCP Server (stdio 协议)
-            docker pull smile9493/pdf-mcp:${{ steps.version.outputs.VERSION }}-mcp
-            
-            # Web 前端 (nginx)
-            docker pull smile9493/pdf-mcp:${{ steps.version.outputs.VERSION }}-web
+            docker pull ${{ github.repository_owner }}/pdf-mcp:${{ steps.version.outputs.VERSION }}
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}
             ```
-            
+
             ### Usage
-            See [README.md](https://github.com/smile9493/rsut_pdf_mcp#readme)
+            See [README.md](https://github.com/${{ github.repository }}#readme)
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip

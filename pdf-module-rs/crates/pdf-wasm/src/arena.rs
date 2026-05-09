@@ -71,11 +71,11 @@ impl WasmPdfEngine {
     /// buffer rather than the original `pdf_data` slice.
     pub fn extract_text_with_arena(&mut self, pdf_data: &[u8]) -> Result<String, WasmError> {
         // Arena copy simulates pdfium writing into arena-allocated buffer
-        let _arena_buffer = self.arena.alloc_slice_copy(pdf_data);
+        let arena_buffer = self.arena.alloc_slice_copy(pdf_data);
 
-        // Real pdfium integration would process _arena_buffer and produce text.
-        // Currently simulates extraction from the original data.
-        let extracted = String::from_utf8(pdf_data.to_vec())
+        // Simulate extraction from the arena buffer instead of copying original data.
+        // In a real implementation, pdfium would write into the arena buffer directly.
+        let extracted = String::from_utf8(arena_buffer.to_vec())
             .map_err(|e| WasmError::ExtractionError(e.to_string()))?;
 
         // Reset arena to free all temporary allocations in O(1)
@@ -134,6 +134,6 @@ mod tests {
         let mut engine = WasmPdfEngine::new();
         let data = b"Hello, WASM!";
         let result = engine.extract_text_with_arena(data).unwrap();
-        assert!(result.len() > 0);
+        assert!(!result.is_empty());
     }
 }

@@ -28,10 +28,16 @@ pub struct WasmSlice {
 
 // SAFETY: WasmSlice is designed for controlled JS-WASM interop.
 // The caller must ensure thread safety and lifetime validity.
+// WASM is single-threaded so Send+Sync is safe in that context.
+// On non-WASM targets, raw pointers should NOT be Send+Sync.
+#[cfg(target_arch = "wasm32")]
 unsafe impl Send for WasmSlice {}
 
 // SAFETY: WasmSlice is designed for controlled JS-WASM interop.
 // The caller must ensure thread safety and lifetime validity.
+// WASM is single-threaded so Send+Sync is safe in that context.
+// On non-WASM targets, raw pointers should NOT be Send+Sync.
+#[cfg(target_arch = "wasm32")]
 unsafe impl Sync for WasmSlice {}
 
 impl WasmSlice {
@@ -80,7 +86,7 @@ impl WasmSlice {
 ///
 /// This prevents dangling pointer issues by keeping the underlying data alive
 /// for the entire lifetime of the `OwnedSlice`. The `WasmSlice` returned by
-/// [`as_wasm_slice`] is only valid while the `OwnedSlice` is alive.
+/// [`OwnedSlice::as_wasm_slice`] is only valid while the `OwnedSlice` is alive.
 ///
 /// # Example
 ///

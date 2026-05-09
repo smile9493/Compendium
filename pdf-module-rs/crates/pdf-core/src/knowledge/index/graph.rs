@@ -398,6 +398,51 @@ impl GraphIndex {
         suggestions
     }
 
+    /// Suggest links for a new entry not yet in the graph, using only tags.
+    /// Compares the given tag set against all existing nodes via Jaccard similarity.
+    pub fn suggest_links_by_tags(&self, tags: &[String], top_k: usize) -> Vec<LinkSuggestion> {
+        let tags_a: HashSet<&str> = tags.iter().map(|s| s.as_str()).collect();
+        if tags_a.is_empty() {
+            return Vec::new();
+        }
+
+        let mut suggestions: Vec<LinkSuggestion> = self
+            .graph
+            .node_indices()
+            .filter_map(|idx| {
+                let tags_b: HashSet<&str> =
+                    self.graph[idx].tags.iter().map(|s| s.as_str()).collect();
+                let intersection = tags_a.intersection(&tags_b).count();
+                let union = tags_a.union(&tags_b).count();
+                if union == 0 || intersection == 0 {
+                    return None;
+                }
+                let jaccard = intersection as f64 / union as f64;
+                if jaccard < 0.1 {
+                    return None;
+                }
+                let shared: Vec<String> = tags_a
+                    .intersection(&tags_b)
+                    .map(|s| s.to_string())
+                    .collect();
+                Some(LinkSuggestion {
+                    from: String::new(),
+                    to: self.graph[idx].path.clone(),
+                    score: jaccard,
+                    reason: format!("Shared tags: {}", shared.join(", ")),
+                })
+            })
+            .collect();
+
+        suggestions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        suggestions.truncate(top_k);
+        suggestions
+    }
+
     /// Export a local concept map around a given entry as Mermaid.js text.
     pub fn export_concept_map(&self, center_path: &str, depth: u32) -> String {
         let start = match self.path_to_node.get(center_path) {

@@ -20,6 +20,7 @@ pub mod entry;
 pub mod hash_cache;
 pub mod index;
 pub mod quality;
+pub mod renderer;
 
 pub use cache_db::CacheDb;
 pub use engine::KnowledgeEngine;
@@ -27,3 +28,4 @@ pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry};
 pub use hash_cache::HashCache;
 pub use index::{detect_communities, Community, FulltextIndex, GraphIndex, VectorIndex};
 pub use quality::QualityReport;
+pub use renderer::{RenderedEntry, TreeNode, WikiRenderer};

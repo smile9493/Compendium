@@ -258,7 +258,7 @@ impl VlmEnhancedPipeline {
     /// Render a page and send to VLM for layout understanding.
     ///
     /// Data flow:
-    ///   Pdfium render → raw RGBA Vec<u8> → perceive_layout (internal Base64) → VLM API
+    ///   Pdfium render → raw RGBA `Vec<u8>` → perceive_layout (internal Base64) → VLM API
     #[tracing::instrument(skip(self))]
     pub async fn perceive_page(
         &self,

@@ -1,6 +1,17 @@
+// DEVIATION: This is an installer CLI tool (rapid/prototype mode).
+// Unwrap on user I/O is acceptable since stdin failure is terminal.
+// Lints are warn-level rather than deny to keep the tool accessible
+// for rapid iteration without blocking the build on user-experience code.
+#![forbid(unsafe_op_in_unsafe_fn)]
+#![warn(clippy::all)]
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::todo)]
+#![warn(clippy::dbg_macro)]
+
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Input};
+use dialoguer::{theme::ColorfulTheme, Input, Select};
+use reqwest::blocking::multipart;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -9,20 +20,29 @@ use std::process::{Command, Stdio};
 const DEFAULT_INSTALL_DIR: &str = "/opt/pdf-module";
 const DEFAULT_VLM_ENDPOINT: &str = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const DEFAULT_VLM_MODEL: &str = "glm-4v-flash";
+const DEFAULT_SERVER_URL: &str = "http://localhost:8000";
+
+// ─────────────────────────── CLI Parser ───────────────────────────
 
 #[derive(Parser)]
-#[command(name = "pdf-mcp-cli")]
+#[command(name = "pdf-mcp-cli", version = "0.1.4")]
 #[command(author = "PDF Module Team")]
 #[command(about = "PDF Module MCP 配置管理工具", long_about = None)]
 struct Cli {
+    /// MCP Server URL for file operations
+    #[arg(global = true, long, default_value = DEFAULT_SERVER_URL)]
+    server: String,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// 初始化配置和环境
     Init,
 
+    /// 配置 GLM API Key 和参数
     Config {
         #[arg(short, long)]
         key: Option<String>,
@@ -34,22 +54,69 @@ enum Commands {
         endpoint: Option<String>,
     },
 
+    /// 查看配置状态和服务状态
     Status,
 
+    /// 生成 MCP 客户端配置
     GenerateConfig {
         #[arg(short, long)]
         output: Option<String>,
     },
 
+    /// 显示配置说明和使用指南
+    Info {
+        /// 配置说明部分: server | client | security
+        #[arg(short, long)]
+        section: Option<String>,
+    },
+
+    /// 管理系统服务 (start/stop/restart/status)
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+
+    /// 启动 Web Dashboard (别名 dashboard)
+    Dashboard {
+        /// Dashboard 端口
+        #[arg(short, long, default_value = "8000")]
+        port: u16,
+    },
+
+    /// 进入交互式菜单模式
+    Interactive,
+
+    /// 上传 PDF 文件到服务器
+    Upload {
+        /// PDF 文件路径
+        file: String,
+    },
+
+    /// 列出服务器上的 PDF 文件
+    List,
+
+    /// 测试 PDF 文件处理
+    Test {
+        /// PDF 文件路径
+        #[arg(short, long)]
+        file: Option<String>,
+    },
+
+    // ── Legacy commands (kept for backward compat) ──
+
+    /// [Legacy] 启动服务 — 推荐使用 `service start`
     Start {
         #[arg(short, long)]
         web: bool,
     },
 
+    /// [Legacy] 停止服务 — 推荐使用 `service stop`
     Stop,
 
+    /// [Legacy] 重启服务 — 推荐使用 `service restart`
     Restart,
 
+    /// 查看日志
     Logs {
         #[arg(short, long, default_value = "20")]
         lines: u16,
@@ -58,13 +125,23 @@ enum Commands {
         follow: bool,
     },
 
+    /// 查看进程列表
     Ps,
-
-    DownloadWeb {
-        #[arg(short, long)]
-        version: Option<String>,
-    },
 }
+
+#[derive(Subcommand)]
+enum ServiceAction {
+    /// 启动服务
+    Start,
+    /// 停止服务
+    Stop,
+    /// 重启服务
+    Restart,
+    /// 查看服务状态
+    Status,
+}
+
+// ─────────────────────────── Config Types ───────────────────────────
 
 #[derive(Serialize, Deserialize, Debug)]
 struct EnvConfig {
@@ -87,21 +164,38 @@ impl Default for EnvConfig {
     }
 }
 
+#[derive(Deserialize, Debug)]
+struct PdfFileInfo {
+    name: String,
+    path: String,
+    size: u64,
+    #[serde(default)]
+    pages: Option<u32>,
+    #[serde(default)]
+    created: Option<String>,
+}
+
+// ─────────────────────────── McpManager ───────────────────────────
+
 struct McpManager {
     install_dir: String,
     env_file: String,
     pid_file: String,
+    server_url: String,
 }
 
 impl McpManager {
-    fn new(install_dir: Option<String>) -> Self {
+    fn new(install_dir: Option<String>, server_url: Option<String>) -> Self {
         let dir = install_dir.unwrap_or_else(|| DEFAULT_INSTALL_DIR.to_string());
         Self {
             install_dir: dir.clone(),
             env_file: format!("{}/.env.local", dir),
             pid_file: format!("{}/.service.pid", dir),
+            server_url: server_url.unwrap_or_else(|| DEFAULT_SERVER_URL.to_string()),
         }
     }
+
+    // ── Config load / save ──
 
     fn load_config(&self) -> EnvConfig {
         if !Path::new(&self.env_file).exists() {
@@ -143,8 +237,6 @@ VLM_MODEL={}
 VLM_ENDPOINT={}
 
 DASHBOARD_PORT={}
-DASHBOARD_WEB_DIR={}/web/dist
-
 STORAGE_TYPE=local
 STORAGE_LOCAL_DIR={}/data
 
@@ -158,9 +250,10 @@ RUST_LOG={}
             self.install_dir,
             config.rust_log,
         );
-
         fs::write(&self.env_file, content)
     }
+
+    // ── Banner ──
 
     fn show_banner(&self) {
         println!(
@@ -199,16 +292,17 @@ RUST_LOG={}
                 .cyan()
                 .bold()
         );
-        println!("\n{}", "PDF Module MCP CLI".green().bold());
+        println!("\n{}", "PDF Module MCP CLI v0.1.4".green().bold());
+        println!("{}", "配置管理工具".blue());
         println!();
     }
 
+    // ── Process helpers ──
+
     fn check_process(&self, name: &str) -> Option<u32> {
         let output = Command::new("pgrep").args(["-f", name]).output().ok()?;
-
         if output.status.success() {
             let pid_str = String::from_utf8_lossy(&output.stdout);
-            // 返回第一个匹配的PID
             pid_str.lines().next()?.trim().parse().ok()
         } else {
             None
@@ -216,11 +310,8 @@ RUST_LOG={}
     }
 
     fn check_mcp_server(&self) -> Option<u32> {
-        // MCP Server: 匹配 pdf-mcp 但排除 pdf-dashboard 和临时进程
         let output = Command::new("ps").args(["aux"]).output().ok()?;
-
         let output_str = String::from_utf8_lossy(&output.stdout);
-
         for line in output_str.lines() {
             if line.contains("/opt/pdf-module/pdf-mcp")
                 && !line.contains("pdf-dashboard")
@@ -228,7 +319,6 @@ RUST_LOG={}
                 && !line.contains("--help")
                 && !line.contains("dashboard")
             {
-                // 提取PID（第二列）
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() > 1 {
                     if let Ok(pid) = parts[1].parse::<u32>() {
@@ -241,29 +331,7 @@ RUST_LOG={}
     }
 
     fn check_dashboard(&self) -> Option<u32> {
-        // Dashboard API: 精确匹配 pdf-dashboard
         self.check_process("/opt/pdf-module/pdf-dashboard")
-    }
-
-    fn check_web_frontend(&self) -> Option<u32> {
-        // Web Frontend: 精确匹配 /opt/pdf-module/web 目录下的 serve 进程
-        let output = Command::new("ps").args(["aux"]).output().ok()?;
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let web_dir = format!("{}/web", self.install_dir);
-
-        for line in output_str.lines() {
-            // 精确匹配：必须在安装目录的 web 目录下运行 serve
-            if line.contains(&web_dir) && line.contains("serve") && line.contains("8080") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() > 1 {
-                    if let Ok(pid) = parts[1].parse::<u32>() {
-                        return Some(pid);
-                    }
-                }
-            }
-        }
-        None
     }
 
     fn check_port(&self, port: u16) -> bool {
@@ -281,6 +349,8 @@ RUST_LOG={}
         let _ = fs::write(&self.pid_file, pid.to_string());
     }
 
+    // ── Commands ──
+
     fn cmd_init(&self) {
         println!("\n{}", ">>> 初始化配置".cyan().bold());
 
@@ -289,6 +359,8 @@ RUST_LOG={}
         fs::create_dir_all(format!("{}/logs", self.install_dir)).ok();
         fs::create_dir_all(format!("{}/data", self.install_dir)).ok();
         fs::create_dir_all(format!("{}/wiki/raw", self.install_dir)).ok();
+        fs::create_dir_all(format!("{}/wiki/wiki", self.install_dir)).ok();
+        fs::create_dir_all(format!("{}/wiki/scheme", self.install_dir)).ok();
         println!(" {}", "✓".green());
 
         print!("  {} 创建配置文件...", "→".blue());
@@ -301,6 +373,7 @@ RUST_LOG={}
         }
 
         println!("\n{} 初始化完成！", "✓".green());
+        println!("  安装目录: {}", self.install_dir);
     }
 
     fn cmd_config(&self, key: Option<String>, model: Option<String>, endpoint: Option<String>) {
@@ -315,12 +388,10 @@ RUST_LOG={}
             println!("  {} API Key 已设置", "✓".green());
         } else if config.vlm_api_key.is_empty() {
             println!("\n  获取 API Key: https://open.bigmodel.cn/ -> 控制台 -> API Keys\n");
-
             let api_key: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("请输入 API Key")
                 .interact_text()
-                .unwrap();
-
+                .expect("failed to read API key from stdin");
             if !api_key.is_empty() {
                 config.vlm_api_key = api_key;
                 changed = true;
@@ -347,76 +418,6 @@ RUST_LOG={}
         self.show_config_summary(&config);
     }
 
-    fn cmd_config_interactive(&self) {
-        use std::io::{self, Write};
-
-        println!("\n{}", ">>> API 配置".cyan().bold());
-
-        loop {
-            let config = self.load_config();
-
-            println!("\n  {}", "当前配置:".yellow());
-            if config.vlm_api_key.is_empty() {
-                println!("    {} API Key: {}", "✗".red(), "未配置".red());
-            } else {
-                let masked = format!(
-                    "{}****",
-                    &config.vlm_api_key[..8.min(config.vlm_api_key.len())]
-                );
-                println!("    {} API Key: {}", "✓".green(), masked);
-            }
-            println!("    {} 模型: {}", "→".blue(), config.vlm_model);
-
-            println!("\n  {} 配置 API Key", "1".cyan());
-            println!("  {} 配置模型", "2".cyan());
-            println!("  {} 返回", "0".cyan());
-            print!("\n  选择: ");
-            io::stdout().flush().unwrap();
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input).unwrap();
-
-            match input.trim() {
-                "1" => {
-                    println!("\n  获取 API Key: https://open.bigmodel.cn/");
-                    print!("  输入 API Key: ");
-                    io::stdout().flush().unwrap();
-
-                    let mut key = String::new();
-                    io::stdin().read_line(&mut key).unwrap();
-
-                    if !key.trim().is_empty() {
-                        let mut config = self.load_config();
-                        config.vlm_api_key = key.trim().to_string();
-                        self.save_config(&config).ok();
-                        println!("  {} 已保存", "✓".green());
-                    }
-                }
-                "2" => {
-                    println!("\n  {} glm-4v-flash (推荐)", "1".cyan());
-                    println!("  {} glm-4v-plus", "2".cyan());
-                    print!("  选择 [1]: ");
-                    io::stdout().flush().unwrap();
-
-                    let mut m = String::new();
-                    io::stdin().read_line(&mut m).unwrap();
-
-                    let model = match m.trim() {
-                        "2" => "glm-4v-plus",
-                        _ => "glm-4v-flash",
-                    };
-
-                    let mut config = self.load_config();
-                    config.vlm_model = model.to_string();
-                    self.save_config(&config).ok();
-                    println!("  {} 模型: {}", "✓".green(), model);
-                }
-                "0" | "" => break,
-                _ => {}
-            }
-        }
-    }
-
     fn cmd_status(&self) {
         println!("\n{}", ">>> 服务状态".cyan().bold());
 
@@ -437,33 +438,17 @@ RUST_LOG={}
 
         println!("\n  {}", "进程:".yellow());
 
-        // MCP Server (即用即停)
         if let Some(pid) = self.check_mcp_server() {
             println!("    {} MCP Server 运行中 (PID: {})", "✓".green(), pid);
-            println!("      说明: MCP服务即用即停，无需手动管理");
         } else {
             println!("    {} MCP Server 未运行 (按需启动)", "○".blue());
         }
 
-        // Dashboard API
         if let Some(pid) = self.check_dashboard() {
             println!("    {} Dashboard API 运行中 (PID: {})", "✓".green(), pid);
             println!("      访问: http://localhost:{}", config.dashboard_port);
         } else {
             println!("    {} Dashboard API 未运行", "○".blue());
-        }
-
-        // Web Frontend
-        if let Some(pid) = self.check_web_frontend() {
-            println!(
-                "    {} Web 前端运行中 (PID: {}, 端口: 8080)",
-                "✓".green(),
-                pid
-            );
-        } else if self.check_port(8080) {
-            println!("    {} Web 前端运行中 (端口: 8080)", "✓".green());
-        } else {
-            println!("    {} Web 前端未运行", "○".blue());
         }
     }
 
@@ -481,7 +466,6 @@ RUST_LOG={}
         let processes = vec![
             ("MCP Server", self.check_mcp_server()),
             ("Dashboard API", self.check_dashboard()),
-            ("Web Frontend", self.check_web_frontend()),
         ];
 
         let mut found = false;
@@ -518,7 +502,8 @@ RUST_LOG={}
             }
         });
 
-        let config_str = serde_json::to_string_pretty(&mcp_config).unwrap();
+        let config_str = serde_json::to_string_pretty(&mcp_config)
+            .expect("MCP config is valid JSON");
 
         if let Some(out_path) = output {
             match fs::write(&out_path, &config_str) {
@@ -530,18 +515,112 @@ RUST_LOG={}
         }
     }
 
-    fn cmd_start(&self, web: bool) {
+    // ── NEW: info command ──
+
+    fn cmd_info(&self, section: Option<String>) {
+        println!("\n{}", ">>> 配置说明".cyan().bold());
+
+        match section.as_deref() {
+            Some("server") => self.show_info_server(),
+            Some("client") => self.show_info_client(),
+            Some("security") => self.show_info_security(),
+            _ => {
+                // Show all sections
+                self.show_info_server();
+                println!();
+                self.show_info_client();
+                println!();
+                self.show_info_security();
+            }
+        }
+    }
+
+    fn show_info_server(&self) {
+        println!("\n  {}", "📦 服务端配置".yellow());
+        println!("  {}", "─".repeat(40));
+        println!("  服务端位于: {}", self.install_dir);
+        println!("  配置文件: {}", self.env_file);
+        println!("  配置项:");
+        println!("    VLM_API_KEY      - 智谱 AI API Key");
+        println!("    VLM_MODEL        - 模型名称 (默认: {})", DEFAULT_VLM_MODEL);
+        println!("    VLM_ENDPOINT     - API 端点");
+        println!("    DASHBOARD_PORT   - Dashboard 端口 (默认: 8000)");
+        println!("    RUST_LOG         - 日志级别 (默认: info)");
+        println!();
+        println!("  常用命令:");
+        println!("    pdf-mcp-cli config           - 配置 API Key");
+        println!("    pdf-mcp-cli dashboard        - 启动 Web 管理界面");
+        println!("    pdf-mcp-cli service start    - 启动服务");
+        println!("    pdf-mcp-cli logs -f          - 查看日志");
+    }
+
+    fn show_info_client(&self) {
+        println!("\n  {}", "🔗 客户端配置".yellow());
+        println!("  {}", "─".repeat(40));
+        println!("  客户端可以是任何 MCP 兼容的 AI 工具:");
+        println!("    - Cursor IDE");
+        println!("    - Claude Desktop");
+        println!("    - Trae IDE");
+        println!();
+        println!("  客户端 MCP JSON 配置:");
+        let config_example = serde_json::json!({
+            "mcpServers": {
+                "pdf-module": {
+                    "command": format!("{}/pdf-mcp", self.install_dir),
+                    "env": {
+                        "VLM_API_KEY": "<your-api-key>",
+                        "VLM_MODEL": DEFAULT_VLM_MODEL,
+                        "VLM_ENDPOINT": DEFAULT_VLM_ENDPOINT
+                    }
+                }
+            }
+        });
+        println!("  {}", serde_json::to_string_pretty(&config_example)
+            .expect("config example is valid JSON")
+            .replace('\n', "\n  "));
+        println!();
+        println!("  使用 generate-config 命令生成配置文件");
+    }
+
+    fn show_info_security(&self) {
+        println!("\n  {}", "🔒 安全最佳实践".yellow());
+        println!("  {}", "─".repeat(40));
+        println!("  ✅ API Key 配置在服务端");
+        println!("     - 集中管理敏感信息");
+        println!("     - 不暴露给客户端");
+        println!("     - 更新只需修改一处");
+        println!();
+        println!("  ✅ 客户端只需要服务地址");
+        println!("     - 不要将 API Key 放在客户端 MCP JSON 中");
+        println!("     - 避免泄露给其他人");
+        println!("     - 避免提交到 Git 仓库");
+        println!();
+        println!("  ✅ 文件权限");
+        println!("     - .env.local 文件权限建议设为 600");
+        println!("     - 安装目录建议 root 所有");
+    }
+
+    // ── NEW: service command ──
+
+    fn cmd_service(&self, action: ServiceAction) {
+        match action {
+            ServiceAction::Start => self.cmd_service_start(),
+            ServiceAction::Stop => self.cmd_stop(),
+            ServiceAction::Restart => {
+                self.cmd_stop();
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                self.cmd_service_start();
+            }
+            ServiceAction::Status => self.cmd_status(),
+        }
+    }
+
+    fn cmd_service_start(&self) {
         println!("\n{}", ">>> 启动服务".cyan().bold());
 
         let config = self.load_config();
 
-        if !web {
-            println!("  {} MCP Server 按需启动，无需手动管理", "ℹ".blue());
-            println!("  使用 --web 参数启动 Dashboard 和 Web 前端");
-            return;
-        }
-
-        // 检查Dashboard二进制
+        // Check dashboard binary
         let dashboard_binary = format!("{}/pdf-dashboard", self.install_dir);
         if !Path::new(&dashboard_binary).exists() {
             println!("  {} pdf-dashboard 不存在", "✗".red());
@@ -549,92 +628,115 @@ RUST_LOG={}
             return;
         }
 
-        // 检查Web前端
-        let web_dist = format!("{}/web/dist", self.install_dir);
-        if !Path::new(&web_dist).exists() {
-            println!("  {} Web 前端不存在", "✗".red());
-            println!("  {} 请先下载 Web 前端:", "ℹ".blue());
-            println!("     pdf-mcp-cli download-web");
-            println!("  或使用交互式菜单选择下载");
+        if self.check_dashboard().is_some() {
+            println!("  {} Dashboard API 已在运行", "ℹ".blue());
             return;
         }
 
-        // 启动Dashboard API
+        print!("  {} 启动 Dashboard API...", "→".blue());
+
+        let pdfium_lib = format!("{}/lib/libpdfium.so", self.install_dir);
+        let lib_dir = format!("{}/lib", self.install_dir);
+
+        let result = Command::new(&dashboard_binary)
+            .args(["--port", &config.dashboard_port.to_string()])
+            .current_dir(&self.install_dir)
+            .env("PDFIUM_LIB_PATH", &pdfium_lib)
+            .env("LD_LIBRARY_PATH", &lib_dir)
+            .env("VLM_API_KEY", &config.vlm_api_key)
+            .env("VLM_MODEL", &config.vlm_model)
+            .env("VLM_ENDPOINT", &config.vlm_endpoint)
+            .env("RUST_LOG", &config.rust_log)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+
+        match result {
+            Ok(child) => {
+                self.save_pid(child.id());
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+
+                if self.check_dashboard().is_some() {
+                    println!(" {}", "✓".green());
+                    println!("\n  {} 访问地址: http://localhost:{}", "→".blue(), config.dashboard_port);
+                } else {
+                    println!(" {}", "✗ 启动失败".red());
+                }
+            }
+            Err(e) => {
+                println!(" {} {}", "✗".red(), e);
+            }
+        }
+    }
+
+    // ── NEW: dashboard command ──
+
+    fn cmd_dashboard(&self, port: u16) {
+        println!("\n{}", ">>> 启动 Dashboard".cyan().bold());
+
+        let config = self.load_config();
+        let dashboard_binary = format!("{}/pdf-dashboard", self.install_dir);
+
+        if !Path::new(&dashboard_binary).exists() {
+            println!("  {} pdf-dashboard 不存在", "✗".red());
+            println!("  {} 请检查安装是否完整", "ℹ".blue());
+            return;
+        }
+
+        let actual_port = if port != 8000 { port } else { config.dashboard_port };
+
         if self.check_dashboard().is_some() {
-            println!("  {} Dashboard API 已在运行", "ℹ".blue());
-        } else {
-            print!("  {} 启动 Dashboard API...", "→".blue());
-
-            let pdfium_lib = format!("{}/lib/libpdfium.so", self.install_dir);
-            let lib_dir = format!("{}/lib", self.install_dir);
-
-            let result = Command::new(&dashboard_binary)
-                .args(["--port", &config.dashboard_port.to_string()])
-                .current_dir(&self.install_dir)
-                .env("PDFIUM_LIB_PATH", &pdfium_lib)
-                .env("LD_LIBRARY_PATH", &lib_dir)
-                .env("VLM_API_KEY", &config.vlm_api_key)
-                .env("VLM_MODEL", &config.vlm_model)
-                .env("VLM_ENDPOINT", &config.vlm_endpoint)
-                .env("RUST_LOG", &config.rust_log)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
-
-            match result {
-                Ok(child) => {
-                    self.save_pid(child.id());
-                    std::thread::sleep(std::time::Duration::from_millis(1000));
-
-                    if self.check_dashboard().is_some() {
-                        println!(" {}", "✓".green());
-                    } else {
-                        println!(" {}", "✗ 启动失败".red());
-                        return;
-                    }
-                }
-                Err(e) => {
-                    println!(" {} {}", "✗".red(), e);
-                    return;
-                }
-            }
+            println!("  {} Dashboard 已在运行", "ℹ".blue());
+            println!("  {} 访问: http://localhost:{}", "→".blue(), actual_port);
+            return;
         }
 
-        if self.check_port(8080) {
-            println!("  {} Web 前端已在运行", "ℹ".blue());
-        } else {
-            print!("  {} 启动 Web 前端...", "→".blue());
+        print!("  {} 启动 Dashboard (端口: {})...", "→".blue(), actual_port);
 
-            let web_dir = format!("{}/web", self.install_dir);
-            let result = Command::new("npx")
-                .args(["serve", "dist", "-p", "8080", "-s"])
-                .current_dir(&web_dir)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
+        let pdfium_lib = format!("{}/lib/libpdfium.so", self.install_dir);
+        let lib_dir = format!("{}/lib", self.install_dir);
 
-            match result {
-                Ok(_) => {
-                    std::thread::sleep(std::time::Duration::from_millis(3000));
+        let result = Command::new(&dashboard_binary)
+            .args(["--port", &actual_port.to_string()])
+            .current_dir(&self.install_dir)
+            .env("PDFIUM_LIB_PATH", &pdfium_lib)
+            .env("LD_LIBRARY_PATH", &lib_dir)
+            .env("VLM_API_KEY", &config.vlm_api_key)
+            .env("VLM_MODEL", &config.vlm_model)
+            .env("VLM_ENDPOINT", &config.vlm_endpoint)
+            .env("RUST_LOG", &config.rust_log)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
 
-                    if self.check_port(8080) {
-                        println!(" {}", "✓".green());
-                    } else {
-                        println!(" {}", "✗ 启动失败".red());
-                    }
-                }
-                Err(e) => {
-                    println!(" {} {}", "✗".red(), e);
+        match result {
+            Ok(child) => {
+                self.save_pid(child.id());
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+
+                if self.check_dashboard().is_some() {
+                    println!(" {}", "✓".green());
+                    println!("\n  {} Dashboard 已启动", "→".blue());
+                    println!("  {} 访问地址: http://localhost:{}", "→".blue(), actual_port);
+                } else {
+                    println!(" {}", "✗ 启动失败".red());
                 }
             }
+            Err(e) => {
+                println!(" {} {}", "✗".red(), e);
+            }
         }
+    }
 
-        println!("\n  {} 访问地址: http://localhost:8080", "→".blue());
-        println!(
-            "  {} API 地址: http://localhost:{}",
-            "→".blue(),
-            config.dashboard_port
-        );
+    // ── Legacy start (kept for backward compat) ──
+
+    fn cmd_start_legacy(&self, web: bool) {
+        if !web {
+            println!("  {} MCP Server 按需启动，无需手动管理", "ℹ".blue());
+            println!("  提示: 使用 `dashboard` 或 `service start` 命令");
+            return;
+        }
+        self.cmd_service_start();
     }
 
     fn cmd_stop(&self) {
@@ -654,140 +756,233 @@ RUST_LOG={}
             println!(" {}", "未运行".blue());
         }
 
-        print!("  {} 停止 Web 前端...", "→".blue());
-        if let Some(pid) = self.check_web_frontend() {
-            let _ = Command::new("kill").args([&pid.to_string()]).status();
-            std::thread::sleep(std::time::Duration::from_millis(500));
-
-            if self.check_web_frontend().is_none() && !self.check_port(8080) {
-                println!(" {}", "✓".green());
-            } else {
-                println!(" {}", "✗ 停止失败".red());
-            }
-        } else if self.check_port(8080) {
-            // 端口被其他进程占用，不要误杀！
-            println!(" {}", "端口 8080 被其他进程占用，请手动检查".yellow());
-            println!("    提示: 使用 'ss -tlnp | grep 8080' 查看占用进程");
-        } else {
-            println!(" {}", "未运行".blue());
-        }
-
         let _ = fs::remove_file(&self.pid_file);
     }
 
-    fn cmd_restart(&self) {
+    fn cmd_restart_legacy(&self) {
         self.cmd_stop();
         std::thread::sleep(std::time::Duration::from_millis(500));
-        self.cmd_start(true);
+        self.cmd_service_start();
     }
 
-    fn cmd_download_web(&self, version: Option<String>) {
-        println!("\n{}", ">>> 下载 Web 前端".cyan().bold());
+    // ── NEW: upload command ──
 
-        let web_dist = format!("{}/web/dist", self.install_dir);
+    fn cmd_upload(&self, file_path: &str) {
+        println!("\n{}", ">>> 上传 PDF 文件".cyan().bold());
 
-        if Path::new(&web_dist).exists() {
-            println!("  {} Web 前端已存在", "ℹ".blue());
-            print!("  {} 是否重新下载? (y/N): ", "?".yellow());
-            use std::io::{self, BufRead};
-            let stdin = io::stdin();
-            let input = stdin
-                .lock()
-                .lines()
-                .next()
-                .unwrap_or(Ok(String::new()))
-                .unwrap_or_default();
-
-            if !input.to_lowercase().starts_with('y') {
-                println!("  {} 已取消", "ℹ".blue());
-                return;
-            }
+        let path = Path::new(file_path);
+        if !path.exists() {
+            println!("  {} 文件不存在: {}", "✗".red(), file_path);
+            return;
         }
 
-        let version = version.unwrap_or_else(|| {
-            print!("  {} 获取最新版本...", "→".blue());
-            let output = Command::new("curl")
-                .args([
-                    "-s",
-                    "https://api.github.com/repos/smile9493/rsut_pdf_mcp/releases/latest",
-                ])
-                .output();
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "document.pdf".to_string());
 
-            match output {
-                Ok(output) => {
-                    let response = String::from_utf8_lossy(&output.stdout);
-                    for line in response.lines() {
-                        if line.contains("\"tag_name\":") {
-                            let version = line
-                                .split(':')
-                                .nth(1)
-                                .unwrap_or("\"v0.1.3\"")
-                                .trim()
-                                .trim_matches(',')
-                                .trim_matches('"')
-                                .to_string();
-                            println!(" {}", version.green());
-                            return version;
+        let file_content = match fs::read(path) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("  {} 读取文件失败: {}", "✗".red(), e);
+                return;
+            }
+        };
+
+        print!("  {} 上传 {}...", "→".blue(), file_name);
+
+        let part = multipart::Part::bytes(file_content)
+            .file_name(file_name.clone())
+            .mime_str("application/pdf")
+            .expect("application/pdf is a valid MIME type");
+
+        let form = multipart::Form::new().part("file", part);
+
+        let client = reqwest::blocking::Client::new();
+        let upload_url = format!("{}/api/upload", self.server_url);
+
+        match client.post(&upload_url).multipart(form).send() {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    println!(" {}", "✓".green());
+                    println!("  {} 文件: {}", "→".blue(), file_name);
+                    println!("  {} 服务器: {}", "→".blue(), self.server_url);
+                } else {
+                    let status = resp.status();
+                    let body = resp.text().unwrap_or_default();
+                    println!(" {}", "✗".red());
+                    println!("  {} HTTP {}: {}", "✗".red(), status, body);
+                }
+            }
+            Err(e) => {
+                println!(" {}", "✗".red());
+                println!("  {} 连接失败: {}", "✗".red(), e);
+                println!("  {} 请确认 Dashboard 正在运行 (端口: {})", "ℹ".blue(), self.server_url);
+            }
+        }
+    }
+
+    // ── NEW: list command ──
+
+    fn cmd_list(&self) {
+        println!("\n{}", ">>> PDF 文件列表".cyan().bold());
+
+        let client = reqwest::blocking::Client::new();
+        let list_url = format!("{}/api/pdfs", self.server_url);
+
+        match client.get(&list_url).send() {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    println!("  {} 请求失败: HTTP {}", "✗".red(), resp.status());
+                    return;
+                }
+
+                let files: Vec<PdfFileInfo> = match resp.json() {
+                    Ok(f) => f,
+                    Err(_) => {
+                        println!("  {} 无法解析服务器响应", "✗".red());
+                        return;
+                    }
+                };
+
+                if files.is_empty() {
+                    println!("  {} 暂无 PDF 文件", "ℹ".blue());
+                    return;
+                }
+
+                println!(
+                    "\n  {:<4} {:<40} {:<10} {}",
+                    "序号".cyan(),
+                    "文件名".cyan(),
+                    "大小".cyan(),
+                    "页数".cyan()
+                );
+                println!("  {}", "─".repeat(70));
+
+                for (i, file) in files.iter().enumerate() {
+                    let size_str = if file.size > 1024 * 1024 {
+                        format!("{:.1} MB", file.size as f64 / (1024.0 * 1024.0))
+                    } else if file.size > 1024 {
+                        format!("{:.1} KB", file.size as f64 / 1024.0)
+                    } else {
+                        format!("{} B", file.size)
+                    };
+
+                    let pages_str = file
+                        .pages
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "-".to_string());
+
+                    println!(
+                        "  {:<4} {:<40} {:<10} {}",
+                        i + 1,
+                        truncate_str(&file.name, 38),
+                        size_str,
+                        pages_str
+                    );
+                }
+                println!("  {} 共 {} 个文件", "→".blue(), files.len());
+            }
+            Err(e) => {
+                println!("  {} 连接失败: {}", "✗".red(), e);
+                println!("  {} 请确认 Dashboard 正在运行", "ℹ".blue());
+            }
+        }
+    }
+
+    // ── NEW: test command ──
+
+    fn cmd_test(&self, file: Option<String>) {
+        println!("\n{}", ">>> 测试 PDF 处理".cyan().bold());
+
+        let test_path = match file {
+            Some(p) => p,
+            None => {
+                print!("  请输入 PDF 文件路径 (直接回车使用默认): ");
+                use std::io::{self, Write};
+                io::stdout().flush().expect("stdout flush failed");
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).expect("failed to read stdin");
+                let trimmed = input.trim();
+                if trimmed.is_empty() {
+                    println!("  {} 未提供文件路径", "ℹ".blue());
+                    println!("  用法: pdf-mcp-cli test --file <path>");
+                    return;
+                }
+                trimmed.to_string()
+            }
+        };
+
+        let path = Path::new(&test_path);
+        if !path.exists() {
+            println!("  {} 文件不存在: {}", "✗".red(), test_path);
+            return;
+        }
+
+        println!("  {} 测试文件: {}", "→".blue(), test_path);
+
+        // Try to test via dashboard API
+        let client = reqwest::blocking::Client::new();
+        let test_url = format!("{}/api/test", self.server_url);
+        let body = serde_json::json!({ "file": test_path });
+
+        match client.post(&test_url).json(&body).send() {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    let result: serde_json::Value = resp.json().unwrap_or_default();
+                    println!("  {} 测试结果: {}", "✓".green(), serde_json::to_string_pretty(&result)
+                        .expect("test result is valid JSON"));
+                } else {
+                    let status = resp.status();
+                    let body_text = resp.text().unwrap_or_default();
+                    println!("  {} 测试失败: HTTP {} - {}", "✗".red(), status, body_text);
+                }
+            }
+            Err(_) => {
+                // Fallback: try direct MCP stdio test
+                println!("  {} Dashboard 未连接，尝试直接测试...", "ℹ".blue());
+
+                let mcp_binary = format!("{}/pdf-mcp", self.install_dir);
+                if !Path::new(&mcp_binary).exists() {
+                    println!("  {} pdf-mcp 未找到: {}", "✗".red(), mcp_binary);
+                    return;
+                }
+
+                println!("  {} 测试: 获取页数", "→".blue());
+                let mcp_request = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "get_page_count",
+                        "arguments": { "file_path": test_path }
+                    }
+                });
+
+                let mcp_str = serde_json::to_string(&mcp_request)
+                    .expect("MCP request is valid JSON");
+                let output = Command::new(&mcp_binary)
+                    .arg("--stdio")
+                    .arg("--single")
+                    .arg(&mcp_str)
+                    .env("PDFIUM_LIB_PATH", format!("{}/lib/libpdfium.so", self.install_dir))
+                    .env("LD_LIBRARY_PATH", format!("{}/lib", self.install_dir))
+                    .output();
+
+                match output {
+                    Ok(out) => {
+                        let stdout_str = String::from_utf8_lossy(&out.stdout);
+                        if out.status.success() {
+                            println!("  {} 响应: {}", "✓".green(), stdout_str.trim());
+                        } else {
+                            let stderr_str = String::from_utf8_lossy(&out.stderr);
+                            println!("  {} 错误: {}", "✗".red(), stderr_str.trim());
                         }
                     }
-                }
-                Err(_) => {}
-            }
-            println!(" {}", "v0.1.3 (默认)".blue());
-            "v0.1.3".to_string()
-        });
-
-        let download_url = format!(
-            "https://github.com/smile9493/rsut_pdf_mcp/releases/download/{}/web-dist.tar.gz",
-            version
-        );
-
-        print!("  {} 下载 Web 前端...", "→".blue());
-
-        let web_dir = format!("{}/web", self.install_dir);
-        let temp_file = format!("{}/web-dist.tar.gz", web_dir);
-
-        fs::create_dir_all(&web_dir).ok();
-
-        let result = Command::new("curl")
-            .args(["-fsSL", "-o", &temp_file, &download_url])
-            .status();
-
-        match result {
-            Ok(status) if status.success() => {
-                println!(" {}", "✓".green());
-
-                print!("  {} 解压文件...", "→".blue());
-
-                // 清理旧的dist目录
-                if Path::new(&web_dist).exists() {
-                    fs::remove_dir_all(&web_dist).ok();
-                }
-
-                let extract_result = Command::new("tar")
-                    .args(["-xzf", &temp_file, "-C", &web_dir])
-                    .status();
-
-                match extract_result {
-                    Ok(status) if status.success() => {
-                        println!(" {}", "✓".green());
-
-                        // 清理临时文件
-                        fs::remove_file(&temp_file).ok();
-
-                        println!("\n  {} Web 前端下载完成！", "✓".green());
-                        println!("  {} 版本: {}", "→".blue(), version);
-                        println!("  {} 位置: {}", "→".blue(), web_dist);
-                    }
-                    _ => {
-                        println!(" {}", "✗ 解压失败".red());
-                        fs::remove_file(&temp_file).ok();
+                    Err(e) => {
+                        println!("  {} 执行失败: {}", "✗".red(), e);
                     }
                 }
-            }
-            _ => {
-                println!(" {}", "✗ 下载失败".red());
-                println!("  {} 请检查网络连接或使用代理", "ℹ".blue());
             }
         }
     }
@@ -796,7 +991,7 @@ RUST_LOG={}
         let log_file = format!("{}/logs/latest.log", self.install_dir);
 
         if !Path::new(&log_file).exists() {
-            println!("  {} 日志文件不存在", "✗".red());
+            println!("  {} 日志文件不存在: {}", "✗".red(), log_file);
             return;
         }
 
@@ -825,15 +1020,218 @@ RUST_LOG={}
         println!("    {} 模型: {}", "→".blue(), config.vlm_model);
         println!("    {} 端点: {}", "→".blue(), config.vlm_endpoint);
     }
+
+    // ── Interactive mode ──
+
+    fn interactive_menu(&self) {
+        use std::io::{self, Write};
+
+        loop {
+            let config = self.load_config();
+
+            println!("\n  {}", "📋 主菜单".cyan().bold());
+            println!("  {}", "─".repeat(34));
+
+            // Check API key status for display
+            let config_status = if config.vlm_api_key.is_empty() {
+                "未配置".red().to_string()
+            } else {
+                "已配置".green().to_string()
+            };
+
+            println!("  {} 初始化配置    [{}]", " 1".cyan(), "init".blue());
+            println!("  {} 配置 GLM API  [{}]", " 2".cyan(), config_status);
+            println!("  {} 查看状态      [{}]", " 3".cyan(), "status".blue());
+            println!("  {} 生成客户端配置 [{}]", " 4".cyan(), "generate-config".blue());
+            println!("  {} 配置说明      [{}]", " 5".cyan(), "info".blue());
+            println!("  {} 管理系统服务  [{}]", " 6".cyan(), "service".blue());
+            println!("  {} 查看日志      [{}]", " 7".cyan(), "logs".blue());
+            println!("  {} 启动 Dashboard [{}]", " 8".cyan(), "dashboard".blue());
+            println!("  {} 上传 PDF      [{}]", " 9".cyan(), "upload".blue());
+            println!("  {} 测试 PDF 处理 [{}]", "10".cyan(), "test".blue());
+            println!("  {} 退出", " 0".cyan());
+
+            print!("\n  选择: ");
+            io::stdout().flush().expect("stdout flush failed");
+
+            let mut input = String::new();
+            if io::stdin().read_line(&mut input).is_err() {
+                break;
+            }
+
+            match input.trim() {
+                "1" => self.cmd_init(),
+                "2" => self.cmd_config_interactive(),
+                "3" => self.cmd_status(),
+                "4" => self.cmd_generate_config(None),
+                "5" => self.cmd_info(None),
+                "6" => self.interactive_service_menu(),
+                "7" => {
+                    print!("  行数 [20]: ");
+                    io::stdout().flush().expect("stdout flush failed");
+                    let mut lines = String::new();
+                    io::stdin().read_line(&mut lines).expect("failed to read stdin");
+                    let n: u16 = lines.trim().parse().unwrap_or(20);
+                    self.cmd_logs(n, false);
+                }
+                "8" => {
+                    print!("  Dashboard 端口 [8000]: ");
+                    io::stdout().flush().expect("stdout flush failed");
+                    let mut port = String::new();
+                    io::stdin().read_line(&mut port).expect("failed to read stdin");
+                    let p: u16 = port.trim().parse().unwrap_or(8000);
+                    self.cmd_dashboard(p);
+                }
+                "9" => {
+                    print!("  PDF 文件路径: ");
+                    io::stdout().flush().expect("stdout flush failed");
+                    let mut path = String::new();
+                    io::stdin().read_line(&mut path).expect("failed to read stdin");
+                    let path = path.trim();
+                    if !path.is_empty() {
+                        self.cmd_upload(path);
+                    }
+                }
+                "10" => self.cmd_test(None),
+                "0" | "q" | "quit" | "exit" => {
+                    println!("\n  再见！\n");
+                    break;
+                }
+                _ => {}
+            }
+
+            if input.trim() != "0" && input.trim() != "q" {
+                println!("\n  {} 按回车键继续...", "→".blue());
+                let mut _pause = String::new();
+                io::stdin().read_line(&mut _pause).ok();
+            }
+        }
+    }
+
+    fn cmd_config_interactive(&self) {
+        use std::io::{self, Write};
+
+        println!("\n{}", ">>> API 配置".cyan().bold());
+
+        loop {
+            let config = self.load_config();
+
+            println!("\n  {}", "当前配置:".yellow());
+            if config.vlm_api_key.is_empty() {
+                println!("    {} API Key: {}", "✗".red(), "未配置".red());
+            } else {
+                let masked = format!(
+                    "{}****",
+                    &config.vlm_api_key[..8.min(config.vlm_api_key.len())]
+                );
+                println!("    {} API Key: {}", "✓".green(), masked);
+            }
+            println!("    {} 模型: {}", "→".blue(), config.vlm_model);
+
+            println!("\n  {} 配置 API Key", "1".cyan());
+            println!("  {} 配置模型", "2".cyan());
+            println!("  {} 返回", "0".cyan());
+            print!("\n  选择: ");
+            io::stdout().flush().expect("stdout flush failed");
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).expect("failed to read stdin");
+
+            match input.trim() {
+                "1" => {
+                    println!("\n  获取 API Key: https://open.bigmodel.cn/");
+                    print!("  输入 API Key: ");
+                    io::stdout().flush().expect("stdout flush failed");
+
+                    let mut key = String::new();
+                    io::stdin().read_line(&mut key).expect("failed to read stdin");
+
+                    if !key.trim().is_empty() {
+                        let mut config = self.load_config();
+                        config.vlm_api_key = key.trim().to_string();
+                        self.save_config(&config).ok();
+                        println!("  {} 已保存", "✓".green());
+                    }
+                }
+                "2" => {
+                    let models = &["glm-4v-flash (推荐)", "glm-4v-plus"];
+                    let selection = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("选择模型")
+                        .items(models)
+                        .default(0)
+                        .interact()
+                        .expect("failed to select model");
+
+                    let model = match selection {
+                        1 => "glm-4v-plus",
+                        _ => "glm-4v-flash",
+                    };
+
+                    let mut config = self.load_config();
+                    config.vlm_model = model.to_string();
+                    self.save_config(&config).ok();
+                    println!("  {} 模型: {}", "✓".green(), model);
+                }
+                "0" | "" => break,
+                _ => {}
+            }
+        }
+    }
+
+    fn interactive_service_menu(&self) {
+        use std::io::{self, Write};
+
+        loop {
+            println!("\n  {}", "🔧 服务管理".cyan().bold());
+            println!("  {}", "─".repeat(20));
+            println!("  {} 启动服务", "1".cyan());
+            println!("  {} 停止服务", "2".cyan());
+            println!("  {} 重启服务", "3".cyan());
+            println!("  {} 查看状态", "4".cyan());
+            println!("  {} 返回主菜单", "0".cyan());
+            print!("\n  选择: ");
+            io::stdout().flush().expect("stdout flush failed");
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).expect("failed to read stdin");
+
+            match input.trim() {
+                "1" => self.cmd_service_start(),
+                "2" => self.cmd_stop(),
+                "3" => {
+                    self.cmd_stop();
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    self.cmd_service_start();
+                }
+                "4" => self.cmd_status(),
+                "0" | "" => break,
+                _ => {}
+            }
+        }
+    }
 }
+
+// ─────────────────────────── Helper ───────────────────────────
+
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max.saturating_sub(3)])
+    }
+}
+
+// ─────────────────────────── Main ───────────────────────────
 
 fn main() {
     let cli = Cli::parse();
-    let manager = McpManager::new(None);
+    let server_url = cli.server.clone();
+    let manager = McpManager::new(None, Some(server_url));
 
+    // No command → interactive mode
     if cli.command.is_none() {
         manager.show_banner();
-        interactive_menu(&manager);
+        manager.interactive_menu();
         return;
     }
 
@@ -841,6 +1239,8 @@ fn main() {
 
     match cli.command {
         None => {}
+
+        // Core commands
         Some(Commands::Init) => manager.cmd_init(),
         Some(Commands::Config {
             key,
@@ -849,70 +1249,31 @@ fn main() {
         }) => manager.cmd_config(key, model, endpoint),
         Some(Commands::Status) => manager.cmd_status(),
         Some(Commands::GenerateConfig { output }) => manager.cmd_generate_config(output),
-        Some(Commands::Start { web }) => manager.cmd_start(web),
+
+        // NEW: info
+        Some(Commands::Info { section }) => manager.cmd_info(section),
+
+        // NEW: service subcommand
+        Some(Commands::Service { action }) => manager.cmd_service(action),
+
+        // NEW: dashboard
+        Some(Commands::Dashboard { port }) => manager.cmd_dashboard(port),
+
+        // NEW: interactive
+        Some(Commands::Interactive) => {
+            manager.interactive_menu();
+        }
+
+        // NEW: file operations
+        Some(Commands::Upload { file }) => manager.cmd_upload(&file),
+        Some(Commands::List) => manager.cmd_list(),
+        Some(Commands::Test { file }) => manager.cmd_test(file),
+
+        // Legacy commands
+        Some(Commands::Start { web }) => manager.cmd_start_legacy(web),
         Some(Commands::Stop) => manager.cmd_stop(),
-        Some(Commands::Restart) => manager.cmd_restart(),
+        Some(Commands::Restart) => manager.cmd_restart_legacy(),
         Some(Commands::Logs { lines, follow }) => manager.cmd_logs(lines, follow),
         Some(Commands::Ps) => manager.cmd_ps(),
-        Some(Commands::DownloadWeb { version }) => manager.cmd_download_web(version),
-    }
-}
-
-fn interactive_menu(manager: &McpManager) {
-    use std::io::{self, Write};
-
-    loop {
-        let config = manager.load_config();
-
-        println!("\n  {}", "主菜单".cyan().bold());
-        println!("  {}", "─".repeat(30));
-
-        if config.vlm_api_key.is_empty() {
-            println!("  {} 配置 API (未配置)", "1".cyan());
-        } else {
-            println!("  {} 配置 API (已配置)", "1".cyan());
-        }
-
-        println!("  {} 查看状态", "2".cyan());
-        println!("  {} 启动服务", "3".cyan());
-        println!("  {} 停止服务", "4".cyan());
-        println!("  {} 重启服务", "5".cyan());
-        println!("  {} 查看进程", "6".cyan());
-        println!("  {} 查看日志", "7".cyan());
-        println!("  {} 生成客户端配置", "8".cyan());
-        println!("  {} 下载 Web 前端", "9".cyan());
-        println!("  {} 退出", "0".cyan());
-
-        print!("\n  选择: ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        if io::stdin().read_line(&mut input).is_err() {
-            break;
-        }
-
-        match input.trim() {
-            "1" => manager.cmd_config_interactive(),
-            "2" => manager.cmd_status(),
-            "3" => manager.cmd_start(true),
-            "4" => manager.cmd_stop(),
-            "5" => manager.cmd_restart(),
-            "6" => manager.cmd_ps(),
-            "7" => {
-                print!("  行数 [20]: ");
-                io::stdout().flush().unwrap();
-                let mut lines = String::new();
-                io::stdin().read_line(&mut lines).unwrap();
-                let n: u16 = lines.trim().parse().unwrap_or(20);
-                manager.cmd_logs(n, false);
-            }
-            "8" => manager.cmd_generate_config(None),
-            "9" => manager.cmd_download_web(None),
-            "0" | "q" | "quit" | "exit" => {
-                println!("\n  再见！\n");
-                break;
-            }
-            _ => {}
-        }
     }
 }

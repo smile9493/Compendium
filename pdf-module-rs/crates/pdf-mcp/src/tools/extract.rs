@@ -127,6 +127,7 @@ pub async fn handle_extract_text(
     Ok(vec![Content::text(result.extracted_text)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_extract_structured(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -146,6 +147,7 @@ pub async fn handle_extract_structured(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_get_page_count(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -162,6 +164,7 @@ pub async fn handle_get_page_count(
     Ok(vec![Content::text(format!("{}", count))])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_search_keywords(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -222,9 +225,9 @@ pub async fn handle_search_keywords(
             let pattern = regex::escape(kw);
             let flags = if case_sensitive { "" } else { "(?i)" };
             regex::Regex::new(&format!("{}{}", flags, pattern))
-                .expect("Regex pattern should be valid after escaping")
+                .map_err(|e| anyhow::anyhow!("Invalid regex for keyword '{}': {}", kw, e))
         })
-        .collect();
+        .collect::<anyhow::Result<_>>()?;
 
     let mut matches: Vec<serde_json::Value> = Vec::with_capacity(256);
     let mut pages_with_matches: std::collections::HashSet<u32> = std::collections::HashSet::new();
@@ -258,6 +261,7 @@ pub async fn handle_search_keywords(
     Ok(vec![Content::text(serde_json::to_string(&search_result)?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_extrude_to_server_wiki(
     ctx: &ToolContext,
     args: &serde_json::Value,
@@ -303,6 +307,7 @@ pub async fn handle_extrude_to_server_wiki(
     )?)])
 }
 
+#[instrument(skip(ctx, args))]
 pub async fn handle_extrude_to_agent_payload(
     ctx: &ToolContext,
     args: &serde_json::Value,

@@ -13,18 +13,24 @@
 //! - **Tracing support**: Optional `tracing-wasm` for logging
 
 #![forbid(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::all)]
-#![warn(clippy::await_holding_lock)]
-#![warn(clippy::await_holding_refcell_ref)]
-#![warn(clippy::large_stack_frames)]
-#![warn(clippy::undocumented_unsafe_blocks)]
-#![warn(clippy::todo)]
-#![warn(clippy::dbg_macro)]
+#![deny(clippy::all)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::await_holding_refcell_ref)]
+#![deny(clippy::large_stack_frames)]
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(test, allow(clippy::undocumented_unsafe_blocks))]
+#![deny(clippy::todo)]
+#![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 #[cfg(feature = "wasm")]
 #[global_allocator]
-static ALLOC: talc::TalckWasm = talc::TalckWasm::new();
+// SAFETY: TalckWasm provides a thread-safe bump-allocated global allocator
+// backed by WASM linear memory. It implements the GlobalAlloc trait correctly
+// for the wasm32-unknown-unknown target. `new_global()` initializes the allocator
+// with WASM's linear memory as the backing storage.
+static ALLOC: talc::TalckWasm = talc::TalckWasm::new_global();
 
 pub mod arena;
 pub mod error;
@@ -44,4 +50,14 @@ pub use slice::{OwnedSlice, WasmSlice};
 pub fn init_panic_hook() {
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
+}
+
+/// Auto-initialize panic hook on WASM instantiation.
+///
+/// This runs automatically when the WASM module is loaded by JavaScript,
+/// ensuring panic messages are always visible in the browser console.
+#[cfg(feature = "wasm")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn start() {
+    init_panic_hook();
 }

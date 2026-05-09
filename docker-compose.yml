@@ -15,7 +15,6 @@ services:
       - STORAGE_TYPE=local
       - STORAGE_LOCAL_DIR=/app/data
       - MAX_FILE_SIZE_MB=100
-      - DASHBOARD_WEB_DIR=/app/web/dist
       - DASHBOARD_PORT=8000
     volumes:
       - pdf_data:/app/data

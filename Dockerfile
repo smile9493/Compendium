@@ -1,13 +1,3 @@
-FROM node:20-bookworm AS frontend-builder
-
-WORKDIR /app/web
-
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
-
-COPY web/ ./
-RUN npm run build
-
 FROM rust:bookworm AS backend-builder
 
 WORKDIR /app
@@ -37,7 +27,6 @@ WORKDIR /app
 
 COPY --from=backend-builder /app/target/release/pdf-mcp /usr/local/bin/pdf-mcp
 COPY --from=backend-builder /app/target/release/pdf-dashboard /usr/local/bin/pdf-dashboard
-COPY --from=frontend-builder /app/web/dist /app/web/dist
 
 RUN chmod +x /usr/local/bin/pdf-mcp /usr/local/bin/pdf-dashboard && \
     mkdir -p /app/data /app/logs/audit /app/cache && \
@@ -53,7 +42,6 @@ ENV CACHE_MAX_SIZE=1000
 ENV AUDIT_ENABLED=true
 ENV AUDIT_LOG_DIR=/app/logs/audit
 ENV MAX_FILE_SIZE_MB=100
-ENV DASHBOARD_WEB_DIR=/app/web/dist
 ENV DASHBOARD_PORT=8000
 
 EXPOSE 8000 8001

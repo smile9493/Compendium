@@ -1,6 +1,7 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::parse_kb_path;
 use pdf_core::{FulltextIndex, GraphIndex};
+use tracing::instrument;
 
 pub fn index_tool_definitions() -> Vec<ToolDefinition> {
     vec![
@@ -137,6 +138,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+#[instrument(skip(args))]
 pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let query = args["query"]
@@ -162,6 +164,7 @@ pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result
     Ok(vec![Content::text(serde_json::to_string_pretty(&hits)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let wiki_dir = kb_path.join("wiki");
@@ -182,6 +185,7 @@ pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Ve
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let entry_path = args["entry_path"]
@@ -204,6 +208,7 @@ pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Resul
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_find_orphans(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
 
@@ -225,6 +230,7 @@ pub async fn handle_find_orphans(args: &serde_json::Value) -> anyhow::Result<Vec
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_suggest_links(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let entry_path = args["entry_path"]
@@ -246,6 +252,7 @@ pub async fn handle_suggest_links(args: &serde_json::Value) -> anyhow::Result<Ve
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_export_concept_map(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let entry_path = args["entry_path"]
@@ -268,6 +275,7 @@ pub async fn handle_export_concept_map(args: &serde_json::Value) -> anyhow::Resu
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+#[instrument(skip(args))]
 pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
     let wiki_dir = kb_path.join("wiki");

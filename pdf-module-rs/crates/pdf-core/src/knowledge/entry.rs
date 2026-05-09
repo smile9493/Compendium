@@ -2,22 +2,48 @@
 //!
 //! Every Markdown file in the wiki must conform to this schema.
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, NaiveDate, Utc};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::path::PathBuf;
+
+/// Custom deserializer for DateTime<Utc> that accepts both:
+/// - Full RFC 3339 format: "2026-01-01T00:00:00Z"
+/// - Date-only format: "2026-05-08"
+fn deserialize_utc_date<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+        if let Some(dt) = naive.and_hms_opt(0, 0, 0) {
+            return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
+        }
+    }
+    Err(serde::de::Error::custom(format!(
+        "invalid datetime format: '{}', expected RFC 3339 or YYYY-MM-DD",
+        s
+    )))
+}
 
 /// Classification level of a knowledge entry in the compilation pyramid.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EntryLevel {
     /// Raw extraction — direct PDF-to-text, lives in `raw/`.
+    #[serde(alias = "L0")]
     L0,
     /// Atomic concept — single idea, lives in `wiki/<domain>/`.
+    #[serde(alias = "L1")]
     #[default]
     L1,
     /// Aggregation — synthesis of multiple L1 entries on one sub-topic.
+    #[serde(alias = "L2")]
     L2,
     /// Domain map — top-level navigation for an entire field.
+    #[serde(alias = "L3")]
     L3,
 }
 
@@ -37,15 +63,20 @@ impl std::fmt::Display for EntryLevel {
 #[serde(rename_all = "snake_case")]
 pub enum CompileStatus {
     /// Newly extracted, awaiting AI compilation.
+    #[serde(alias = "Pending")]
     #[default]
     Pending,
     /// Currently being compiled by AI.
+    #[serde(alias = "Compiling")]
     Compiling,
     /// Successfully compiled into a wiki entry.
+    #[serde(alias = "Compiled")]
     Compiled,
     /// Needs recompilation due to quality drift or instruction change.
+    #[serde(alias = "NeedsRecompile")]
     NeedsRecompile,
     /// Compilation failed.
+    #[serde(alias = "Failed")]
     Failed,
 }
 
@@ -68,9 +99,10 @@ pub struct KnowledgeEntry {
     /// Relative path to the source PDF (e.g. "raw/paper_x.pdf").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// Page number in source PDF where this concept originates.
+    /// Page number or page range in source PDF where this concept originates.
+    /// Accepts formats like "12", "70-198", "70-198,200-210".
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<u32>,
+    pub page: Option<String>,
     /// SHA-256 hash of the source file at compilation time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_hash: Option<String>,
@@ -106,7 +138,9 @@ pub struct KnowledgeEntry {
     pub version: u32,
 
     // === Timestamps ===
+    #[serde(deserialize_with = "deserialize_utc_date")]
     pub created: DateTime<Utc>,
+    #[serde(deserialize_with = "deserialize_utc_date")]
     pub updated: DateTime<Utc>,
 }
 
@@ -158,7 +192,13 @@ impl KnowledgeEntry {
         let after_first = &content[3..];
         let end = after_first.find("---")?;
         let yaml = &after_first[..end].trim();
-        Self::from_yaml(yaml).ok()
+        match Self::from_yaml(yaml) {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                tracing::debug!(error = %e, yaml_len = yaml.len(), "Failed to parse YAML front matter");
+                None
+            }
+        }
     }
 
     /// Build a complete Markdown file: front matter + body.
@@ -204,7 +244,7 @@ mod tests {
             domain: "IT".into(),
             category: Some("networking/protocols".into()),
             source: Some("raw/rfc7540.pdf".into()),
-            page: Some(12),
+            page: Some("12".to_string()),
             source_hash: Some("abc123".into()),
             tags: vec!["http".into(), "networking".into()],
             level: EntryLevel::L1,
@@ -245,6 +285,31 @@ Body content here."#;
         let entry = KnowledgeEntry::from_markdown(md).unwrap();
         assert_eq!(entry.title, "Test");
         assert_eq!(entry.domain, "IT");
+    }
+
+    #[test]
+    fn test_date_only_and_page_range() {
+        let md = r#"---
+title: "Page Range Entry"
+domain: "IT"
+page: "70-198"
+tags: ["nginx"]
+level: l1
+status: compiled
+quality_score: 0.86
+created: 2026-05-08
+updated: 2026-05-08
+related: []
+---
+
+# Test"#;
+
+        let entry = KnowledgeEntry::from_markdown(md).unwrap();
+        assert_eq!(entry.title, "Page Range Entry");
+        assert_eq!(entry.page, Some("70-198".to_string()));
+        assert_eq!(entry.domain, "IT");
+        assert_eq!(entry.tags, vec!["nginx"]);
+        assert_eq!(entry.quality_score, 0.86);
     }
 
     #[test]

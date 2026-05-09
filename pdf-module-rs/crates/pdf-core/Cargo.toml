@@ -38,6 +38,8 @@ rs_merkle = { workspace = true }
 bincode = { workspace = true }
 hex = { workspace = true }
 sled = { workspace = true }
+pulldown-cmark = { workspace = true }
+fnv = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10"
