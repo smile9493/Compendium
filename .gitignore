@@ -15,6 +15,13 @@ libpdfium.so
 *.so
 *.dylib
 *.dll
+package/
+
+# ─── Third-party / Prebuilt (PDFium) ───────────
+lib/
+licenses/
+include/
+*.orig
 
 # ─── Environment ────────────────────────────────
 .env
