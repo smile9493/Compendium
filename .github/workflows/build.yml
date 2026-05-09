@@ -176,182 +176,71 @@ jobs:
           echo "WASM build completed (package: pdf-wasm)"
 
   build-mcp:
-    name: MCP (${{ matrix.target }})
+    name: Build MCP Server (Linux x86_64)
     needs: [test-rust, security-audit]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: pdf-mcp-linux-x64
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: pdf-mcp-linux-arm64
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            artifact: pdf-mcp-linux-x64-musl
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact: pdf-mcp-macos-x64
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact: pdf-mcp-macos-arm64
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact: pdf-mcp-windows-x64
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install cross-compiler (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libssl-dev
-
-      - name: Install musl cross-compiler (Linux x86_64 musl)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools libssl-dev
-
-      - name: Install OpenSSL (Linux x64)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
-
-      - name: Setup macOS ARM64 target
-        if: matrix.target == 'aarch64-apple-darwin'
-        run: |
-          rustup target add aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "pdf-module-rs -> target"
 
-      - name: Setup environment for cross-compilation
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install dependencies
         run: |
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "STRIP_CMD=aarch64-linux-gnu-strip" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
 
-      - name: Download PDFium (Linux x64)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Download PDFium
         run: |
           curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
           tar -xzf pdfium.tgz
           echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
 
-      - name: Download PDFium (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-arm64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
-
-      - name: Download PDFium (Linux musl x64)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-musl-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
-
-      - name: Download PDFium (macOS x64)
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-mac-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.dylib" >> $GITHUB_ENV
-
-      - name: Download PDFium (macOS ARM64)
-        if: matrix.target == 'aarch64-apple-darwin'
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-mac-arm64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.dylib" >> $GITHUB_ENV
-
-      - name: Download PDFium (Windows x64)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-win-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/pdfium.dll" >> $GITHUB_ENV
-
       - name: Build MCP Server
         run: |
           cd pdf-module-rs
-          cargo build --release --target ${{ matrix.target }} --bin pdf-mcp
+          cargo build --release --bin pdf-mcp
 
       - name: Build pdf-cli
         run: |
           cd pdf-module-rs
-          cargo build --release --target ${{ matrix.target }} --bin pdf-cli
+          cargo build --release --bin pdf-cli
 
       - name: Build pdf-mcp-cli (installer)
         run: |
           cd pdf-mcp-installer
-          cargo build --release --target ${{ matrix.target }} --bin pdf-mcp-cli
+          cargo build --release --bin pdf-mcp-cli
 
-      - name: Optimize binary (Unix)
-        if: runner.os != 'Windows'
+      - name: Optimize binary
         run: |
-          cd pdf-module-rs/target/${{ matrix.target }}/release
-          STRIP="${STRIP_CMD:-strip}"
-          $STRIP pdf-mcp
+          cd pdf-module-rs/target/release
+          strip pdf-mcp
           ls -lh pdf-mcp
-          $STRIP pdf-cli
+          strip pdf-cli
           ls -lh pdf-cli
-          cd $GITHUB_WORKSPACE/pdf-mcp-installer/target/${{ matrix.target }}/release
-          $STRIP pdf-mcp-cli
+          cd $GITHUB_WORKSPACE/pdf-mcp-installer/target/release
+          strip pdf-mcp-cli
           ls -lh pdf-mcp-cli
 
-      - name: Optimize binary (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd pdf-module-rs/target/${{ matrix.target }}/release
-          strip pdf-mcp.exe
-          dir pdf-mcp.exe
-          strip pdf-cli.exe
-          dir pdf-cli.exe
-          cd ${{ github.workspace }}/pdf-mcp-installer/target/${{ matrix.target }}/release
-          strip pdf-mcp-cli.exe
-          dir pdf-mcp-cli.exe
-
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Package
         run: |
           mkdir -p package
-          cp pdf-module-rs/target/${{ matrix.target }}/release/pdf-mcp package/
-          cp pdf-module-rs/target/${{ matrix.target }}/release/pdf-cli package/
-          cp pdf-mcp-installer/target/${{ matrix.target }}/release/pdf-mcp-cli package/
-          tar -czvf $GITHUB_WORKSPACE/${{ matrix.artifact }}.tar.gz -C package .
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          mkdir package
-          copy pdf-module-rs/target/${{ matrix.target }}/release/pdf-mcp.exe package/
-          copy pdf-module-rs/target/${{ matrix.target }}/release/pdf-cli.exe package/
-          copy pdf-mcp-installer/target/${{ matrix.target }}/release/pdf-mcp-cli.exe package/
-          7z a ${{ github.workspace }}/${{ matrix.artifact }}.zip ./package/*
+          cp pdf-module-rs/target/release/pdf-mcp package/
+          cp pdf-module-rs/target/release/pdf-cli package/
+          cp pdf-mcp-installer/target/release/pdf-mcp-cli package/
+          tar -czvf $GITHUB_WORKSPACE/pdf-mcp-linux-x64.tar.gz -C package .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: pdf-mcp-linux-x64
           path: |
-            ${{ matrix.artifact }}.tar.gz
-            ${{ matrix.artifact }}.zip
+            pdf-mcp-linux-x64.tar.gz
 
   docker-build:
     name: Docker Image
@@ -430,13 +319,8 @@ jobs:
           body: |
             ## PDF Module MCP Server ${{ steps.version.outputs.VERSION }}
 
-            ### MCP Server + CLI (多平台)
+            ### MCP Server + CLI (Linux x86_64)
             - `pdf-mcp-linux-x64.tar.gz` - Linux x64
-            - `pdf-mcp-linux-arm64.tar.gz` - Linux ARM64
-            - `pdf-mcp-linux-x64-musl.tar.gz` - Linux x64 (musl)
-            - `pdf-mcp-macos-x64.tar.gz` - macOS x64
-            - `pdf-mcp-macos-arm64.tar.gz` - macOS ARM64
-            - `pdf-mcp-windows-x64.zip` - Windows x64
 
             每个包包含：
             - `pdf-mcp` - MCP 服务端
