@@ -189,7 +189,8 @@ pub async fn handle_trigger_incremental_compile(
     let _ = tokio::fs::write(
         &status_path,
         serde_json::to_string_pretty(&status).unwrap_or_default(),
-    ).await;
+    )
+    .await;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -212,7 +213,8 @@ pub async fn handle_get_compile_status(args: &serde_json::Value) -> anyhow::Resu
         return Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)]);
     }
 
-    let content = tokio::fs::read_to_string(&status_path).await
+    let content = tokio::fs::read_to_string(&status_path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
     let status: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| anyhow::anyhow!("Failed to parse compile status: {}", e))?;

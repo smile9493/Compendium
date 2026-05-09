@@ -58,8 +58,9 @@ impl fmt::Display for HealthReport {
         writeln!(
             f,
             "Last compile:         {}",
-            self.last_compile
-                .map_or("never".to_string(), |t| t.format("%Y-%m-%d %H:%M").to_string())
+            self.last_compile.map_or("never".to_string(), |t| t
+                .format("%Y-%m-%d %H:%M")
+                .to_string())
         )?;
         writeln!(
             f,
@@ -112,14 +113,17 @@ impl fmt::Display for CompileStatusRecord {
         writeln!(
             f,
             "Last started: {}",
-            self.last_started
-                .map_or("never".to_string(), |t| t.format("%Y-%m-%d %H:%M").to_string())
+            self.last_started.map_or("never".to_string(), |t| t
+                .format("%Y-%m-%d %H:%M")
+                .to_string())
         )?;
         writeln!(
             f,
             "Last finished:{}",
-            self.last_finished
-                .map_or(" never".to_string(), |t| format!(" {}", t.format("%Y-%m-%d %H:%M")))
+            self.last_finished.map_or(" never".to_string(), |t| format!(
+                " {}",
+                t.format("%Y-%m-%d %H:%M")
+            ))
         )?;
         if let Some(ms) = self.last_duration_ms {
             writeln!(f, "Duration:     {} ms", ms)?;

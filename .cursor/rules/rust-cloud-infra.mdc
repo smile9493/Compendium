@@ -1,0 +1,45 @@
+---
+description: Rust Systems & Cloud Infrastructure Guide — I/O model, backpressure, graceful shutdown, deterministic state machine, lock-free concurrency, SIMD/SoA, arena allocation, breakwater pattern
+globs: pdf-module-rs/crates/pdf-core/**/*.rs, pdf-module-rs/crates/pdf-mcp/**/*.rs, pdf-module-rs/crates/vlm-visual-gateway/**/*.rs, pdf-module-rs/crates/pdf-cli/**/*.rs, pdf-module-rs/crates/pdf-dashboard/**/*.rs, pdf-module-rs/crates/pdf-common/**/*.rs
+alwaysApply: false
+---
+
+# Rust Systems & Cloud Infrastructure Guide
+
+Vertical deepening of rust-architecture-guide for long-running cloud-native services. Based on [rust-systems-cloud-infra-guide](/opt/pdf-module/.cursor/skills/rust-systems-cloud-infra-guide/SKILL.md) V6.1.0.
+
+## Core Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Mechanical Sympathy** | Align software with hardware physics (CPU cache, NUMA, kernel I/O stack) |
+| **Determinism** | Eliminate non-determinism for reproducible state machines |
+| **Resilience** | Graceful degradation over crash; backpressure over OOM |
+| **Jeet Kune Do** | One-strike memory lifecycle; flow like water to hardware channels |
+
+## Red Lines (Prohibitions)
+
+| Category | Prohibited | Mandatory |
+|----------|------------|-----------|
+| Queue | `std::sync::mpsc::channel()` unbounded | `tokio::sync::mpsc::channel(LIMIT)` |
+| Cancellation | Direct non-idempotent write in `select!` | `spawn` + `oneshot` |
+| Time | `Instant::now()` in state machine Apply | Leader-proposed timestamp |
+| Shutdown | Exit immediately on `SIGTERM` | Graceful shutdown flow (CancellationToken → drain → persist → exit) |
+| FFI | `extern` function without `catch_unwind` | Catch panic + return error code |
+| Per-Request Alloc | Global heap for AST nodes | Arena (`bumpalo`) |
+| Arena Escape | Save Arena ptr to external static | Clone to global heap if needed |
+| Alloc Panic | `panic!` on exhaustion | `Result<T, AllocError>` + backpressure (503) |
+| Read-heavy Lock | `RwLock`/`Mutex` in read-heavy path | `arc-swap` (RCU zero-block read) |
+| Memory Ordering | Blind `Ordering::SeqCst` | `Release`+`Acquire` pair; `Relaxed` for counters |
+| Byte Loop | Byte-by-byte `if byte == b'\n'` | SIMD bitmask bulk compare |
+| AoS | Array of Structs for bulk aggregation | SoA (Struct of Arrays) columnar layout |
+
+## Key Actions
+
+1. **I/O Model**: Many TCP conns → `tokio`+`epoll`; high disk throughput → `monoio`/`glommio` (io_uring); **never mix runtimes**
+2. **Zero-Copy**: Kernel-level `splice`/`sendfile` via `rustix`; user-space `bytes::Bytes` for O(1) clone
+3. **Graceful Shutdown**: SIGTERM → CancellationToken → stop new requests → drain in-flight → fsync WAL → exit
+4. **Deterministic State Machine**: Prohibit `Instant::now()`, `SystemTime::now()`, `rand::random()`, `HashMap` order; use `BTreeMap`/`IndexMap`
+5. **Lock-free Read Path**: Use `arc-swap`; writer does Copy→Modify→Swap; readers never block
+6. **SIMD Vectorized**: Use `std::simd` or `core::arch::x86_64` (AVX-512); convert control flow to data flow via Bitmask
+7. **Slab Pre-allocation**: `mmap` large contiguous block at startup; `crossbeam_queue::ArrayQueue` for lock-free alloc/dealloc

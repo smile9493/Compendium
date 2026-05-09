@@ -1,0 +1,48 @@
+---
+description: Rust to Wasm Vertical Compilation & Boundary Specification — binary size, zero-copy FFI, memory lifecycle, wasm32-unknown-unknown constraints
+globs: pdf-module-rs/crates/pdf-wasm/**/*.rs
+alwaysApply: false
+---
+
+# Rust to Wasm Vertical Compilation & Boundary Guide
+
+Hard constraints for `wasm32-unknown-unknown` target. Based on [rust-wasm-frontend-infra-guide](/opt/pdf-module/.cursor/skills/rust-wasm-frontend-infra-guide/SKILL.md) V4.1.0.
+
+## Iron Rules
+
+| ID | Rule | Meaning |
+|----|------|---------|
+| **IRON-01** | Binary Size Is Paramount | `opt-level="z"`, `lto=true`, `codegen-units=1`, `panic="abort"`, `strip=true`; post-process with `wasm-opt -Oz`; use `talc` allocator (~1KB baseline) |
+| **IRON-02** | Zero-Copy at Boundary | On high-frequency data paths, always pass pointer+length (`WasmSlice`), never serialize; zero-copy view lifetimes must be documented |
+| **IRON-03** | Memory Partitioning | Global state static residency, per-frame objects ephemeral via `bumpalo` Arena, prevent dynamic allocation fragmentation |
+| **IRON-04** | Cross-Origin Isolation | Any use of `SharedArrayBuffer` must document COOP/COEP header configuration |
+
+## Tiered Memory Management
+
+| Tier | Applicable | Weapon |
+|------|------------|--------|
+| Tier 1: Per-Frame Ephemeral | Not exceeding a single `rAF` callback | Bump Allocator (`bumpalo`) |
+| Tier 2: Scene-Level Residency | Interaction scene lifecycle | Nestable or independent Arena pools |
+| Tier 3: Global Orthogonal Storage | Cross entire lifecycle | `SlotMap`, ECS-style component storage |
+
+## FFI Boundary (Stage 2)
+
+- `WasmSlice` safe encapsulation for memory views; JS must consume within current tick
+- Parameters must be scalars or `WasmSlice` — prohibit `JsValue` pass-through
+- Document lifetimes in `# Safety` comments
+
+## Wasm Code Adaptation (Stage 5)
+
+- Error handling: `Result<T, JsValue>` + `thiserror` — under `panic="abort"` must use `Result` not `panic!`
+- Observability: `console_error_panic_hook::set_once()` + `tracing_wasm::set_as_global_default()`
+- Async: `wasm-bindgen-futures` (`JsFuture` + `spawn_local`)
+- Prohibit blocking APIs: no `std::thread::sleep`, blocking `Mutex::lock()`, busy-waiting
+
+## Code Review Smells
+
+| Smell | Correction |
+|-------|------------|
+| Unjustified `.unwrap()` | `Result<T, JsValue>` or `expect` with clear message |
+| High-frequency `serde_json` | `WasmSlice` zero-copy |
+| Exported functions return `String`/`Vec` | Return `WasmSlice` (pointer+length) |
+| Business logic `if/else` on JS side | Logic centralized in Rust, JS pure execution only |
