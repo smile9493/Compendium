@@ -204,34 +204,50 @@ async fn mcp_proxy(
     State(state): State<AppState>,
     Json(req): Json<McpProxyRequest>,
 ) -> Result<Json<McpProxyResponse>, (StatusCode, String)> {
-    let request_str = serde_json::to_string(&req.request).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let request_str = serde_json::to_string(&req.request)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     let mut child = Command::new(&req.command)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to spawn MCP server: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to spawn MCP server: {}", e),
+            )
+        })?;
 
-    let stdin = child.stdin.as_mut().ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No stdin".into()))?;
-    
+    let stdin = child
+        .stdin
+        .as_mut()
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No stdin".into()))?;
+
     // MCP uses line protocol, not LSP Content-Length format
     let line_message = format!("{}\n", request_str);
-    stdin.write_all(line_message.as_bytes()).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    stdin.flush().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    stdin
+        .write_all(line_message.as_bytes())
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    stdin
+        .flush()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let stdout = child.stdout.as_mut().ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No stdout".into()))?;
-    
+    let stdout = child
+        .stdout
+        .as_mut()
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No stdout".into()))?;
+
     // Read line protocol response using BufReader for efficiency
     let reader = BufReader::new(stdout);
     let mut lines_read = 0;
     let mut response: Option<serde_json::Value> = None;
-    
+
     for line in reader.lines() {
         match line {
             Ok(line_str) => {
                 lines_read += 1;
-                
+
                 // Check if this is a JSON-RPC response (starts with {"jsonrpc")
                 if line_str.starts_with("{\"jsonrpc") {
                     match serde_json::from_str::<serde_json::Value>(&line_str) {
@@ -251,27 +267,38 @@ async fn mcp_proxy(
                         Err(_) => continue,
                     }
                 }
-                
+
                 if lines_read > 1000 {
                     let _ = child.kill();
-                    return Err((StatusCode::INTERNAL_SERVER_ERROR, "Too many log lines before response".into()));
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Too many log lines before response".into(),
+                    ));
                 }
             }
             Err(e) => {
                 let _ = child.kill();
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Read error: {}", e)));
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Read error: {}", e),
+                ));
             }
         }
     }
 
     let _ = child.kill();
 
-    let response = response.ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No JSON-RPC response".into()))?;
+    let response = response.ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "No JSON-RPC response".into(),
+    ))?;
 
     if let Some(params) = req.request.get("params") {
         if let Some(tool_name) = params.get("name").and_then(|n| n.as_str()) {
             if response.get("result").is_some() {
-                state.activity_log.add("info", &format!("Tool {} executed successfully", tool_name));
+                state
+                    .activity_log
+                    .add("info", &format!("Tool {} executed successfully", tool_name));
             }
         }
     }
@@ -285,28 +312,28 @@ async fn mcp_proxy(
 async fn metrics(State(state): State<AppState>) -> Json<DashboardMetrics> {
     let stats = &state.stats;
     let tools_lock = stats.tools.read().unwrap();
-    
+
     let mut total_calls: u64 = 0;
     let mut total_latency: u64 = 0;
     let mut total_errors: u64 = 0;
     let mut tool_stats: Vec<ToolStat> = Vec::with_capacity(tools_lock.len());
-    
+
     for (name, metric) in tools_lock.iter() {
         let calls = metric.calls.load(Ordering::Relaxed);
         let latency = metric.latency_ms.load(Ordering::Relaxed);
         let errors = metric.errors.load(Ordering::Relaxed);
-        
+
         total_calls += calls;
         total_latency += latency;
         total_errors += errors;
-        
+
         let avg = latency.checked_div(calls).unwrap_or(0);
         let rate = if calls > 0 {
             ((calls - errors) as f64 / calls as f64) * 100.0
         } else {
             100.0
         };
-        
+
         tool_stats.push(ToolStat {
             name: name.to_string(),
             calls,
@@ -314,7 +341,7 @@ async fn metrics(State(state): State<AppState>) -> Json<DashboardMetrics> {
             success_rate: rate,
         });
     }
-    
+
     let avg_latency = total_latency.checked_div(total_calls).unwrap_or(0);
     let success_rate = if total_calls > 0 {
         ((total_calls - total_errors) as f64 / total_calls as f64) * 100.0

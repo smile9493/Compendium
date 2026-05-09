@@ -43,22 +43,18 @@ impl CacheDb {
     /// On first open, attempts to migrate from `.hash_cache` JSON if it exists.
     pub fn open(knowledge_base: &Path) -> PdfResult<Self> {
         let db_path = knowledge_base.join(".cache_db");
-        let db = sled::open(&db_path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to open cache db: {}", e))
-        })?;
+        let db = sled::open(&db_path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to open cache db: {}", e)))?;
 
         let this = Self { db, db_path };
 
         // Check schema version and migrate if needed
-        let meta_tree = this.db.open_tree("meta").map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to open meta tree: {}", e))
-        })?;
+        let meta_tree = this
+            .db
+            .open_tree("meta")
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to open meta tree: {}", e)))?;
 
-        let has_version = meta_tree
-            .get("schema_version")
-            .ok()
-            .flatten()
-            .is_some();
+        let has_version = meta_tree.get("schema_version").ok().flatten().is_some();
 
         if !has_version {
             this.migrate_from_json(knowledge_base)?;
@@ -78,9 +74,10 @@ impl CacheDb {
     /// Get the compilation state for a source file.
     pub fn get_compilation_state(&self, key: &str) -> PdfResult<Option<CacheEntry>> {
         let tree = self.entries_tree()?;
-        match tree.get(key).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to get entry: {}", e))
-        })? {
+        match tree
+            .get(key)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to get entry: {}", e)))?
+        {
             Some(bytes) => {
                 let entry: CacheEntry = bincode::deserialize(&bytes).map_err(|e| {
                     PdfModuleError::Storage(format!("Failed to deserialize cache entry: {}", e))
@@ -97,18 +94,17 @@ impl CacheDb {
         let bytes = bincode::serialize(entry).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to serialize cache entry: {}", e))
         })?;
-        tree.insert(key, bytes).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to insert entry: {}", e))
-        })?;
+        tree.insert(key, bytes)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to insert entry: {}", e)))?;
         Ok(())
     }
 
     /// Remove a compilation state entry.
     pub fn remove_compilation_state(&self, key: &str) -> PdfResult<bool> {
         let tree = self.entries_tree()?;
-        let result = tree.remove(key).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to remove entry: {}", e))
-        })?;
+        let result = tree
+            .remove(key)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to remove entry: {}", e)))?;
         Ok(result.is_some())
     }
 
@@ -143,18 +139,17 @@ impl CacheDb {
     /// Store a key-value pair in the `meta` tree.
     pub fn set_meta(&self, key: &str, value: &[u8]) -> PdfResult<()> {
         let tree = self.meta_tree()?;
-        tree.insert(key, value).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to set meta: {}", e))
-        })?;
+        tree.insert(key, value)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to set meta: {}", e)))?;
         Ok(())
     }
 
     /// Get a value from the `meta` tree.
     pub fn get_meta(&self, key: &str) -> PdfResult<Option<Vec<u8>>> {
         let tree = self.meta_tree()?;
-        let result = tree.get(key).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to get meta: {}", e))
-        })?;
+        let result = tree
+            .get(key)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to get meta: {}", e)))?;
         Ok(result.map(|v| v.to_vec()))
     }
 
@@ -173,22 +168,22 @@ impl CacheDb {
 
     /// Flush all pending writes to disk.
     pub fn flush(&self) -> PdfResult<()> {
-        self.db.flush().map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to flush cache db: {}", e))
-        })?;
+        self.db
+            .flush()
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to flush cache db: {}", e)))?;
         Ok(())
     }
 
     fn entries_tree(&self) -> PdfResult<sled::Tree> {
-        self.db.open_tree("entries").map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to open entries tree: {}", e))
-        })
+        self.db
+            .open_tree("entries")
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to open entries tree: {}", e)))
     }
 
     fn meta_tree(&self) -> PdfResult<sled::Tree> {
-        self.db.open_tree("meta").map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to open meta tree: {}", e))
-        })
+        self.db
+            .open_tree("meta")
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to open meta tree: {}", e)))
     }
 
     /// Migrate entries from the legacy `.hash_cache` JSON file.
@@ -215,7 +210,10 @@ impl CacheDb {
                         migrated += 1;
                     }
                 }
-                info!(count = migrated, "Migrated entries from .hash_cache (new format)");
+                info!(
+                    count = migrated,
+                    "Migrated entries from .hash_cache (new format)"
+                );
                 return Ok(());
             }
 
@@ -228,7 +226,10 @@ impl CacheDb {
                         migrated += 1;
                     }
                 }
-                info!(count = migrated, "Migrated entries from .hash_cache (legacy format)");
+                info!(
+                    count = migrated,
+                    "Migrated entries from .hash_cache (legacy format)"
+                );
                 return Ok(());
             }
         }
@@ -256,7 +257,8 @@ mod tests {
     fn test_open_set_get() {
         let dir = tempfile::TempDir::new().unwrap();
         let db = CacheDb::open(dir.path()).unwrap();
-        db.set_compilation_state("raw/test.pdf", &make_entry("abc123")).unwrap();
+        db.set_compilation_state("raw/test.pdf", &make_entry("abc123"))
+            .unwrap();
         let loaded = db.get_compilation_state("raw/test.pdf").unwrap().unwrap();
         assert_eq!(loaded.source_hash, "abc123");
         assert_eq!(loaded.compiled_entries, vec!["wiki/a.md"]);
@@ -266,7 +268,8 @@ mod tests {
     fn test_remove() {
         let dir = tempfile::TempDir::new().unwrap();
         let db = CacheDb::open(dir.path()).unwrap();
-        db.set_compilation_state("raw/a.pdf", &make_entry("abc")).unwrap();
+        db.set_compilation_state("raw/a.pdf", &make_entry("abc"))
+            .unwrap();
         assert_eq!(db.len().unwrap(), 1);
         db.remove_compilation_state("raw/a.pdf").unwrap();
         assert_eq!(db.len().unwrap(), 0);
@@ -314,7 +317,8 @@ mod tests {
             db.set_compilation_state(
                 &format!("raw/{}.pdf", i),
                 &make_entry(&format!("hash_{}", i)),
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let entries = db.iter_entries().unwrap();

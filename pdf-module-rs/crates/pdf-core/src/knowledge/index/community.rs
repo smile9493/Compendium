@@ -84,9 +84,7 @@ pub fn detect_communities(
             // Pick the label with highest frequency; break ties by lowest label value
             let best_label = label_freq
                 .iter()
-                .max_by(|(la, fa), (lb, fb)| {
-                    fb.cmp(fa).then_with(|| lb.cmp(la))
-                })
+                .max_by(|(la, fa), (lb, fb)| fb.cmp(fa).then_with(|| lb.cmp(la)))
                 .map(|(&label, _)| label)
                 .expect("label_freq is non-empty");
 

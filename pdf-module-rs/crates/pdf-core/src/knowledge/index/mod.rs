@@ -26,4 +26,6 @@ pub use graph_partition::GraphPartitionStore;
 pub use lazy_loader::LazyLoadingCoordinator;
 pub use metadata_store::{extract_domain, MetadataStore};
 pub use tokenizer::register_cjk_tokenizer;
-pub use vector::{cosine_similarity, EmbeddingModel, TfidfModel, VectorHit, VectorIndex, VectorStore};
+pub use vector::{
+    cosine_similarity, EmbeddingModel, TfidfModel, VectorHit, VectorIndex, VectorStore,
+};

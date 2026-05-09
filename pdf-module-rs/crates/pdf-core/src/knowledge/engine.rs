@@ -359,7 +359,9 @@ related: ["wiki/other/concept.md"]
         if let Ok(existing) = self.collect_wiki_entries() {
             if !existing.is_empty() {
                 prompt.push_str("\n\n## 已有知识库上下文\n\n");
-                prompt.push_str("以下是 `wiki/` 中已存在的所有知识条目，用于判断新内容的相关性：\n\n");
+                prompt.push_str(
+                    "以下是 `wiki/` 中已存在的所有知识条目，用于判断新内容的相关性：\n\n",
+                );
                 prompt.push_str("| # | 标题 | 领域 | 路径 | 标签 |\n");
                 prompt.push_str("|---|------|------|------|------|\n");
                 for (i, (path, e)) in existing.iter().enumerate() {
@@ -387,7 +389,9 @@ related: ["wiki/other/concept.md"]
                 let suggestions = graph.suggest_links_by_tags(&entry.tags, 5);
                 if !suggestions.is_empty() {
                     prompt.push_str("\n\n## 标签关联建议\n\n");
-                    prompt.push_str("以下条目与新内容的标签高度重叠（Jaccard 相似度），可能语义相关：\n\n");
+                    prompt.push_str(
+                        "以下条目与新内容的标签高度重叠（Jaccard 相似度），可能语义相关：\n\n",
+                    );
                     for s in &suggestions {
                         prompt.push_str(&format!(
                             "- `{}` — score={:.2} — {}\n",
@@ -597,7 +601,7 @@ related: ["wiki/other/concept.md"]
     /// 3. For each multi-entry community, assign to the majority domain
     /// 4. Return clusters with >= 2 members as aggregation candidates
     pub fn identify_aggregation_candidates(&self) -> PdfResult<Vec<AggregationCandidate>> {
-        use crate::knowledge::index::{GraphIndex, detect_communities};
+        use crate::knowledge::index::{detect_communities, GraphIndex};
 
         let wiki_dir = self.wiki_dir();
         let mut graph = GraphIndex::new();

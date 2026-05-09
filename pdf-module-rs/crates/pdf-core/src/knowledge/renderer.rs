@@ -349,11 +349,8 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
         .unwrap_or_default();
 
     if current.is_file() {
-        let is_entry = current
-            .extension()
-            .map(|e| e == "md")
-            .unwrap_or(false)
-            && !name.starts_with('.');
+        let is_entry =
+            current.extension().map(|e| e == "md").unwrap_or(false) && !name.starts_with('.');
 
         let (title, domain) = if is_entry {
             if let Ok(content) = std::fs::read_to_string(current) {
@@ -412,8 +409,8 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
             .collect();
 
         let dir_name_lower = name.to_lowercase();
-        let single_domain_matches_dir = domains.len() == 1
-            && domains[0].to_lowercase() == dir_name_lower;
+        let single_domain_matches_dir =
+            domains.len() == 1 && domains[0].to_lowercase() == dir_name_lower;
 
         if single_domain_matches_dir || domains.len() <= 1 {
             flat_entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -450,9 +447,7 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
     children.sort_by(|a, b| {
         let a_is_dir = !a.is_entry;
         let b_is_dir = !b.is_entry;
-        b_is_dir
-            .cmp(&a_is_dir)
-            .then_with(|| a.name.cmp(&b.name))
+        b_is_dir.cmp(&a_is_dir).then_with(|| a.name.cmp(&b.name))
     });
 
     Ok(TreeNode {

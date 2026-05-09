@@ -53,8 +53,11 @@ pub struct SamplingManager {
     pending: PendingRequests,
 }
 
-type PendingRequests =
-    Arc<tokio::sync::RwLock<HashMap<u64, tokio::sync::oneshot::Sender<Result<SamplingResponse, SamplingError>>>>>;
+type PendingRequests = Arc<
+    tokio::sync::RwLock<
+        HashMap<u64, tokio::sync::oneshot::Sender<Result<SamplingResponse, SamplingError>>>,
+    >,
+>;
 
 #[allow(dead_code)]
 impl SamplingManager {

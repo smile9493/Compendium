@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
-use crate::knowledge::index::vector::{cosine_similarity, TfidfModel, EmbeddingModel};
+use crate::knowledge::index::vector::{cosine_similarity, EmbeddingModel, TfidfModel};
 
 /// Severity level for quality issues.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -332,10 +332,7 @@ fn scan_entries_recursive(
 /// trained on the corpus of all entry titles and bodies.
 const DRIFT_THRESHOLD: f32 = 0.6;
 
-fn detect_drift(
-    wiki_dir: &Path,
-    entries: &[(PathBuf, KnowledgeEntry)],
-) -> Vec<DriftPair> {
+fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<DriftPair> {
     if entries.len() < 2 {
         return Vec::new();
     }
@@ -379,7 +376,9 @@ fn detect_drift(
                 let (_, entry_a) = &entries[idx_a];
                 let (_, entry_b) = &entries[idx_b];
 
-                let time_span = (entry_b.created - entry_a.created).num_days().unsigned_abs();
+                let time_span = (entry_b.created - entry_a.created)
+                    .num_days()
+                    .unsigned_abs();
                 if time_span < 90 {
                     continue;
                 }

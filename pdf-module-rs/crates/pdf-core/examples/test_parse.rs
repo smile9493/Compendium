@@ -1,5 +1,5 @@
-use std::fs;
 use pdf_core::knowledge::entry::KnowledgeEntry;
+use std::fs;
 
 fn main() {
     let wiki_dir = "/opt/pdf-module/nginx-wiki/wiki";
@@ -16,8 +16,10 @@ fn main() {
             count += 1;
             let content = fs::read_to_string(&path).unwrap();
             match KnowledgeEntry::from_markdown(&content) {
-                Some(e) => eprintln!("OK: {} -> title={} domain={} page={:?} tags={:?}",
-                    name, e.title, e.domain, e.page, e.tags),
+                Some(e) => eprintln!(
+                    "OK: {} -> title={} domain={} page={:?} tags={:?}",
+                    name, e.title, e.domain, e.page, e.tags
+                ),
                 None => {
                     eprintln!("FAIL: {}", name);
                     failed += 1;
@@ -25,5 +27,10 @@ fn main() {
             }
         }
     }
-    eprintln!("\nTotal: {} entries, {} parsed OK, {} failed", count, count - failed, failed);
+    eprintln!(
+        "\nTotal: {} entries, {} parsed OK, {} failed",
+        count,
+        count - failed,
+        failed
+    );
 }

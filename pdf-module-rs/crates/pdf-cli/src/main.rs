@@ -21,7 +21,11 @@ use pdf_core::management::{ConfigManager, HealthReporter};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "pdf-cli", version, about = "Manage rsut-pdf-mcp knowledge bases from the terminal")]
+#[command(
+    name = "pdf-cli",
+    version,
+    about = "Manage rsut-pdf-mcp knowledge bases from the terminal"
+)]
 struct Cli {
     /// Path to the knowledge base directory
     #[arg(long, env = "KNOWLEDGE_BASE", default_value = ".")]
@@ -139,8 +143,7 @@ fn cmd_config(kb_path: &Path, action: ConfigAction) -> Result<()> {
         ConfigAction::Set { key, value } => {
             let mut cm = ConfigManager::new(kb_path);
             cm.load().context("Failed to load config")?;
-            cm.set(&key, &value)
-                .context("Failed to set config value")?;
+            cm.set(&key, &value).context("Failed to set config value")?;
             println!("Set '{}' = '{}'", key, value);
             Ok(())
         }

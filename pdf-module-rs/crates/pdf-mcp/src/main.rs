@@ -67,7 +67,9 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .and_then(|s| s.parse::<u16>().ok());
 
-    let kb_path = std::env::var("KNOWLEDGE_BASE").ok().map(std::path::PathBuf::from);
+    let kb_path = std::env::var("KNOWLEDGE_BASE")
+        .ok()
+        .map(std::path::PathBuf::from);
 
     if let Some(port) = http_port {
         info!("Starting MCP server (stdio + HTTP on port {})", port);
@@ -83,7 +85,9 @@ async fn main() -> anyhow::Result<()> {
 
         match tokio::time::timeout(std::time::Duration::from_secs(3), ready_rx).await {
             Ok(Ok(())) => info!("HTTP server started successfully on port {}", port),
-            _ => tracing::error!("HTTP server failed to start within 3s. Running stdio-only as fallback."),
+            _ => tracing::error!(
+                "HTTP server failed to start within 3s. Running stdio-only as fallback."
+            ),
         }
 
         let stdio_result = server::run_stdio(pipeline).await;

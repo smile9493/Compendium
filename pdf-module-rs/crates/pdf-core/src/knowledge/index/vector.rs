@@ -306,7 +306,11 @@ impl VectorIndex {
     /// Must be called before embedding individual entries.
     pub fn train_model(&mut self, documents: &[String]) {
         self.model.train(documents);
-        info!(count = documents.len(), dim = self.model.dimension(), "TF-IDF model trained");
+        info!(
+            count = documents.len(),
+            dim = self.model.dimension(),
+            "TF-IDF model trained"
+        );
     }
 
     /// Embed and index a single entry.
@@ -342,9 +346,8 @@ impl VectorIndex {
             PdfModuleError::Storage(format!("Failed to serialize vector index: {}", e))
         })?;
         let path = self.index_dir.join("vectors.bin");
-        fs::write(&path, &bytes).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to write vector index: {}", e))
-        })?;
+        fs::write(&path, &bytes)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to write vector index: {}", e)))?;
         debug!(entries = self.store.len(), path = ?path, "Vector index saved");
         Ok(())
     }
@@ -357,9 +360,8 @@ impl VectorIndex {
             return Ok(None);
         }
 
-        let bytes = fs::read(&path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to read vector index: {}", e))
-        })?;
+        let bytes = fs::read(&path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read vector index: {}", e)))?;
         let snapshot: VectorSnapshot = bincode::deserialize(&bytes).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to deserialize vector index: {}", e))
         })?;

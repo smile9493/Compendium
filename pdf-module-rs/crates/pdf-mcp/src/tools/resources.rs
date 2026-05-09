@@ -58,7 +58,9 @@ pub fn handle_resources_read(request: &JsonRpcRequest) -> JsonRpcResponse {
         "ui://wiki/browser" => {
             let html = UiAssets::get("wiki.html")
                 .map(|f| String::from_utf8_lossy(&f.data).into_owned())
-                .unwrap_or_else(|| "<html><body>Wiki browser not available</body></html>".to_string());
+                .unwrap_or_else(|| {
+                    "<html><body>Wiki browser not available</body></html>".to_string()
+                });
 
             let result = serde_json::json!({
                 "contents": [

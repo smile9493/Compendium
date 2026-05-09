@@ -29,9 +29,7 @@ impl ConfigManager {
     /// Create a new `ConfigManager` bound to a knowledge base directory.
     /// The config file lives at `<kb_path>/.rsut_index/config.json`.
     pub fn new(kb_path: &Path) -> Self {
-        let config_path = kb_path
-            .join(".rsut_index")
-            .join(CONFIG_FILENAME);
+        let config_path = kb_path.join(".rsut_index").join(CONFIG_FILENAME);
         Self {
             config_path,
             data: HashMap::new(),
@@ -43,12 +41,10 @@ impl ConfigManager {
         if !self.config_path.exists() {
             return Ok(());
         }
-        let content = fs::read_to_string(&self.config_path).map_err(|e| {
-            PdfModuleError::Config(format!("Failed to read config file: {}", e))
-        })?;
-        self.data = serde_json::from_str(&content).map_err(|e| {
-            PdfModuleError::Config(format!("Failed to parse config JSON: {}", e))
-        })?;
+        let content = fs::read_to_string(&self.config_path)
+            .map_err(|e| PdfModuleError::Config(format!("Failed to read config file: {}", e)))?;
+        self.data = serde_json::from_str(&content)
+            .map_err(|e| PdfModuleError::Config(format!("Failed to parse config JSON: {}", e)))?;
         Ok(())
     }
 
@@ -81,9 +77,8 @@ impl ConfigManager {
                 PdfModuleError::Config(format!("Failed to create config dir: {}", e))
             })?;
         }
-        let json = serde_json::to_string_pretty(&self.data).map_err(|e| {
-            PdfModuleError::Config(format!("Failed to serialize config: {}", e))
-        })?;
+        let json = serde_json::to_string_pretty(&self.data)
+            .map_err(|e| PdfModuleError::Config(format!("Failed to serialize config: {}", e)))?;
         let tmp_path = self.config_path.with_extension("json.tmp");
         fs::write(&tmp_path, &json).map_err(|e| {
             PdfModuleError::Config(format!("Failed to write config tmp file: {}", e))

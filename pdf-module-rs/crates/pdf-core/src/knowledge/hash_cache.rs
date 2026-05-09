@@ -121,9 +121,7 @@ impl HashCache {
             String::new()
         } else {
             let tree = MerkleTree::<Sha256Algorithm>::from_leaves(&leaf_hashes);
-            tree.root()
-                .map(hex::encode)
-                .unwrap_or_default()
+            tree.root().map(hex::encode).unwrap_or_default()
         };
 
         let state = PersistedState {
@@ -400,11 +398,21 @@ mod tests {
 
         let pdf1 = dir.path().join("a.pdf");
         let pdf2 = dir.path().join("b.pdf");
-        fs::File::create(&pdf1).unwrap().write_all(b"content_a").unwrap();
-        fs::File::create(&pdf2).unwrap().write_all(b"content_b").unwrap();
+        fs::File::create(&pdf1)
+            .unwrap()
+            .write_all(b"content_a")
+            .unwrap();
+        fs::File::create(&pdf2)
+            .unwrap()
+            .write_all(b"content_b")
+            .unwrap();
 
-        cache.record_compile(&pdf1, vec!["wiki/a.md".into()]).unwrap();
-        cache.record_compile(&pdf2, vec!["wiki/b.md".into()]).unwrap();
+        cache
+            .record_compile(&pdf1, vec!["wiki/a.md".into()])
+            .unwrap();
+        cache
+            .record_compile(&pdf2, vec!["wiki/b.md".into()])
+            .unwrap();
 
         let root1 = cache.compute_merkle_root().unwrap();
         cache.save().unwrap();
@@ -415,9 +423,15 @@ mod tests {
         assert!(!loaded.has_changes());
 
         // Modify file — root should differ
-        fs::File::create(&pdf1).unwrap().write_all(b"modified").unwrap();
-        loaded.entries.get_mut(&pdf1.to_string_lossy().to_string()).unwrap().source_hash =
-            HashCache::hash_bytes(b"modified");
+        fs::File::create(&pdf1)
+            .unwrap()
+            .write_all(b"modified")
+            .unwrap();
+        loaded
+            .entries
+            .get_mut(&pdf1.to_string_lossy().to_string())
+            .unwrap()
+            .source_hash = HashCache::hash_bytes(b"modified");
         assert!(loaded.has_changes());
     }
 }

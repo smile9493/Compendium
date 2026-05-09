@@ -28,10 +28,10 @@ static PDFIUM: LazyLock<Option<Arc<pdfium_render::prelude::Pdfium>>> = LazyLock:
             }
         }
     }
-        // Reload the pdfium binary using the system library path
-        pdfium_render::prelude::Pdfium::bind_to_system_library()
-            .ok()
-            .map(|b| Arc::new(pdfium_render::prelude::Pdfium::new(b)))
+    // Reload the pdfium binary using the system library path
+    pdfium_render::prelude::Pdfium::bind_to_system_library()
+        .ok()
+        .map(|b| Arc::new(pdfium_render::prelude::Pdfium::new(b)))
 });
 
 impl PdfiumEngine {

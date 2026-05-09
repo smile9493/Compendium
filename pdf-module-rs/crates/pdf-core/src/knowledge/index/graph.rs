@@ -86,14 +86,12 @@ impl GraphIndex {
     /// If the directory does not exist, it is created.
     pub fn save_to_disk(&self, knowledge_base: &Path) -> PdfResult<()> {
         let index_dir = knowledge_base.join(".rsut_index");
-        fs::create_dir_all(&index_dir).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to create index dir: {}", e))
-        })?;
+        fs::create_dir_all(&index_dir)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to create index dir: {}", e)))?;
 
         let snapshot = self.to_snapshot();
-        let bytes = bincode::serialize(&snapshot).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to serialize graph: {}", e))
-        })?;
+        let bytes = bincode::serialize(&snapshot)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to serialize graph: {}", e)))?;
 
         let path = index_dir.join("graph.bin");
         fs::write(&path, &bytes).map_err(|e| {
@@ -134,17 +132,19 @@ impl GraphIndex {
 
     /// Load graph from a bincode snapshot file.
     fn load_from_disk(path: &Path) -> PdfResult<Self> {
-        let bytes = fs::read(path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to read graph cache: {}", e))
-        })?;
-        let snapshot: GraphSnapshot = bincode::deserialize(&bytes).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to deserialize graph: {}", e))
-        })?;
+        let bytes = fs::read(path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read graph cache: {}", e)))?;
+        let snapshot: GraphSnapshot = bincode::deserialize(&bytes)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to deserialize graph: {}", e)))?;
         Ok(Self::from_snapshot(snapshot))
     }
 
     fn to_snapshot(&self) -> GraphSnapshot {
-        let nodes: Vec<NodeMeta> = self.graph.node_indices().map(|idx| self.graph[idx].clone()).collect();
+        let nodes: Vec<NodeMeta> = self
+            .graph
+            .node_indices()
+            .map(|idx| self.graph[idx].clone())
+            .collect();
 
         let mut node_idx_to_usize = HashMap::new();
         for (i, idx) in self.graph.node_indices().enumerate() {
@@ -652,7 +652,8 @@ Body B"#;
 
         // Load
         let wiki_dir = dir.path().join("wiki");
-        let (loaded, rebuilt) = GraphIndex::load_from_disk_or_rebuild(dir.path(), &wiki_dir).unwrap();
+        let (loaded, rebuilt) =
+            GraphIndex::load_from_disk_or_rebuild(dir.path(), &wiki_dir).unwrap();
         assert!(!rebuilt, "should load from cache, not rebuild");
         assert_eq!(loaded.node_count(), 2);
         assert_eq!(loaded.edge_count(), graph.edge_count());
@@ -668,7 +669,8 @@ Body B"#;
         fs::write(&graph_path, b"corrupted data").unwrap();
 
         let wiki_dir = dir.path().join("wiki");
-        let (loaded, rebuilt) = GraphIndex::load_from_disk_or_rebuild(dir.path(), &wiki_dir).unwrap();
+        let (loaded, rebuilt) =
+            GraphIndex::load_from_disk_or_rebuild(dir.path(), &wiki_dir).unwrap();
         assert!(rebuilt, "should rebuild on corrupt cache");
         assert_eq!(loaded.node_count(), 2);
     }

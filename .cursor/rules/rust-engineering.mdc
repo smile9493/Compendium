@@ -1,0 +1,66 @@
+---
+description: Rust Architecture & Engineering Constitution — priority pyramid, error handling, idiomatic style, ownership strategy, observability, memory layout transparency, breakwater pattern, physical feasibility audit
+alwaysApply: true
+---
+
+# Rust Architecture & Engineering Guide
+
+Based on [rust-architecture-guide](/opt/pdf-module/.cursor/skills/rust-architecture-guide/SKILL.md) V9.1.0.
+
+## Execution Mode
+
+- **rapid** (prototype): Enforce P0 only; `anyhow` in libraries, unlimited `.clone()`, no doc-tests
+- **standard** (default): Enforce P0+P1; warn on P2 violations
+- **strict** (production): Enforce P0-P3; all deviations require formal annotation
+
+## Priority Decision Matrix (P0 > P1 > P2 > P3)
+
+| Level | Core Principle | Accept | Reject |
+|-------|---------------|--------|--------|
+| **P0** | Safety & Correctness | Compile-time borrow checking, Miri-verified unsafe | Any UB, race conditions, unproven unsafe |
+| **P1** | Maintainability | Semantic naming, ownership transfer, trait decoupling | Deeply nested lifetimes, overly complex generics |
+| **P2** | Engineering Efficiency | `Box<dyn Trait>`, workspace division, feature isolation | Binary bloat from monomorphization |
+| **P3** | Runtime Performance | SoA layout, lock-free, SIMD, profiling-proven | Intuition-based premature optimization |
+
+## Error Handling
+
+- **Library crate**: `thiserror` — prohibit `anyhow::Error` from public API
+- **Application binary**: `anyhow` with `.with_context(|| ...)` — register global Panic Hook at `main`
+
+## Ownership & Memory
+
+- Business logic: prefer owned types, allow `.clone()` on non-hotpaths
+- Hotpaths: `Cow<'a, T>` or `bytes::Bytes`, enforce AoS→SoA for bulk data, `#[repr(align(64))]` to eliminate false sharing
+
+## Jeet Kune Do Coding
+
+- Flat code paths via `let else` / `?`; iterator chains over manual loops
+- Minimize variable scopes via shadowing; no stuttering names (`user::UserConfig` → `user::Config`)
+- High signal-to-noise ratio: every line carries maximum energy density
+
+## Mandatory Output Contract
+
+Every code generation or review output MUST end with:
+
+```markdown
+## Decision Summary
+- **Mode**: [rapid|standard|strict]
+- **Edition**: [2021|2024]
+- **Rules Applied**: [list specific rules from P0-P3]
+- **Conflicts Resolved**: [PX > PY with justification, or "None"]
+- **Deviations**: [list with `// DEVIATION: reason` references, or "None"]
+- **Trade-offs**: [key trade-off decisions made]
+```
+
+## Mandatory CI Lints
+
+```rust
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::await_holding_refcell_ref)]
+#![deny(clippy::large_stack_frames)]
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::todo)]
+#![deny(clippy::dbg_macro)]
+#![deny(unsafe_op_in_unsafe_fn)]
+```

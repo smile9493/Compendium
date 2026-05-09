@@ -150,7 +150,10 @@ impl McpPdfPipeline {
         let mut pages_processed = 0u32;
 
         for page_idx in 0..page_count {
-            match self.extract_page_text_via_vlm(gateway, pdf_data, page_idx).await {
+            match self
+                .extract_page_text_via_vlm(gateway, pdf_data, page_idx)
+                .await
+            {
                 Ok(page_text) => {
                     all_text.push_str(&page_text);
                     all_text.push_str("\n\n");
@@ -246,7 +249,10 @@ impl McpPdfPipeline {
         let mut pages_enhanced = 0u32;
 
         for page_idx in 0..page_count {
-            match self.extract_page_text_via_vlm(gateway, pdf_data, page_idx).await {
+            match self
+                .extract_page_text_via_vlm(gateway, pdf_data, page_idx)
+                .await
+            {
                 Ok(page_text) if !page_text.trim().is_empty() => {
                     vlm_text.push_str(&page_text);
                     vlm_text.push_str("\n\n");
@@ -312,7 +318,10 @@ impl McpPdfPipeline {
         let mut all_text = String::new();
 
         for page_idx in 0..page_count {
-            match self.extract_page_structured_via_vlm(gateway, pdf_data, page_idx).await {
+            match self
+                .extract_page_structured_via_vlm(gateway, pdf_data, page_idx)
+                .await
+            {
                 Ok((page_text, regions)) => {
                     all_text.push_str(&page_text);
                     all_text.push('\n');
@@ -338,13 +347,12 @@ impl McpPdfPipeline {
             }
         }
 
-        let file_info = crate::dto::FileInfo::from_path(file_path).unwrap_or_else(|_| {
-            crate::dto::FileInfo {
+        let file_info =
+            crate::dto::FileInfo::from_path(file_path).unwrap_or_else(|_| crate::dto::FileInfo {
                 file_path: file_path.to_string_lossy().to_string(),
                 file_size: 0,
                 file_size_mb: 0.0,
-            }
-        });
+            });
 
         Ok(StructuredExtractionResult {
             pages: all_pages,
