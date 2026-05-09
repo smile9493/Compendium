@@ -87,6 +87,7 @@ mod tests {
         let arena = Bump::new();
         let mut buf = VisualBuffer::new(&arena, 1, 1);
         let ptr = buf.as_mut_ptr();
+        // SAFETY: ptr is valid for buf.len() bytes; test writes known values within bounds
         unsafe {
             *ptr = 255;
             *ptr.add(1) = 128;

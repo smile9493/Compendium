@@ -5,8 +5,8 @@
 //!
 //! Registered as `"cjk"` — use this name in field options.
 
-use std::sync::LazyLock;
 use jieba_rs::Jieba;
+use std::sync::LazyLock;
 use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 
 /// Global Jieba instance (lazy-initialized, thread-safe).
@@ -129,7 +129,10 @@ mod tests {
         let mut words = Vec::new();
         while stream.advance() {
             let tok = stream.token();
-            assert!(!tok.text.trim().is_empty(), "should not produce empty tokens");
+            assert!(
+                !tok.text.trim().is_empty(),
+                "should not produce empty tokens"
+            );
             words.push(tok.text.clone());
         }
         assert!(!words.is_empty());

@@ -103,7 +103,6 @@ enum Commands {
     },
 
     // ── Legacy commands (kept for backward compat) ──
-
     /// [Legacy] 启动服务 — 推荐使用 `service start`
     Start {
         #[arg(short, long)]
@@ -165,6 +164,7 @@ impl Default for EnvConfig {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct PdfFileInfo {
     name: String,
     path: String,
@@ -246,7 +246,6 @@ RUST_LOG={}
             config.vlm_model,
             config.vlm_endpoint,
             config.dashboard_port,
-            self.install_dir,
             self.install_dir,
             config.rust_log,
         );
@@ -334,6 +333,7 @@ RUST_LOG={}
         self.check_process("/opt/pdf-module/pdf-dashboard")
     }
 
+    #[allow(dead_code)]
     fn check_port(&self, port: u16) -> bool {
         Command::new("ss")
             .args(["-tlnp"])
@@ -502,8 +502,8 @@ RUST_LOG={}
             }
         });
 
-        let config_str = serde_json::to_string_pretty(&mcp_config)
-            .expect("MCP config is valid JSON");
+        let config_str =
+            serde_json::to_string_pretty(&mcp_config).expect("MCP config is valid JSON");
 
         if let Some(out_path) = output {
             match fs::write(&out_path, &config_str) {
@@ -542,7 +542,10 @@ RUST_LOG={}
         println!("  配置文件: {}", self.env_file);
         println!("  配置项:");
         println!("    VLM_API_KEY      - 智谱 AI API Key");
-        println!("    VLM_MODEL        - 模型名称 (默认: {})", DEFAULT_VLM_MODEL);
+        println!(
+            "    VLM_MODEL        - 模型名称 (默认: {})",
+            DEFAULT_VLM_MODEL
+        );
         println!("    VLM_ENDPOINT     - API 端点");
         println!("    DASHBOARD_PORT   - Dashboard 端口 (默认: 8000)");
         println!("    RUST_LOG         - 日志级别 (默认: info)");
@@ -575,9 +578,12 @@ RUST_LOG={}
                 }
             }
         });
-        println!("  {}", serde_json::to_string_pretty(&config_example)
-            .expect("config example is valid JSON")
-            .replace('\n', "\n  "));
+        println!(
+            "  {}",
+            serde_json::to_string_pretty(&config_example)
+                .expect("config example is valid JSON")
+                .replace('\n', "\n  ")
+        );
         println!();
         println!("  使用 generate-config 命令生成配置文件");
     }
@@ -658,7 +664,11 @@ RUST_LOG={}
 
                 if self.check_dashboard().is_some() {
                     println!(" {}", "✓".green());
-                    println!("\n  {} 访问地址: http://localhost:{}", "→".blue(), config.dashboard_port);
+                    println!(
+                        "\n  {} 访问地址: http://localhost:{}",
+                        "→".blue(),
+                        config.dashboard_port
+                    );
                 } else {
                     println!(" {}", "✗ 启动失败".red());
                 }
@@ -683,7 +693,11 @@ RUST_LOG={}
             return;
         }
 
-        let actual_port = if port != 8000 { port } else { config.dashboard_port };
+        let actual_port = if port != 8000 {
+            port
+        } else {
+            config.dashboard_port
+        };
 
         if self.check_dashboard().is_some() {
             println!("  {} Dashboard 已在运行", "ℹ".blue());
@@ -717,7 +731,11 @@ RUST_LOG={}
                 if self.check_dashboard().is_some() {
                     println!(" {}", "✓".green());
                     println!("\n  {} Dashboard 已启动", "→".blue());
-                    println!("  {} 访问地址: http://localhost:{}", "→".blue(), actual_port);
+                    println!(
+                        "  {} 访问地址: http://localhost:{}",
+                        "→".blue(),
+                        actual_port
+                    );
                 } else {
                     println!(" {}", "✗ 启动失败".red());
                 }
@@ -817,7 +835,11 @@ RUST_LOG={}
             Err(e) => {
                 println!(" {}", "✗".red());
                 println!("  {} 连接失败: {}", "✗".red(), e);
-                println!("  {} 请确认 Dashboard 正在运行 (端口: {})", "ℹ".blue(), self.server_url);
+                println!(
+                    "  {} 请确认 Dashboard 正在运行 (端口: {})",
+                    "ℹ".blue(),
+                    self.server_url
+                );
             }
         }
     }
@@ -902,7 +924,9 @@ RUST_LOG={}
                 use std::io::{self, Write};
                 io::stdout().flush().expect("stdout flush failed");
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).expect("failed to read stdin");
+                io::stdin()
+                    .read_line(&mut input)
+                    .expect("failed to read stdin");
                 let trimmed = input.trim();
                 if trimmed.is_empty() {
                     println!("  {} 未提供文件路径", "ℹ".blue());
@@ -930,8 +954,11 @@ RUST_LOG={}
             Ok(resp) => {
                 if resp.status().is_success() {
                     let result: serde_json::Value = resp.json().unwrap_or_default();
-                    println!("  {} 测试结果: {}", "✓".green(), serde_json::to_string_pretty(&result)
-                        .expect("test result is valid JSON"));
+                    println!(
+                        "  {} 测试结果: {}",
+                        "✓".green(),
+                        serde_json::to_string_pretty(&result).expect("test result is valid JSON")
+                    );
                 } else {
                     let status = resp.status();
                     let body_text = resp.text().unwrap_or_default();
@@ -959,13 +986,16 @@ RUST_LOG={}
                     }
                 });
 
-                let mcp_str = serde_json::to_string(&mcp_request)
-                    .expect("MCP request is valid JSON");
+                let mcp_str =
+                    serde_json::to_string(&mcp_request).expect("MCP request is valid JSON");
                 let output = Command::new(&mcp_binary)
                     .arg("--stdio")
                     .arg("--single")
                     .arg(&mcp_str)
-                    .env("PDFIUM_LIB_PATH", format!("{}/lib/libpdfium.so", self.install_dir))
+                    .env(
+                        "PDFIUM_LIB_PATH",
+                        format!("{}/lib/libpdfium.so", self.install_dir),
+                    )
                     .env("LD_LIBRARY_PATH", format!("{}/lib", self.install_dir))
                     .output();
 
@@ -1042,7 +1072,11 @@ RUST_LOG={}
             println!("  {} 初始化配置    [{}]", " 1".cyan(), "init".blue());
             println!("  {} 配置 GLM API  [{}]", " 2".cyan(), config_status);
             println!("  {} 查看状态      [{}]", " 3".cyan(), "status".blue());
-            println!("  {} 生成客户端配置 [{}]", " 4".cyan(), "generate-config".blue());
+            println!(
+                "  {} 生成客户端配置 [{}]",
+                " 4".cyan(),
+                "generate-config".blue()
+            );
             println!("  {} 配置说明      [{}]", " 5".cyan(), "info".blue());
             println!("  {} 管理系统服务  [{}]", " 6".cyan(), "service".blue());
             println!("  {} 查看日志      [{}]", " 7".cyan(), "logs".blue());
@@ -1070,7 +1104,9 @@ RUST_LOG={}
                     print!("  行数 [20]: ");
                     io::stdout().flush().expect("stdout flush failed");
                     let mut lines = String::new();
-                    io::stdin().read_line(&mut lines).expect("failed to read stdin");
+                    io::stdin()
+                        .read_line(&mut lines)
+                        .expect("failed to read stdin");
                     let n: u16 = lines.trim().parse().unwrap_or(20);
                     self.cmd_logs(n, false);
                 }
@@ -1078,7 +1114,9 @@ RUST_LOG={}
                     print!("  Dashboard 端口 [8000]: ");
                     io::stdout().flush().expect("stdout flush failed");
                     let mut port = String::new();
-                    io::stdin().read_line(&mut port).expect("failed to read stdin");
+                    io::stdin()
+                        .read_line(&mut port)
+                        .expect("failed to read stdin");
                     let p: u16 = port.trim().parse().unwrap_or(8000);
                     self.cmd_dashboard(p);
                 }
@@ -1086,7 +1124,9 @@ RUST_LOG={}
                     print!("  PDF 文件路径: ");
                     io::stdout().flush().expect("stdout flush failed");
                     let mut path = String::new();
-                    io::stdin().read_line(&mut path).expect("failed to read stdin");
+                    io::stdin()
+                        .read_line(&mut path)
+                        .expect("failed to read stdin");
                     let path = path.trim();
                     if !path.is_empty() {
                         self.cmd_upload(path);
@@ -1135,7 +1175,9 @@ RUST_LOG={}
             io::stdout().flush().expect("stdout flush failed");
 
             let mut input = String::new();
-            io::stdin().read_line(&mut input).expect("failed to read stdin");
+            io::stdin()
+                .read_line(&mut input)
+                .expect("failed to read stdin");
 
             match input.trim() {
                 "1" => {
@@ -1144,7 +1186,9 @@ RUST_LOG={}
                     io::stdout().flush().expect("stdout flush failed");
 
                     let mut key = String::new();
-                    io::stdin().read_line(&mut key).expect("failed to read stdin");
+                    io::stdin()
+                        .read_line(&mut key)
+                        .expect("failed to read stdin");
 
                     if !key.trim().is_empty() {
                         let mut config = self.load_config();
@@ -1193,7 +1237,9 @@ RUST_LOG={}
             io::stdout().flush().expect("stdout flush failed");
 
             let mut input = String::new();
-            io::stdin().read_line(&mut input).expect("failed to read stdin");
+            io::stdin()
+                .read_line(&mut input)
+                .expect("failed to read stdin");
 
             match input.trim() {
                 "1" => self.cmd_service_start(),

@@ -87,12 +87,12 @@ impl FulltextIndex {
 
         let index = if index_dir.join("meta.json").exists() {
             info!(dir = ?index_dir, "Opening existing tantivy index");
-            Index::open_in_dir(&index_dir).map_err(|e| {
+            Index::open_in_dir(index_dir).map_err(|e| {
                 PdfModuleError::Storage(format!("Failed to open tantivy index: {}", e))
             })?
         } else {
             info!(dir = ?index_dir, "Creating new tantivy index");
-            Index::create_in_dir(&index_dir, schema.clone()).map_err(|e| {
+            Index::create_in_dir(index_dir, schema.clone()).map_err(|e| {
                 PdfModuleError::Storage(format!("Failed to create tantivy index: {}", e))
             })?
         };

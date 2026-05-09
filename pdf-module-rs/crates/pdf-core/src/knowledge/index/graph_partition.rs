@@ -102,8 +102,9 @@ impl GraphPartitionStore {
     /// Open or create the graph partition store at `<knowledge_base>/.rsut_index/graph_partitions/`.
     pub fn open(knowledge_base: &Path) -> PdfResult<Self> {
         let db_path = knowledge_base.join(".rsut_index").join("graph_partitions");
-        std::fs::create_dir_all(&db_path)
-            .map_err(|e| PdfError::Storage(format!("Failed to create graph partitions dir: {}", e)))?;
+        std::fs::create_dir_all(&db_path).map_err(|e| {
+            PdfError::Storage(format!("Failed to create graph partitions dir: {}", e))
+        })?;
 
         let db = sled::open(&db_path)
             .map_err(|e| PdfError::Storage(format!("Failed to open graph partitions db: {}", e)))?;
@@ -140,17 +141,17 @@ impl GraphPartitionStore {
 
         // Load from sled
         let tree_name = format!("graph:{}", domain);
-        let tree = self.db.open_tree(&tree_name)
-            .map_err(|e| PdfError::Storage(format!("Failed to open graph tree '{}': {}", domain, e)))?;
+        let tree = self.db.open_tree(&tree_name).map_err(|e| {
+            PdfError::Storage(format!("Failed to open graph tree '{}': {}", domain, e))
+        })?;
 
         let subgraph_key = "subgraph";
-        let snapshot: SubgraphSnapshot = match tree.get(subgraph_key)
-            .map_err(|e| PdfError::Storage(format!("Failed to read graph for '{}': {}", domain, e)))?
-        {
-            Some(bytes) => {
-                bincode::deserialize(&bytes)
-                    .map_err(|e| PdfError::Storage(format!("Failed to deserialize graph '{}': {}", domain, e)))?
-            }
+        let snapshot: SubgraphSnapshot = match tree.get(subgraph_key).map_err(|e| {
+            PdfError::Storage(format!("Failed to read graph for '{}': {}", domain, e))
+        })? {
+            Some(bytes) => bincode::deserialize(&bytes).map_err(|e| {
+                PdfError::Storage(format!("Failed to deserialize graph '{}': {}", domain, e))
+            })?,
             None => return Ok(None),
         };
 
@@ -172,12 +173,14 @@ impl GraphPartitionStore {
         path_to_node: &HashMap<String, NodeIndex>,
     ) -> PdfResult<DomainGraph> {
         let tree_name = format!("graph:{}", domain);
-        let tree = self.db.open_tree(&tree_name)
-            .map_err(|e| PdfError::Storage(format!("Failed to open graph tree '{}': {}", domain, e)))?;
+        let tree = self.db.open_tree(&tree_name).map_err(|e| {
+            PdfError::Storage(format!("Failed to open graph tree '{}': {}", domain, e))
+        })?;
 
         let snapshot = Self::serialize_subgraph(graph, path_to_node);
-        let bytes = bincode::serialize(&snapshot)
-            .map_err(|e| PdfError::Storage(format!("Failed to serialize graph '{}': {}", domain, e)))?;
+        let bytes = bincode::serialize(&snapshot).map_err(|e| {
+            PdfError::Storage(format!("Failed to serialize graph '{}': {}", domain, e))
+        })?;
 
         tree.insert("subgraph", bytes)
             .map_err(|e| PdfError::Storage(format!("Failed to write graph '{}': {}", domain, e)))?;
@@ -204,7 +207,9 @@ impl GraphPartitionStore {
 
     /// List all domains that have stored graph partitions.
     pub fn domains(&self) -> PdfResult<Vec<String>> {
-        let domains: Vec<String> = self.db.tree_names()
+        let domains: Vec<String> = self
+            .db
+            .tree_names()
             .into_iter()
             .filter_map(|name| {
                 let name = String::from_utf8_lossy(&name).to_string();
@@ -231,15 +236,16 @@ impl GraphPartitionStore {
 
     /// Get the last access time for a warm domain.
     pub fn last_access(&self, domain: &str) -> Option<Instant> {
-        self.warm.get(domain).and_then(|dg| {
-            dg.inner.read().ok().map(|g| g.last_access)
-        })
+        self.warm
+            .get(domain)
+            .and_then(|dg| dg.inner.read().ok().map(|g| g.last_access))
     }
 
     /// Flush all pending writes.
     pub fn flush(&self) -> PdfResult<()> {
-        self.db.flush()
-            .map_err(|e| PdfError::Storage(format!("Failed to flush graph partitions db: {}", e)))?;
+        self.db.flush().map_err(|e| {
+            PdfError::Storage(format!("Failed to flush graph partitions db: {}", e))
+        })?;
         Ok(())
     }
 
@@ -247,10 +253,10 @@ impl GraphPartitionStore {
 
     fn evict_if_needed(&mut self) {
         while self.warm.len() >= self.max_warm {
-            let coldest = self.warm.iter()
-                .filter_map(|(d, dg)| {
-                    dg.inner.read().ok().map(|g| (d.clone(), g.last_access))
-                })
+            let coldest = self
+                .warm
+                .iter()
+                .filter_map(|(d, dg)| dg.inner.read().ok().map(|g| (d.clone(), g.last_access)))
                 .min_by_key(|(_, last_access)| *last_access)
                 .map(|(d, _)| d);
 
@@ -290,7 +296,11 @@ impl GraphPartitionStore {
             .map(|(path, idx)| (path.clone(), node_idx_to_usize[idx]))
             .collect();
 
-        SubgraphSnapshot { nodes, edges, path_to_index }
+        SubgraphSnapshot {
+            nodes,
+            edges,
+            path_to_index,
+        }
     }
 
     fn deserialize_subgraph(
@@ -409,7 +419,9 @@ mod tests {
         // Save 4 domains
         for i in 0..4 {
             let g = DiGraph::new();
-            store.save_domain(&format!("d{}", i), &g, &HashMap::new()).unwrap();
+            store
+                .save_domain(&format!("d{}", i), &g, &HashMap::new())
+                .unwrap();
         }
 
         assert!(store.warm_count() <= 2);

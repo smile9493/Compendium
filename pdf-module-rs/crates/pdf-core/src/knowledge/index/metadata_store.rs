@@ -49,9 +49,7 @@ impl MetadataStore {
         let has_version = meta.get("schema_version").ok().flatten().is_some();
         if !has_version {
             meta.insert("schema_version", &SCHEMA_VERSION.to_le_bytes())
-                .map_err(|e| {
-                    PdfError::Storage(format!("Failed to set schema version: {}", e))
-                })?;
+                .map_err(|e| PdfError::Storage(format!("Failed to set schema version: {}", e)))?;
             info!("MetadataStore initialized with schema v{}", SCHEMA_VERSION);
         } else {
             debug!("MetadataStore opened at {:?}", db_path);
@@ -70,8 +68,9 @@ impl MetadataStore {
             .map_err(|e| PdfError::Storage(format!("Failed to get entry '{}': {}", path, e)))?
         {
             Some(bytes) => {
-                let entry: KnowledgeEntry = serde_json::from_slice(&bytes)
-                    .map_err(|e| PdfError::Storage(format!("Failed to deserialize entry '{}': {}", path, e)))?;
+                let entry: KnowledgeEntry = serde_json::from_slice(&bytes).map_err(|e| {
+                    PdfError::Storage(format!("Failed to deserialize entry '{}': {}", path, e))
+                })?;
                 Ok(Some(entry))
             }
             None => Ok(None),
@@ -83,8 +82,9 @@ impl MetadataStore {
         let domain = extract_domain(path);
         let tree = self.domain_tree(domain)?;
 
-        let bytes = serde_json::to_vec(entry)
-            .map_err(|e| PdfError::Storage(format!("Failed to serialize entry '{}': {}", path, e)))?;
+        let bytes = serde_json::to_vec(entry).map_err(|e| {
+            PdfError::Storage(format!("Failed to serialize entry '{}': {}", path, e))
+        })?;
 
         tree.insert(path.as_bytes(), bytes)
             .map_err(|e| PdfError::Storage(format!("Failed to insert entry '{}': {}", path, e)))?;
@@ -125,10 +125,12 @@ impl MetadataStore {
     /// List all known domains.
     pub fn all_domains(&self) -> PdfResult<Vec<String>> {
         let meta = self.meta_tree()?;
-        match meta.get("domains").map_err(|e| PdfError::Storage(format!("Failed to read domains: {}", e)))? {
+        match meta
+            .get("domains")
+            .map_err(|e| PdfError::Storage(format!("Failed to read domains: {}", e)))?
+        {
             Some(bytes) => {
-                let domains: Vec<String> =
-                    serde_json::from_slice(&bytes).unwrap_or_default();
+                let domains: Vec<String> = serde_json::from_slice(&bytes).unwrap_or_default();
                 Ok(domains)
             }
             None => {
@@ -173,13 +175,16 @@ impl MetadataStore {
         // Persist domain list
         let domains = self.all_domains()?;
         let meta = self.meta_tree()?;
-        let domain_bytes = serde_json::to_vec(&domains).map_err(|e| {
-            PdfError::Storage(format!("Failed to serialize domain list: {}", e))
-        })?;
+        let domain_bytes = serde_json::to_vec(&domains)
+            .map_err(|e| PdfError::Storage(format!("Failed to serialize domain list: {}", e)))?;
         meta.insert("domains", domain_bytes)
             .map_err(|e| PdfError::Storage(format!("Failed to write domain list: {}", e)))?;
 
-        info!(count = count, domains = domains.len(), "MetadataStore populated from wiki");
+        info!(
+            count = count,
+            domains = domains.len(),
+            "MetadataStore populated from wiki"
+        );
         Ok(count)
     }
 
@@ -205,9 +210,9 @@ impl MetadataStore {
 
     fn domain_tree(&self, domain: &str) -> PdfResult<sled::Tree> {
         let name = format!("entries:{}", domain);
-        self.db
-            .open_tree(&name)
-            .map_err(|e| PdfError::Storage(format!("Failed to open domain tree '{}': {}", domain, e)))
+        self.db.open_tree(&name).map_err(|e| {
+            PdfError::Storage(format!("Failed to open domain tree '{}': {}", domain, e))
+        })
     }
 
     fn meta_tree(&self) -> PdfResult<sled::Tree> {
@@ -218,9 +223,10 @@ impl MetadataStore {
 
     fn register_domain(&self, domain: &str) -> PdfResult<()> {
         let meta = self.meta_tree()?;
-        let current_domains: HashSet<String> = match meta.get("domains").map_err(|e| {
-            PdfError::Storage(format!("Failed to read domains: {}", e))
-        })? {
+        let current_domains: HashSet<String> = match meta
+            .get("domains")
+            .map_err(|e| PdfError::Storage(format!("Failed to read domains: {}", e)))?
+        {
             Some(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
             None => HashSet::new(),
         };
@@ -242,8 +248,8 @@ impl MetadataStore {
         for entry in fs::read_dir(dir)
             .map_err(|e| PdfError::Storage(format!("Failed to read dir: {}", e)))?
         {
-            let entry = entry
-                .map_err(|e| PdfError::Storage(format!("Failed to read entry: {}", e)))?;
+            let entry =
+                entry.map_err(|e| PdfError::Storage(format!("Failed to read entry: {}", e)))?;
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
@@ -344,10 +350,7 @@ Content here."#;
     #[test]
     fn test_extract_domain() {
         assert_eq!(extract_domain("it/concept.md"), "it");
-        assert_eq!(
-            extract_domain("[IT] HTTP_2 Multiplexing.md"),
-            "IT"
-        );
+        assert_eq!(extract_domain("[IT] HTTP_2 Multiplexing.md"), "IT");
         assert_eq!(extract_domain("concept.md"), "未分类");
     }
 
@@ -385,10 +388,7 @@ Content here."#;
         assert_eq!(it_entries.len(), 1);
         assert!(it_entries[0].contains("HTTP_2"));
 
-        let loaded = store
-            .get_entry(&it_entries[0])
-            .unwrap()
-            .unwrap();
+        let loaded = store.get_entry(&it_entries[0]).unwrap().unwrap();
         assert_eq!(loaded.title, "HTTP/2 Multiplexing");
         assert_eq!(loaded.domain, "it");
     }
@@ -398,9 +398,15 @@ Content here."#;
         let dir = TempDir::new().unwrap();
         let store = MetadataStore::open(dir.path()).unwrap();
 
-        store.upsert_entry("it/a.md", &make_entry("A", "it")).unwrap();
-        store.upsert_entry("it/b.md", &make_entry("B", "it")).unwrap();
-        store.upsert_entry("rust/c.md", &make_entry("C", "rust")).unwrap();
+        store
+            .upsert_entry("it/a.md", &make_entry("A", "it"))
+            .unwrap();
+        store
+            .upsert_entry("it/b.md", &make_entry("B", "it"))
+            .unwrap();
+        store
+            .upsert_entry("rust/c.md", &make_entry("C", "rust"))
+            .unwrap();
 
         assert_eq!(store.total_entries().unwrap(), 3);
         assert_eq!(store.len().unwrap(), 3);
