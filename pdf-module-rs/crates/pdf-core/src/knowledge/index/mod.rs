@@ -10,12 +10,20 @@
 
 pub mod community;
 pub mod fulltext;
+pub mod fulltext_shard;
 pub mod graph;
+pub mod graph_partition;
+pub mod lazy_loader;
+pub mod metadata_store;
 pub mod tokenizer;
 pub mod vector;
 
 pub use community::{detect_communities, Community};
 pub use fulltext::FulltextIndex;
+pub use fulltext_shard::FulltextShardManager;
 pub use graph::GraphIndex;
+pub use graph_partition::GraphPartitionStore;
+pub use lazy_loader::LazyLoadingCoordinator;
+pub use metadata_store::{extract_domain, MetadataStore};
 pub use tokenizer::register_cjk_tokenizer;
 pub use vector::{cosine_similarity, EmbeddingModel, TfidfModel, VectorHit, VectorIndex, VectorStore};

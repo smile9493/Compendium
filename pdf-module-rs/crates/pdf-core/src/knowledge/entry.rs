@@ -2,30 +2,51 @@
 //!
 //! Every Markdown file in the wiki must conform to this schema.
 
-use chrono::{DateTime, NaiveDate, Utc};
-use serde::{Deserialize, Deserializer, Serialize};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::path::PathBuf;
 
-/// Custom deserializer for DateTime<Utc> that accepts both:
-/// - Full RFC 3339 format: "2026-01-01T00:00:00Z"
-/// - Date-only format: "2026-05-08"
+/// Custom serializer for DateTime<Utc> that adapts to the serialization format:
+/// - Human-readable (YAML/JSON): RFC 3339 string
+/// - Binary (bincode): i64 epoch seconds
+fn serialize_utc_date<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if serializer.is_human_readable() {
+        date.to_rfc3339().serialize(serializer)
+    } else {
+        date.timestamp().serialize(serializer)
+    }
+}
+
+/// Custom deserializer for DateTime<Utc> that accepts:
+/// - Human-readable (YAML/JSON): RFC 3339 string or "YYYY-MM-DD" date-only string
+/// - Binary (bincode): i64 epoch seconds
 fn deserialize_utc_date<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
-        return Ok(dt.with_timezone(&Utc));
-    }
-    if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
-        if let Some(dt) = naive.and_hms_opt(0, 0, 0) {
-            return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
+    if deserializer.is_human_readable() {
+        let s = String::deserialize(deserializer)?;
+        if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
+            return Ok(dt.with_timezone(&Utc));
         }
+        if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+            if let Some(dt) = naive.and_hms_opt(0, 0, 0) {
+                return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
+            }
+        }
+        Err(serde::de::Error::custom(format!(
+            "invalid datetime format: '{}', expected RFC 3339 or YYYY-MM-DD",
+            s
+        )))
+    } else {
+        let ts = i64::deserialize(deserializer)?;
+        Utc.timestamp_opt(ts, 0)
+            .single()
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid timestamp: {}", ts)))
     }
-    Err(serde::de::Error::custom(format!(
-        "invalid datetime format: '{}', expected RFC 3339 or YYYY-MM-DD",
-        s
-    )))
 }
 
 /// Classification level of a knowledge entry in the compilation pyramid.
@@ -45,6 +66,18 @@ pub enum EntryLevel {
     /// Domain map — top-level navigation for an entire field.
     #[serde(alias = "L3")]
     L3,
+}
+
+impl std::fmt::Display for CompileStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "Pending"),
+            Self::Compiling => write!(f, "Compiling"),
+            Self::Compiled => write!(f, "Compiled"),
+            Self::NeedsRecompile => write!(f, "NeedsRecompile"),
+            Self::Failed => write!(f, "Failed"),
+        }
+    }
 }
 
 impl std::fmt::Display for EntryLevel {
@@ -138,9 +171,15 @@ pub struct KnowledgeEntry {
     pub version: u32,
 
     // === Timestamps ===
-    #[serde(deserialize_with = "deserialize_utc_date")]
+    #[serde(
+        serialize_with = "serialize_utc_date",
+        deserialize_with = "deserialize_utc_date"
+    )]
     pub created: DateTime<Utc>,
-    #[serde(deserialize_with = "deserialize_utc_date")]
+    #[serde(
+        serialize_with = "serialize_utc_date",
+        deserialize_with = "deserialize_utc_date"
+    )]
     pub updated: DateTime<Utc>,
 }
 

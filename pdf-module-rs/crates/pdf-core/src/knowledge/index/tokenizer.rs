@@ -75,9 +75,13 @@ impl TokenStream for JiebaTokenStream {
 /// Register the CJK jieba tokenizer on a Tantivy index.
 ///
 /// Registers as `"cjk"` — use this name in schema field options.
+/// The pipeline applies jieba segmentation followed by lowercasing
+/// for case-insensitive English token matching.
 pub fn register_cjk_tokenizer(index: &tantivy::Index) {
-    use tantivy::tokenizer::TextAnalyzer;
-    let analyzer = TextAnalyzer::builder(JiebaTokenizer).build();
+    use tantivy::tokenizer::{LowerCaser, TextAnalyzer};
+    let analyzer = TextAnalyzer::builder(JiebaTokenizer)
+        .filter(LowerCaser)
+        .build();
     index.tokenizers().register("cjk", analyzer);
 }
 
@@ -87,19 +91,35 @@ mod tests {
 
     #[test]
     fn test_jieba_segmentation() {
+        // Use the full pipeline via TextAnalyzer to include LowerCaser
+        use tantivy::tokenizer::{LowerCaser, TextAnalyzer};
+        let mut analyzer = TextAnalyzer::builder(JiebaTokenizer)
+            .filter(LowerCaser)
+            .build();
+        let mut stream = analyzer.token_stream("从 Transformer 到大规模语言模型的演进");
+        let mut words = Vec::new();
+        while stream.advance() {
+            words.push(stream.token().text.clone());
+        }
+        // Should produce meaningful word-level tokens (lowercased)
+        assert!(words.contains(&"transformer".to_string()));
+        assert!(words.contains(&"大规模".to_string()) || words.contains(&"大".to_string()));
+        assert!(words.contains(&"语言".to_string()));
+        assert!(words.contains(&"模型".to_string()));
+        // Should NOT produce noise like "的文", "件中"
+        assert!(!words.contains(&"从 transformer".to_string()));
+    }
+
+    #[test]
+    fn test_raw_tokenizer_preserves_case() {
         let mut tokenizer = JiebaTokenizer;
         let mut stream = tokenizer.token_stream("从 Transformer 到大规模语言模型的演进");
         let mut words = Vec::new();
         while stream.advance() {
             words.push(stream.token().text.clone());
         }
-        // Should produce meaningful word-level tokens
+        // Raw JiebaTokenizer preserves original case
         assert!(words.contains(&"Transformer".to_string()));
-        assert!(words.contains(&"大规模".to_string()) || words.contains(&"大".to_string()));
-        assert!(words.contains(&"语言".to_string()));
-        assert!(words.contains(&"模型".to_string()));
-        // Should NOT produce noise like "的文", "件中"
-        assert!(!words.contains(&"从 Transformer".to_string()));
     }
 
     #[test]

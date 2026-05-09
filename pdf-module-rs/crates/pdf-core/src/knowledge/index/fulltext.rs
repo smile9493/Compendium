@@ -49,7 +49,15 @@ impl FulltextIndex {
     /// Open or create the fulltext index at `<knowledge_base>/.rsut_index/tantivy/`.
     pub fn open_or_create(knowledge_base: &Path) -> PdfResult<Self> {
         let index_dir = knowledge_base.join(".rsut_index").join("tantivy");
-        fs::create_dir_all(&index_dir).map_err(|e| {
+        Self::open_at(&index_dir)
+    }
+
+    /// Open or create a fulltext index at the exact directory path.
+    ///
+    /// This is used by `FulltextShardManager` to create per-domain indexes
+    /// at arbitrary paths under `.rsut_index/tantivy/<domain>/`.
+    pub fn open_at(index_dir: &Path) -> PdfResult<Self> {
+        fs::create_dir_all(index_dir).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to create tantivy index dir: {}", e))
         })?;
 
@@ -103,7 +111,7 @@ impl FulltextIndex {
         Ok(Self {
             index,
             reader,
-            index_dir,
+            index_dir: index_dir.to_path_buf(),
         })
     }
 
@@ -148,6 +156,11 @@ impl FulltextIndex {
         let domain_field = schema
             .get_field(FIELD_DOMAIN)
             .map_err(|e| PdfModuleError::Storage(format!("Missing domain field: {}", e)))?;
+
+        // Force reload to pick up any recently committed segments
+        self.reader.reload().map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to reload index reader: {}", e))
+        })?;
 
         let searcher = self.reader.searcher();
         let query_parser =
