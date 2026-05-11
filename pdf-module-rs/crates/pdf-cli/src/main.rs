@@ -1,9 +1,18 @@
-//! # pdf-cli
+//! # rsut-pdf CLI
 //!
-//! CLI management tool for rsut-pdf-mcp knowledge bases.
+//! Unified client for the rsut-pdf-mcp knowledge engine.
 //!
-//! Provides terminal access to all management operations without
-//! requiring a running server or AI client.
+//! ## Dual Mode Architecture
+//!
+//! - `--local` (default): Links directly to `pdf-core`, all operations local.
+//! - `--remote`: Connects to a remote MCP server via HTTP API.
+//!
+//! ## File Transfer (Remote Mode)
+//!
+//! For cross-network scenarios, `compile --remote` automatically:
+//! 1. Uploads the PDF via `POST /api/upload`
+//! 2. Calls `compile_uploaded_pdf` MCP tool
+//! 3. Returns compile results
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::all)]
@@ -15,21 +24,56 @@
 #![deny(clippy::dbg_macro)]
 #![deny(clippy::unwrap_used)]
 
+mod commands;
+mod config;
+mod local;
+mod output;
+mod proxy;
+mod remote;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use pdf_core::management::{ConfigManager, HealthReporter};
+use commands::{CmdResult, Mode};
+use output::OutputFormat;
 use std::path::{Path, PathBuf};
+
+// ── CLI Structure ──
 
 #[derive(Parser)]
 #[command(
-    name = "pdf-cli",
-    version,
-    about = "Manage rsut-pdf-mcp knowledge bases from the terminal"
+    name = "rsut-pdf",
+    version = "1.0.0",
+    about = "Unified CLI for rsut-pdf-mcp knowledge engine — compile, search, manage"
 )]
 struct Cli {
-    /// Path to the knowledge base directory
-    #[arg(long, env = "KNOWLEDGE_BASE", default_value = ".")]
-    knowledge_base: PathBuf,
+    /// Use local mode: direct pdf-core integration, zero network
+    /// Defaults to config file `mode` setting, or local if unset.
+    #[arg(
+        long,
+        global = true,
+        conflicts_with = "remote",
+    )]
+    local: bool,
+
+    /// Use remote mode: connect to a remote MCP server via HTTP
+    #[arg(
+        long,
+        global = true,
+        conflicts_with = "local",
+    )]
+    remote: bool,
+
+    /// Remote server URL (overrides config)
+    #[arg(long, global = true, requires = "remote")]
+    server: Option<String>,
+
+    /// Auth token for remote server (overrides config/env)
+    #[arg(long, global = true, requires = "remote")]
+    token: Option<String>,
+
+    /// Output as JSON
+    #[arg(long, global = true)]
+    json: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -37,8 +81,34 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Show knowledge base health report
-    Health,
+    /// Compile a PDF into the knowledge base
+    Compile(commands::compile::CompileArgs),
+
+    /// Micro-compile: extract text for current session, not saved to wiki
+    #[command(name = "micro-compile")]
+    MicroCompile(commands::compile::MicroCompileArgs),
+
+    /// Recompile an existing wiki entry
+    Recompile(commands::compile::RecompileArgs),
+
+    /// Incremental compile of entire raw/ directory
+    Incremental(commands::compile::IncrementalArgs),
+
+    /// Full-text search across wiki entries
+    Search(commands::query::SearchArgs),
+
+    /// Get N-hop context for an entry (backlinks)
+    Context(commands::query::ContextArgs),
+
+    /// Export concept map as Mermaid.js
+    #[command(name = "concept-map")]
+    ConceptMap(commands::query::ConceptMapArgs),
+
+    /// List orphan entries (no links)
+    Orphans(commands::query::OrphansArgs),
+
+    /// Knowledge base statistics
+    Stats(commands::query::StatsArgs),
 
     /// Configuration management
     Config {
@@ -46,32 +116,38 @@ enum Commands {
         action: ConfigAction,
     },
 
-    /// Trigger knowledge compilation
-    Compile {
-        /// Run incremental compile (only changed PDFs)
-        #[arg(short, long)]
-        incremental: bool,
+    /// Health check
+    Health {
+        /// Knowledge base path (local mode)
+        #[arg(long)]
+        knowledge_base: Option<String>,
     },
 
     /// Index management
     Index {
-        /// Rebuild all indexes (fulltext + graph)
-        #[arg(short, long)]
-        rebuild: bool,
+        #[command(subcommand)]
+        action: IndexAction,
     },
+
+    /// Server management (Linux only, local)
+    Server {
+        #[command(subcommand)]
+        action: ServerAction,
+    },
+
+    /// Stdio proxy: forward stdio MCP to remote HTTP server
+    Proxy,
 }
 
 #[derive(Subcommand)]
 enum ConfigAction {
     /// Show all configuration values
     Show,
-
-    /// Get a configuration value
+    /// Get a specific configuration value
     Get {
         /// Configuration key
         key: String,
     },
-
     /// Set a configuration value
     Set {
         /// Configuration key
@@ -79,139 +155,377 @@ enum ConfigAction {
         /// Configuration value
         value: String,
     },
+    /// Reset configuration to defaults
+    Reset,
+}
 
-    /// Remove a configuration key
-    Remove {
-        /// Configuration key
-        key: String,
+#[derive(Subcommand)]
+enum IndexAction {
+    /// Rebuild all indexes (fulltext + graph)
+    Rebuild {
+        /// Knowledge base path
+        #[arg(long)]
+        knowledge_base: Option<String>,
     },
 }
 
+#[derive(Subcommand)]
+enum ServerAction {
+    /// Start the MCP server (Linux only)
+    Start,
+    /// Stop the MCP server
+    Stop,
+    /// Check server status
+    Status,
+}
+
+// ── Main ──
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Register global panic hook for structured diagnostics
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("FATAL: {}", info);
+    }));
+
+    // Initialize tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .with_target(false)
+        .without_time()
+        .init();
+
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Health => cmd_health(&cli.knowledge_base),
-        Commands::Config { action } => cmd_config(&cli.knowledge_base, action),
-        Commands::Compile { incremental } => cmd_compile(&cli.knowledge_base, incremental).await,
-        Commands::Index { rebuild } => cmd_index(&cli.knowledge_base, rebuild),
-    }
-}
+    // Load config from ~/.rsut-pdf/config.toml
+    let mut cfg = config::CliConfig::load()?;
 
-fn cmd_health(kb_path: &Path) -> Result<()> {
-    let reporter = HealthReporter::new(kb_path);
-    let report = reporter
-        .report()
-        .context("Failed to generate health report")?;
-    println!("{}", report);
+    // CLI flags override config
+    if let Some(ref server) = cli.server {
+        cfg.server = Some(server.clone());
+    }
+    if let Some(ref token) = cli.token {
+        cfg.token = Some(token.clone());
+    }
+
+    // Resolve mode from flags or config default
+    let mode = if cli.remote {
+        Mode::Remote
+    } else if cli.local {
+        Mode::Local
+    } else {
+        // Neither --local nor --remote explicitly set — fall back to config
+        Mode::from_config(&cfg)
+    };
+
+    let format = if cli.json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+
+    let result = match &cli.command {
+        Commands::Compile(args) => {
+            commands::compile::run_compile(&cfg, mode, args).await
+        }
+        Commands::MicroCompile(args) => {
+            commands::compile::run_micro_compile(&cfg, mode, args).await
+        }
+        Commands::Recompile(args) => {
+            commands::compile::run_recompile(&cfg, mode, args).await
+        }
+        Commands::Incremental(args) => {
+            commands::compile::run_incremental(&cfg, mode, args).await
+        }
+        Commands::Search(args) => {
+            commands::query::run_search(&cfg, mode, args).await
+        }
+        Commands::Context(args) => {
+            commands::query::run_context(&cfg, mode, args).await
+        }
+        Commands::ConceptMap(args) => {
+            commands::query::run_concept_map(&cfg, mode, args).await
+        }
+        Commands::Orphans(args) => {
+            commands::query::run_orphans(&cfg, mode, args).await
+        }
+        Commands::Stats(args) => {
+            commands::query::run_stats(&cfg, mode, args).await
+        }
+        Commands::Config { action } => cmd_config(&mut cfg, action, format),
+        Commands::Health { knowledge_base } => {
+            cmd_health(&cfg, mode, knowledge_base.as_deref())
+        }
+        Commands::Index { action } => cmd_index(&cfg, mode, action),
+        Commands::Server { action } => cmd_server(action),
+        Commands::Proxy => cmd_proxy(&cfg).await,
+    }?;
+
+    result.print(format);
     Ok(())
 }
 
-fn cmd_config(kb_path: &Path, action: ConfigAction) -> Result<()> {
+// ── Command Handlers ──
+
+/// Config management: operates on CLI config (~/.rsut-pdf/config.toml)
+fn cmd_config(
+    config: &mut config::CliConfig,
+    action: &ConfigAction,
+    _format: OutputFormat,
+) -> Result<CmdResult> {
     match action {
         ConfigAction::Show => {
-            let mut cm = ConfigManager::new(kb_path);
-            cm.load().context("Failed to load config")?;
-            let data = cm.all();
-            if data.is_empty() {
-                println!("No configuration entries found.");
-                return Ok(());
-            }
-            println!("Configuration ({} entries):", data.len());
-            println!("{:<30} VALUE", "KEY");
-            println!("{}", "─".repeat(60));
-            let mut entries: Vec<_> = data.iter().collect();
-            entries.sort_by_key(|(k, _)| k.as_str());
-            for (k, v) in entries {
-                println!("{:<30} {}", k, v);
-            }
-            Ok(())
+            let path = config::CliConfig::config_path()?;
+            let content = if path.exists() {
+                std::fs::read_to_string(&path)?
+            } else {
+                "No configuration file found (defaults apply).".to_string()
+            };
+            Ok(CmdResult::new("CLI Configuration", serde_json::json!({
+                "config_path": path.to_string_lossy(),
+                "content": content,
+                "effective": {
+                    "mode": config.mode,
+                    "server": config.server,
+                    "token": config.token.as_ref().map(|_| "***"),
+                    "knowledge_base": config.knowledge_base,
+                    "remote_knowledge_base": config.remote_knowledge_base,
+                }
+            })))
         }
         ConfigAction::Get { key } => {
-            let mut cm = ConfigManager::new(kb_path);
-            cm.load().context("Failed to load config")?;
-            match cm.get(&key) {
-                Some(value) => println!("{}", value),
-                None => {
-                    eprintln!("Key '{}' not found.", key);
-                    std::process::exit(1);
-                }
-            }
-            Ok(())
+            let value = match key.as_str() {
+                "mode" => config.mode.clone(),
+                "server" => config.server.clone().unwrap_or_default(),
+                "token" => config.token.clone().unwrap_or_default(),
+                "knowledge_base" | "kb" => config
+                    .knowledge_base
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                "remote_knowledge_base" | "remote_kb" => config
+                    .remote_knowledge_base
+                    .clone()
+                    .unwrap_or_default(),
+                _ => anyhow::bail!("Unknown config key: {}", key),
+            };
+            Ok(CmdResult::new(
+                format!("Config: {}", key),
+                serde_json::json!({ key: value }),
+            ))
         }
         ConfigAction::Set { key, value } => {
-            let mut cm = ConfigManager::new(kb_path);
-            cm.load().context("Failed to load config")?;
-            cm.set(&key, &value).context("Failed to set config value")?;
-            println!("Set '{}' = '{}'", key, value);
-            Ok(())
+            match key.as_str() {
+                "mode" => {
+                    // Accept both "local"/"remote" and "--local"/"--remote"
+                    let mode_str = match value.as_str() {
+                        "--local" | "local" => "local",
+                        "--remote" | "remote" => "remote",
+                        _ => anyhow::bail!("Invalid mode: {}. Use 'local' or 'remote'.", value),
+                    };
+                    config.mode = mode_str.to_string();
+                }
+                "server" => config.server = Some(value.clone()),
+                "token" => config.token = Some(value.clone()),
+                "knowledge_base" | "kb" => {
+                    config.knowledge_base = Some(PathBuf::from(value));
+                }
+                "remote_knowledge_base" | "remote_kb" => {
+                    config.remote_knowledge_base = Some(value.clone());
+                }
+                _ => anyhow::bail!("Unknown config key: {}", key),
+            }
+            config.save()?;
+            Ok(CmdResult::new(
+                "Config Set",
+                serde_json::json!({ "key": key, "value": value, "status": "ok" }),
+            ))
         }
-        ConfigAction::Remove { key } => {
-            let mut cm = ConfigManager::new(kb_path);
-            cm.load().context("Failed to load config")?;
-            cm.remove(&key).context("Failed to remove config key")?;
-            println!("Removed '{}'", key);
-            Ok(())
+        ConfigAction::Reset => {
+            *config = config::CliConfig::default();
+            config.save()?;
+            Ok(CmdResult::new(
+                "Config Reset",
+                serde_json::json!({ "status": "ok", "message": "Configuration reset to defaults." }),
+            ))
         }
     }
 }
 
-async fn cmd_compile(kb_path: &Path, incremental: bool) -> Result<()> {
-    if incremental {
-        println!("Running incremental compile...");
-        let config = pdf_core::ServerConfig::from_env().unwrap_or_default();
-        let pipeline = std::sync::Arc::new(
-            pdf_core::McpPdfPipeline::new(&config).context("Failed to create pipeline")?,
-        );
-        let engine = pdf_core::KnowledgeEngine::new(pipeline, kb_path)
-            .context("Failed to create knowledge engine")?;
-        let raw_dir = engine.raw_dir();
-        let result = engine
-            .incremental_compile(&raw_dir)
-            .await
-            .context("Incremental compile failed")?;
-        println!(
-            "Compile complete: {} compiled, {} skipped out of {} scanned",
-            result.compiled, result.skipped, result.total_scanned
-        );
-    } else {
-        println!("Full compile requires a PDF path. Use the MCP tool 'compile_to_wiki' for single-PDF compilation, or 'trigger_incremental_compile' for batch operations.");
-        println!("To compile a specific PDF:");
-        println!("  Use 'pdf-mcp' with the compile_to_wiki tool");
+/// Health check
+fn cmd_health(
+    config: &config::CliConfig,
+    mode: Mode,
+    kb_path: Option<&str>,
+) -> Result<CmdResult> {
+    match mode {
+        Mode::Local => {
+            let kb = commands::resolve_kb_path(config, kb_path.map(PathBuf::from).as_deref());
+            let result = local::health(&kb)?;
+            Ok(CmdResult::new("Health Report", result))
+        }
+        Mode::Remote => {
+            let _server = config.server.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("No remote server configured. Use --server or config set.")
+            })?;
+            let client = commands::build_remote_client(config)?;
+            let result = futures::executor::block_on(client.health())?;
+            Ok(CmdResult::new("Server Health", result))
+        }
     }
-    Ok(())
 }
 
-fn cmd_index(kb_path: &Path, rebuild: bool) -> Result<()> {
-    if rebuild {
-        let wiki_dir = kb_path.join("wiki");
-        if !wiki_dir.exists() {
-            eprintln!("Wiki directory not found at {}", wiki_dir.display());
-            std::process::exit(1);
-        }
-        println!("Rebuilding indexes...");
-
-        let ft_idx = pdf_core::FulltextIndex::open_or_create(kb_path)
-            .context("Failed to open fulltext index")?;
-        let ft_count = ft_idx
-            .rebuild(&wiki_dir)
-            .context("Failed to rebuild fulltext index")?;
-        println!("Fulltext index: {} entries indexed", ft_count);
-
-        let mut g_idx = pdf_core::GraphIndex::new();
-        let g_count = g_idx
-            .rebuild(&wiki_dir)
-            .context("Failed to rebuild graph index")?;
-        println!(
-            "Graph index: {} nodes, {} edges",
-            g_count,
-            g_idx.edge_count()
-        );
-
-        println!("Index rebuild complete.");
-    } else {
-        println!("Use --rebuild to rebuild all indexes from wiki/ files.");
+/// Index management
+fn cmd_index(
+    config: &config::CliConfig,
+    mode: Mode,
+    action: &IndexAction,
+) -> Result<CmdResult> {
+    match action {
+        IndexAction::Rebuild { knowledge_base } => match mode {
+            Mode::Local => {
+                let kb = commands::resolve_kb_path(
+                    config,
+                    knowledge_base.as_ref().map(PathBuf::from).as_deref(),
+                );
+                let result = local::rebuild_index(&kb)?;
+                Ok(CmdResult::new("Index Rebuild", result))
+            }
+            Mode::Remote => {
+                let client = commands::build_remote_client(config)?;
+                let result = futures::executor::block_on(async {
+                    client.call_tool(
+                        "rebuild_index",
+                        serde_json::json!({
+                            "knowledge_base": commands::resolve_remote_kb(
+                                config,
+                                knowledge_base.as_deref(),
+                            ),
+                        }),
+                    ).await
+                })?;
+                Ok(CmdResult::new("Index Rebuild", result))
+            }
+        },
     }
-    Ok(())
+}
+
+/// Server management (local Linux only)
+fn cmd_server(action: &ServerAction) -> Result<CmdResult> {
+    match action {
+        ServerAction::Start => {
+            let bin_path = std::env::current_exe()
+                .context("Cannot determine current executable path")?;
+            let bin_dir = bin_path.parent().unwrap_or(&bin_path);
+
+            let mcp_bin = find_server_binary(bin_dir);
+
+            match mcp_bin {
+                Some(path) => {
+                    let child = std::process::Command::new(&path)
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::inherit())
+                        .spawn()
+                        .context(format!("Failed to start server: {}", path.display()))?;
+
+                    let pid = child.id();
+                    // Detach — don't wait for child
+                    std::mem::forget(child);
+
+                    Ok(CmdResult::new(
+                        "Server Start",
+                        serde_json::json!({
+                            "status": "started",
+                            "pid": pid,
+                            "binary": path.to_string_lossy(),
+                            "message": format!("Server started (PID: {})", pid),
+                        }),
+                    ))
+                }
+                None => {
+                    anyhow::bail!(
+                        "Cannot find 'pdf-mcp' binary. Make sure it's installed and in PATH."
+                    );
+                }
+            }
+        }
+        ServerAction::Stop => {
+            let output = std::process::Command::new("pkill")
+                .arg("-f")
+                .arg("pdf-mcp")
+                .output()
+                .context("Failed to run pkill")?;
+
+            if output.status.success() {
+                Ok(CmdResult::new(
+                    "Server Stop",
+                    serde_json::json!({ "status": "stopped" }),
+                ))
+            } else {
+                Ok(CmdResult::new(
+                    "Server Stop",
+                    serde_json::json!({
+                        "status": "not_running",
+                        "message": "No running pdf-mcp process found.",
+                    }),
+                ))
+            }
+        }
+        ServerAction::Status => {
+            let output = std::process::Command::new("pgrep")
+                .arg("-f")
+                .arg("pdf-mcp")
+                .output()
+                .context("Failed to run pgrep")?;
+
+            if output.status.success() {
+                let pids = String::from_utf8_lossy(&output.stdout);
+                let pid_list: Vec<&str> = pids.lines().collect();
+                Ok(CmdResult::new(
+                    "Server Status",
+                    serde_json::json!({
+                        "running": true,
+                        "pids": pid_list,
+                        "count": pid_list.len(),
+                    }),
+                ))
+            } else {
+                Ok(CmdResult::new(
+                    "Server Status",
+                    serde_json::json!({ "running": false, "pids": [], "count": 0 }),
+                ))
+            }
+        }
+    }
+}
+
+/// Stdio proxy mode
+async fn cmd_proxy(config: &config::CliConfig) -> Result<CmdResult> {
+    proxy::run_proxy(config).await?;
+    Ok(CmdResult::new("Proxy", serde_json::json!({"status": "shutdown"})))
+}
+
+/// Find the pdf-mcp server binary
+fn find_server_binary(search_dir: &Path) -> Option<PathBuf> {
+    // Check same directory as CLI
+    let candidate = search_dir.join("pdf-mcp");
+    if candidate.exists() {
+        return Some(candidate);
+    }
+
+    // Check PATH
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths).find_map(|dir| {
+            let candidate = dir.join("pdf-mcp");
+            if candidate.exists() {
+                Some(candidate)
+            } else {
+                None
+            }
+        })
+    })
 }

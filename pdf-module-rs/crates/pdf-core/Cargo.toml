@@ -39,6 +39,7 @@ bincode = { workspace = true }
 hex = { workspace = true }
 sled = { workspace = true }
 pulldown-cmark = { workspace = true }
+regex = { workspace = true }
 fnv = { workspace = true }
 
 [dev-dependencies]

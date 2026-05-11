@@ -1,0 +1,32 @@
+{
+  "name": "@smile9493/pdf-mcp",
+  "version": "0.6.0",
+  "description": "AI-native PDF knowledge compilation engine - MCP server",
+  "author": "smile9493",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smile9493/rsut_pdf_mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "pdf",
+    "knowledge-base",
+    "ai",
+    "claude",
+    "cursor"
+  ],
+  "bin": {
+    "pdf-mcp": "./bin/pdf-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

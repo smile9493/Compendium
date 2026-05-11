@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdf-mcp"
+version = "0.6.0"
+description = "AI-native PDF knowledge compilation engine - MCP server"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    { name = "smile9493", email = "smile9493@example.com" }
+]
+keywords = ["mcp", "pdf", "knowledge-base", "ai", "claude", "cursor"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+pdf-mcp = "pdf_mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/smile9493/rsut_pdf_mcp"
+Repository = "https://github.com/smile9493/rsut_pdf_mcp.git"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdf_mcp"]

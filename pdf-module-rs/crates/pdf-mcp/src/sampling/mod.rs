@@ -5,15 +5,11 @@
 //! document analysis tasks.
 
 pub mod client;
-pub mod manager;
 
-#[allow(unused_imports)]
 pub use client::{
     create_sampling_jsonrpc_request, parse_sampling_response, OutgoingRequest, SamplingClient,
     SamplingClientConfig,
 };
-#[allow(unused_imports)]
-pub use manager::{SamplingError, SamplingManager};
 
 use serde::{Deserialize, Serialize};
 

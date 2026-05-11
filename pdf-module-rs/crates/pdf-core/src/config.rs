@@ -413,11 +413,19 @@ impl ServerConfig {
 
     /// Initialize tracing/logging
     pub fn init_tracing(&self) {
+        if std::env::var("RUST_LOG")
+            .map(|v| v.to_lowercase() == "off")
+            .unwrap_or(false)
+        {
+            return;
+        }
+
         let level = match self.logging.level.to_lowercase().as_str() {
             "debug" => tracing::Level::DEBUG,
             "info" => tracing::Level::INFO,
             "warn" => tracing::Level::WARN,
             "error" => tracing::Level::ERROR,
+            "off" => return,
             _ => tracing::Level::INFO,
         };
 
@@ -427,7 +435,8 @@ impl ServerConfig {
         let subscriber = tracing_subscriber::fmt()
             .with_max_level(level)
             .with_target(true)
-            .with_thread_ids(true);
+            .with_thread_ids(true)
+            .with_writer(std::io::stderr);
 
         match self.logging.format {
             LogFormat::Json => {

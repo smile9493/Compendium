@@ -13,6 +13,7 @@ use crate::sampling::{
     SamplingClientConfig,
 };
 use crate::tools;
+use crate::upload::UploadStore;
 use pdf_core::McpPdfPipeline;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -77,6 +78,7 @@ impl ToolStats {
             ("aggregate_entries", ToolMetric::new()),
             ("hypothesis_test", ToolMetric::new()),
             ("recompile_entry", ToolMetric::new()),
+            ("compile_uploaded_pdf", ToolMetric::new()),
             ("get_config", ToolMetric::new()),
             ("set_config", ToolMetric::new()),
             ("get_health_report", ToolMetric::new()),
@@ -161,8 +163,13 @@ impl Default for ToolStats {
     }
 }
 
-#[tracing::instrument(skip(pipeline))]
-pub async fn run_stdio(pipeline: Arc<McpPdfPipeline>) -> anyhow::Result<()> {
+/// Run the MCP stdio server with an externally provided ToolContext.
+#[tracing::instrument(skip(_pipeline, ctx, _upload_store))]
+pub async fn run_stdio_with_tool_ctx(
+    _pipeline: Arc<McpPdfPipeline>,
+    ctx: tools::ToolContext,
+    _upload_store: Arc<UploadStore>,
+) -> anyhow::Result<()> {
     info!("MCP server listening on stdio");
 
     let stats = Arc::new(ToolStats::new());
@@ -207,8 +214,6 @@ pub async fn run_stdio(pipeline: Arc<McpPdfPipeline>) -> anyhow::Result<()> {
             }
         }
     });
-
-    let ctx = tools::ToolContext::new(Arc::clone(&pipeline));
 
     loop {
         tokio::select! {
@@ -336,7 +341,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
                 "messageTypes": ["text", "image"]
             }
         },
-        "instructions": "Knowledge engine with 25 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, incremental_compile, recompile_entry, aggregate_entries, check_quality. Indexing: search_knowledge, rebuild_index, get_entry_context, find_orphans, suggest_links, export_concept_map. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status.",
+        "instructions": "Knowledge engine with 26 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, compile_uploaded_pdf, incremental_compile, recompile_entry, aggregate_entries, check_quality. Indexing: search_knowledge, rebuild_index, get_entry_context, find_orphans, suggest_links, export_concept_map. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status.",
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)

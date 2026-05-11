@@ -18,7 +18,6 @@
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
-pub mod cache;
 pub mod config;
 pub mod dto;
 pub mod engine;
@@ -28,13 +27,10 @@ pub mod knowledge;
 pub mod management;
 pub mod mmap_loader;
 pub mod parallel;
-pub mod progress;
 pub mod quality_probe;
 pub mod validator;
-pub mod vlm_pipeline;
 pub mod wiki;
 
-pub use cache::LruTtlCache;
 pub use config::ServerConfig;
 pub use extractor::McpPdfPipeline;
 pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};

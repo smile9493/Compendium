@@ -14,23 +14,6 @@
 //! - Extract structured data (per-page text with bounding boxes)
 //! - Get page count
 //! - Search for keywords with context
-//!
-//! ## Usage
-//!
-//! ```bash
-//! cargo run --release --bin pdf-mcp
-//! ```
-//!
-//! ## Environment Variables
-//!
-//! - `VLM_ENDPOINT`: VLM API endpoint URL
-//! - `VLM_API_KEY`: VLM API key
-//! - `VLM_MODEL`: Target model (default: gpt-4o)
-//! - `VLM_TIMEOUT_SECS`: Request timeout in seconds (default: 30)
-//! - `VLM_MAX_CONCURRENCY`: Max concurrent VLM requests (default: 5)
-//! - `VLM_MAX_RETRIES`: Max retry attempts (default: 3)
-//! - `VLM_RETRY_DELAY_BASE_SECS`: Base retry delay (default: 1)
-//! - `VLM_RETRY_DELAY_MAX_SECS`: Max retry delay (default: 30)
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::all)]
@@ -48,11 +31,13 @@ use pdf_core::{McpPdfPipeline, ServerConfig};
 use std::sync::Arc;
 use tracing::info;
 
+mod embed;
 mod http;
 mod protocol;
 mod sampling;
 mod server;
 mod tools;
+mod upload;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -71,10 +56,22 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .map(std::path::PathBuf::from);
 
+    // Create shared upload store (used by both HTTP and MCP tools)
+    let upload_store = Arc::new(upload::UploadStore::new()?);
+
+    // Build ToolContext with upload store reference
+    let tool_ctx = tools::ToolContext::new_with_upload_store(
+        Arc::clone(&pipeline),
+        Some(Arc::clone(&upload_store)),
+    );
+
     if let Some(port) = http_port {
         info!("Starting MCP server (stdio + HTTP on port {})", port);
 
-        let http_state = http::HttpState { kb_path };
+        let http_state = http::HttpState {
+            kb_path,
+            upload_store: Some(Arc::clone(&upload_store)),
+        };
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 
         let http_handle = tokio::spawn(async move {
@@ -90,11 +87,11 @@ async fn main() -> anyhow::Result<()> {
             ),
         }
 
-        let stdio_result = server::run_stdio(pipeline).await;
+        let stdio_result = server::run_stdio_with_tool_ctx(pipeline, tool_ctx, upload_store).await;
         http_handle.abort();
         stdio_result
     } else {
         info!("Starting MCP server (stdio only, pdfium engine)");
-        server::run_stdio(pipeline).await
+        server::run_stdio_with_tool_ctx(pipeline, tool_ctx, upload_store).await
     }
 }

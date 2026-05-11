@@ -102,7 +102,7 @@ impl FulltextIndex {
 
         let reader = index
             .reader_builder()
-            .reload_policy(ReloadPolicy::OnCommitWithDelay)
+            .reload_policy(ReloadPolicy::Manual)
             .try_into()
             .map_err(|e| {
                 PdfModuleError::Storage(format!("Failed to create tantivy reader: {}", e))
@@ -139,6 +139,14 @@ impl FulltextIndex {
     }
 
     /// Search the index for a query string.
+    pub fn is_empty(&self) -> PdfResult<bool> {
+        self.reader.reload().map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to reload reader: {}", e))
+        })?;
+        let searcher = self.reader.searcher();
+        Ok(searcher.num_docs() == 0)
+    }
+
     pub fn search(&self, query_str: &str, limit: usize) -> PdfResult<Vec<SearchHit>> {
         let schema = self.index.schema();
         let body_field = schema

@@ -19,14 +19,14 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                     },
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "domain": {
                         "type": "string",
                         "description": "Domain classification (e.g. 'IT', 'Math'). Default: '未分类'"
                     }
                 },
-                "required": ["pdf_path", "knowledge_base"]
+                "required": ["pdf_path"]
             }),
         },
         ToolDefinition {
@@ -37,10 +37,10 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -69,10 +69,10 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -83,10 +83,10 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -97,14 +97,36 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "entry_path": {
                         "type": "string",
                         "description": "Relative path of the entry within wiki/ (e.g. 'it/concept.md')"
                     }
                 },
-                "required": ["knowledge_base", "entry_path"]
+                "required": ["entry_path"]
+            }),
+        },
+        ToolDefinition {
+            name: "compile_uploaded_pdf".to_string(),
+            description: "Compile an uploaded PDF identified by file_id into the knowledge base. Use after uploading a file via POST /api/upload. This enables cross-network PDF compilation where the client cannot share a filesystem with the server.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "File ID returned from POST /api/upload"
+                    },
+                    "knowledge_base": {
+                        "type": "string",
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
+                    },
+                    "domain": {
+                        "type": "string",
+                        "description": "Domain classification (e.g. 'IT', 'Math'). Default: '未分类'"
+                    }
+                },
+                "required": ["file_id"]
             }),
         },
     ]
@@ -305,4 +327,249 @@ pub async fn handle_recompile_entry(
     let result = engine.recompile_entry(std::path::Path::new(entry_path))?;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_compile_uploaded_pdf(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let file_id = args["file_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing file_id"))?;
+
+    let upload_store = ctx
+        .upload_store
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Upload store not available on this server"))?;
+
+    let uploaded = upload_store
+        .get(file_id)
+        .ok_or_else(|| anyhow::anyhow!("File not found or expired: {}", file_id))?;
+
+    let kb_path = parse_kb_path(args)?;
+    let domain = args["domain"].as_str();
+
+    let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
+    let result = engine.compile_to_wiki(&uploaded.temp_path, domain).await?;
+
+    // Clean up the uploaded temp file after successful compile
+    upload_store.remove(file_id);
+
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::ToolContext;
+    use pdf_core::{McpPdfPipeline, ServerConfig};
+    use std::sync::Arc;
+
+    fn get_test_pdf_path() -> std::path::PathBuf {
+        std::path::PathBuf::from("/opt/pdf-module/深入理解Nginx.PDF")
+    }
+
+    fn create_test_context() -> ToolContext {
+        let config = ServerConfig::from_env().unwrap_or_default();
+        let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
+        ToolContext::new(pipeline)
+    }
+
+    #[test]
+    fn test_knowledge_tool_definitions() {
+        let defs = knowledge_tool_definitions();
+        assert_eq!(defs.len(), 7);
+        
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
+        assert!(names.contains(&"compile_to_wiki"));
+        assert!(names.contains(&"compile_uploaded_pdf"));
+        assert!(names.contains(&"incremental_compile"));
+        assert!(names.contains(&"micro_compile"));
+        assert!(names.contains(&"aggregate_entries"));
+        assert!(names.contains(&"hypothesis_test"));
+        assert!(names.contains(&"recompile_entry"));
+    }
+
+    #[test]
+    fn test_parse_page_range_single() {
+        let result = parse_page_range("5", 10);
+        assert_eq!(result, vec![5]);
+    }
+
+    #[test]
+    fn test_parse_page_range_range() {
+        let result = parse_page_range("1-3", 10);
+        assert_eq!(result, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_parse_page_range_mixed() {
+        let result = parse_page_range("1,3,5-7", 10);
+        assert_eq!(result, vec![1, 3, 5, 6, 7]);
+    }
+
+    #[test]
+    fn test_parse_page_range_exceeds_max() {
+        let result = parse_page_range("8-15", 10);
+        assert_eq!(result, vec![8, 9, 10]);
+    }
+
+    #[test]
+    fn test_parse_page_range_duplicates() {
+        let result = parse_page_range("1,1,2-3,3", 10);
+        assert_eq!(result, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_micro_compile_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let path_str = pdf_path.to_str().expect("Path should be valid UTF-8");
+        eprintln!("Testing with path: {:?}", path_str);
+        
+        let args = serde_json::json!({
+            "pdf_path": path_str
+        });
+        eprintln!("Args: {:?}", args);
+        
+        let result = handle_micro_compile(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                assert!(content[0].text.contains("# 微编译结果"));
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("micro_compile failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_micro_compile_with_page_range() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let path_str = pdf_path.to_str().expect("Path should be valid UTF-8");
+        eprintln!("Testing with path: {:?}", path_str);
+        
+        let args = serde_json::json!({
+            "pdf_path": path_str,
+            "page_range": "1-2"
+        });
+        eprintln!("Args: {:?}", args);
+        
+        let result = handle_micro_compile(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                assert!(content[0].text.contains("提取范围: 1-2"));
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("micro_compile failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_compile_to_wiki_missing_pdf_path() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "knowledge_base": "/tmp/test_kb"
+        });
+        
+        let result = handle_compile_to_wiki(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing pdf_path"));
+    }
+
+    #[tokio::test]
+    async fn test_compile_to_wiki_missing_kb() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "pdf_path": pdf_path.to_str().unwrap()
+        });
+        
+        let result = handle_compile_to_wiki(&ctx, &args).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_incremental_compile_missing_kb() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({});
+        
+        let result = handle_incremental_compile(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+    }
+
+    #[tokio::test]
+    async fn test_aggregate_entries_missing_kb() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({});
+        
+        let result = handle_aggregate_entries(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+    }
+
+    #[tokio::test]
+    async fn test_hypothesis_test_missing_kb() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({});
+        
+        let result = handle_hypothesis_test(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+    }
+
+    #[tokio::test]
+    async fn test_recompile_entry_missing_kb() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "entry_path": "test.md"
+        });
+        
+        let result = handle_recompile_entry(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+    }
+
+    #[tokio::test]
+    async fn test_recompile_entry_missing_entry_path() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "knowledge_base": "/tmp/test_kb"
+        });
+        
+        let result = handle_recompile_entry(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
+    }
 }

@@ -11,6 +11,7 @@ pub use management::*;
 pub use resources::*;
 
 use crate::protocol::{Content, ToolDefinition};
+use crate::upload::UploadStore;
 use pdf_core::{McpPdfPipeline, PathValidationConfig};
 use std::sync::Arc;
 
@@ -25,6 +26,7 @@ pub fn default_path_config() -> PathValidationConfig {
 pub struct ToolContext {
     pub pipeline: Arc<McpPdfPipeline>,
     pub path_config: PathValidationConfig,
+    pub upload_store: Option<Arc<UploadStore>>,
 }
 
 impl ToolContext {
@@ -32,12 +34,24 @@ impl ToolContext {
         Self {
             pipeline,
             path_config: default_path_config(),
+            upload_store: None,
+        }
+    }
+
+    pub fn new_with_upload_store(
+        pipeline: Arc<McpPdfPipeline>,
+        upload_store: Option<Arc<UploadStore>>,
+    ) -> Self {
+        Self {
+            pipeline,
+            path_config: default_path_config(),
+            upload_store,
         }
     }
 }
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(25);
+    let mut tools = Vec::with_capacity(26);
     tools.extend(extract_tool_definitions());
     tools.extend(knowledge_tool_definitions());
     tools.extend(index_tool_definitions());
@@ -59,6 +73,7 @@ pub async fn dispatch_tool(
         "extrude_to_server_wiki" => handle_extrude_to_server_wiki(ctx, args).await,
         "extrude_to_agent_payload" => handle_extrude_to_agent_payload(ctx, args).await,
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
+        "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
         "incremental_compile" => handle_incremental_compile(ctx, args).await,
         "search_knowledge" => handle_search_knowledge(args).await,
         "rebuild_index" => handle_rebuild_index(args).await,
@@ -81,9 +96,84 @@ pub async fn dispatch_tool(
     }
 }
 
+const DEFAULT_KNOWLEDGE_BASE: &str = "/app/kb";
+
 fn parse_kb_path(args: &serde_json::Value) -> anyhow::Result<std::path::PathBuf> {
     let kb = args["knowledge_base"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
+        .map(String::from)
+        .or_else(|| std::env::var("KNOWLEDGE_BASE_PATH").ok())
+        .unwrap_or_else(|| DEFAULT_KNOWLEDGE_BASE.to_string());
     Ok(std::path::PathBuf::from(kb))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pdf_core::{McpPdfPipeline, ServerConfig};
+    use std::sync::Arc;
+
+    fn create_test_context() -> ToolContext {
+        let config = ServerConfig::from_env().unwrap_or_default();
+        let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
+        ToolContext::new(pipeline)
+    }
+
+    #[test]
+    fn test_all_tool_definitions_count() {
+        let tools = all_tool_definitions();
+        assert_eq!(tools.len(), 26, "Expected 26 tools total");
+    }
+
+    #[test]
+    fn test_all_tool_definitions_unique_names() {
+        let tools = all_tool_definitions();
+        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names.len(), 26, "All tool names should be unique");
+    }
+
+    #[test]
+    fn test_all_tool_definitions_have_required_fields() {
+        let tools = all_tool_definitions();
+        for tool in &tools {
+            assert!(!tool.name.is_empty(), "Tool name should not be empty");
+            assert!(!tool.description.is_empty(), "Tool description should not be empty");
+            assert!(tool.input_schema.is_object(), "Tool input_schema should be an object");
+        }
+    }
+
+    #[test]
+    fn test_default_path_config() {
+        let config = default_path_config();
+        assert!(config.require_absolute);
+        assert!(!config.allow_traversal);
+        assert!(config.base_dir.is_none());
+    }
+
+    #[test]
+    fn test_parse_kb_path_valid() {
+        let args = serde_json::json!({
+            "knowledge_base": "/tmp/test_kb"
+        });
+        let result = parse_kb_path(&args);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_str().unwrap(), "/tmp/test_kb");
+    }
+
+    #[test]
+    fn test_parse_kb_path_missing() {
+        let args = serde_json::json!({});
+        let result = parse_kb_path(&args);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_str().unwrap(), "/app/kb");
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_unknown_tool() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({});
+        let result = dispatch_tool(&ctx, "unknown_tool_name", &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown tool"));
+    }
 }

@@ -1,0 +1,17 @@
+[build]
+target = "index.html"
+dist = "dist"
+
+[serve]
+port = 8080
+
+[[proxy]]
+rewrite = "/api/wiki/"
+backend = "http://127.0.0.1:8071/api/wiki/"
+
+[[proxy]]
+rewrite = "/api/"
+backend = "http://127.0.0.1:8070/api/"
+
+[watch]
+ignore = ["dist"]
