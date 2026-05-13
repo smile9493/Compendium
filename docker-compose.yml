@@ -1,42 +1,90 @@
 version: '3.8'
 
 services:
+  # ==================== PDF MCP Server ====================
   pdf-mcp:
-    image: smile9493/pdf-mcp:0.1.1
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pdf-mcp-server
+      target: runtime
+    image: pdf-mcp:latest
+    container_name: pdf-mcp
     ports:
-      - "8000:8000"
-      - "8001:8001"
+      - "${MCP_PORT:-8001}:8001"
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=${LOG_LEVEL:-info}
+      - HTTP_PORT=8001
+      - KNOWLEDGE_BASE=/app/knowledge
       - STORAGE_TYPE=local
       - STORAGE_LOCAL_DIR=/app/data
-      - MAX_FILE_SIZE_MB=100
-      - DASHBOARD_PORT=8000
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+      - CACHE_TTL_SECONDS=${CACHE_TTL:-3600}
+      - VLM_ENDPOINT=${VLM_ENDPOINT:-}
+      - VLM_API_KEY=${VLM_API_KEY:-}
+      - VLM_MODEL=${VLM_MODEL:-gpt-4o}
+      - AUDIT_ENABLED=${AUDIT_ENABLED:-true}
+      - AUDIT_LOG_DIR=/app/logs/audit
+      - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-30}
     volumes:
+      - pdf_knowledge:/app/knowledge
       - pdf_data:/app/data
+      - pdf_logs:/app/logs
+      - pdf_cache:/app/cache
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - pdf-network
+    command: ["pdf-mcp"]
 
-  redis:
-    image: redis:7-alpine
-    container_name: pdf-redis
+  # ==================== PDF Web Dashboard ====================
+  pdf-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: pdf-mcp:latest
+    container_name: pdf-web
     ports:
-      - "6379:6379"
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      - RUST_LOG=${LOG_LEVEL:-info}
+      - HTTP_PORT=8000
+      - KNOWLEDGE_BASE=/app/knowledge
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_DIR=/app/data
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+      - CACHE_TTL_SECONDS=${CACHE_TTL:-3600}
     volumes:
-      - redis_data:/data
+      - pdf_knowledge:/app/knowledge
+      - pdf_data:/app/data
+      - pdf_logs:/app/logs
+      - pdf_cache:/app/cache
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - pdf-network
+    command: ["pdf-web", "--host", "0.0.0.0", "--port", "8000"]
 
 volumes:
+  pdf_knowledge:
+    driver: local
   pdf_data:
     driver: local
-  redis_data:
+  pdf_logs:
+    driver: local
+  pdf_cache:
     driver: local
 
 networks:

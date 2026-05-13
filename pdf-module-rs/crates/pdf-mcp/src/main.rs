@@ -26,10 +26,12 @@
 #![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
+#![recursion_limit = "256"]
 
 use pdf_core::{McpPdfPipeline, ServerConfig};
 use std::sync::Arc;
 use tracing::info;
+use vlm_visual_gateway::MetricsCollector;
 
 mod embed;
 mod http;
@@ -46,7 +48,10 @@ async fn main() -> anyhow::Result<()> {
     let config = ServerConfig::from_env()?;
     config.init_tracing();
 
-    let pipeline = Arc::new(McpPdfPipeline::new(&config)?);
+    // Facade owns the shared MetricsCollector so metrics from all components
+    // (VLM gateway, pipeline, tools) are collected into a single registry.
+    let metrics = Arc::new(MetricsCollector::with_default_registry());
+    let pipeline = Arc::new(McpPdfPipeline::new_with_metrics(&config, metrics)?);
 
     let http_port = std::env::var("HTTP_PORT")
         .ok()

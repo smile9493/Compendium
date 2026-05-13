@@ -1,49 +1,87 @@
+# ============================================================
+# rsut-pdf-mcp — Multi-stage Docker Build
+#
+# Stage 1: Build Vue3 SPA frontend
+# Stage 2: Build Rust binaries (pdf-mcp + pdf-web)
+# Stage 3: Runtime image (minimal debian)
+# ============================================================
+
+# ── Stage 1: Frontend (Vue3 SPA) ──
+FROM node:20-bookworm AS frontend-builder
+
+WORKDIR /app
+
+# Copy package files for dependency caching
+COPY pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package.json \
+     pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json \
+     ./
+RUN npm ci
+
+# Copy all frontend source and build
+COPY pdf-module-rs/crates/pdf-mcp/pdf-web-ui/ .
+RUN npm run build
+
+# ── Stage 2: Backend (Rust) ──
 FROM rust:bookworm AS backend-builder
 
 WORKDIR /app
 
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy Vue dist into the correct location for rust-embed
+# (must exist before cargo build so rust-embed can include it)
+COPY --from=frontend-builder /app/dist crates/pdf-mcp/pdf-web-ui/dist/
+
+# Copy workspace manifests
 COPY pdf-module-rs/Cargo.toml pdf-module-rs/Cargo.lock ./
-COPY pdf-module-rs/crates ./crates
 COPY pdf-module-rs/.cargo ./.cargo
 
-RUN cargo build --release --bin pdf-mcp --bin pdf-dashboard
+# Copy all crate source
+COPY pdf-module-rs/crates ./crates
 
-FROM debian:bookworm-slim
+# Build pdf-mcp with embedded Vue SPA and pdf-web
+RUN cargo build --release --bin pdf-mcp --bin pdf-web
 
+# ── Stage 3: Runtime ──
+FROM debian:bookworm-slim AS runtime
+
+# Runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
     curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN useradd -m -u 1000 pdfuser
+    && rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 pdfuser
 
 WORKDIR /app
 
+# Copy both binaries
 COPY --from=backend-builder /app/target/release/pdf-mcp /usr/local/bin/pdf-mcp
-COPY --from=backend-builder /app/target/release/pdf-dashboard /usr/local/bin/pdf-dashboard
+COPY --from=backend-builder /app/target/release/pdf-web /usr/local/bin/pdf-web
 
-RUN chmod +x /usr/local/bin/pdf-mcp /usr/local/bin/pdf-dashboard && \
-    mkdir -p /app/data /app/logs/audit /app/cache && \
+RUN chmod +x /usr/local/bin/pdf-mcp /usr/local/bin/pdf-web && \
+    mkdir -p /app/data /app/knowledge /app/logs /app/cache && \
     chown -R pdfuser:pdfuser /app
 
 USER pdfuser
 
+# Environment defaults
 ENV RUST_LOG=info
+ENV HTTP_PORT=8001
+ENV KNOWLEDGE_BASE=/app/knowledge
 ENV STORAGE_TYPE=local
 ENV STORAGE_LOCAL_DIR=/app/data
 ENV CACHE_ENABLED=true
 ENV CACHE_MAX_SIZE=1000
-ENV AUDIT_ENABLED=true
-ENV AUDIT_LOG_DIR=/app/logs/audit
-ENV MAX_FILE_SIZE_MB=100
-ENV DASHBOARD_PORT=8000
+ENV CACHE_TTL_SECONDS=3600
 
 EXPOSE 8000 8001
 
-CMD ["pdf-dashboard"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:8001/api/health > /dev/null || exit 1
+
+CMD ["pdf-mcp"]

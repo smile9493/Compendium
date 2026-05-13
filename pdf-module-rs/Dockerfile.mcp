@@ -1,16 +1,50 @@
+# ============================================================
+# pdf-mcp — Standalone Multi-stage Docker Build
+#
+# Stage 1: Build Vue3 SPA
+# Stage 2: Build Rust binary with embedded SPA
+# Stage 3: Alpine runtime (single binary, ~20MB)
+# ============================================================
+
+# ── Stage 1: Vue3 SPA ──
+FROM node:20-bookworm AS frontend
+
+WORKDIR /app
+
+COPY crates/pdf-mcp/pdf-web-ui/package*.json ./
+RUN npm ci
+
+COPY crates/pdf-mcp/pdf-web-ui/ .
+RUN npm run build
+
+# ── Stage 2: Rust binary ──
+FROM rust:bookworm AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy SPA dist into embed location before building
+COPY --from=frontend /app/dist crates/pdf-mcp/pdf-web-ui/dist/
+
+COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
+COPY crates ./crates
+
+RUN cargo build --release --bin pdf-mcp
+
+# ── Stage 3: Alpine runtime ──
 FROM alpine:3.19
 
 RUN apk add --no-cache ca-certificates
 
-COPY pdf-mcp /usr/local/bin/pdf-mcp
+COPY --from=builder /app/target/release/pdf-mcp /usr/local/bin/pdf-mcp
 
 RUN adduser -D -s /bin/false pdfuser
 
-ENV PDF_SERVER_HOST=0.0.0.0
-ENV PDF_SERVER_PORT=8001
-ENV PDF_DEFAULT_ADAPTER=lopdf
-ENV PDF_CACHE_ENABLED=true
-ENV PDF_MAX_FILE_SIZE_MB=200
 ENV HTTP_PORT=8001
 ENV KNOWLEDGE_BASE=/data
 
@@ -18,7 +52,7 @@ EXPOSE 8001
 
 USER pdfuser
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q --spider http://localhost:8001/api/health || exit 1
 
 ENTRYPOINT ["pdf-mcp"]

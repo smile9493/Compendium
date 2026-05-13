@@ -2495,13 +2495,11 @@ dependencies = [
  "bincode",
  "bumpalo",
  "chrono",
- "console",
  "crossbeam-deque",
  "dotenvy",
  "fnv",
  "futures",
  "hex",
- "indicatif",
  "infer",
  "jieba-rs",
  "memmap2",
@@ -2509,7 +2507,6 @@ dependencies = [
  "pdf-common",
  "pdfium-render",
  "petgraph",
- "prometheus",
  "pulldown-cmark",
  "rayon",
  "regex",
@@ -2579,6 +2576,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "vlm-visual-gateway",
 ]
 
 [[package]]
