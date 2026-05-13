@@ -1,0 +1,120 @@
+//! Prometheus metrics endpoint for {{project-name}}.
+//!
+//! Exposes `GET /metrics` with:
+//! - HTTP request counters by method, path, and status
+//! - Request duration histogram
+//! - Process metrics (CPU, memory)
+
+use axum::http::{Request, StatusCode};
+use axum::response::IntoResponse;
+use axum::{Extension, Router};
+use prometheus::{
+    Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry, TextEncoder,
+};
+use std::sync::Arc;
+use std::time::Instant;
+use tower::{Layer, Service};
+use std::task::{Context, Poll};
+
+pub struct AppMetrics {
+    registry: Registry,
+    requests_total: IntCounterVec,
+    request_duration: HistogramVec,
+}
+
+impl AppMetrics {
+    pub fn new() -> Self {
+        let registry = Registry::new();
+        let requests_total = IntCounterVec::new(
+            Opts::new("http_requests_total", "Total HTTP requests"),
+            &["method", "path", "status"],
+        )
+        .expect("metric");
+        let request_duration = HistogramVec::new(
+            HistogramOpts::new("http_request_duration_seconds", "Request duration")
+                .buckets(vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
+            &["method", "path"],
+        )
+        .expect("metric");
+
+        registry.register(Box::new(requests_total.clone())).ok();
+        registry.register(Box::new(request_duration.clone())).ok();
+
+        if let Ok(pc) = prometheus::process_collector::ProcessCollector::for_self() {
+            registry.register(Box::new(pc)).ok();
+        }
+
+        Self { registry, requests_total, request_duration }
+    }
+
+    pub fn render(&self) -> String {
+        let encoder = TextEncoder::new();
+        let mut buf = Vec::new();
+        encoder.encode(&self.registry.gather(), &mut buf).ok();
+        String::from_utf8(buf).unwrap_or_default()
+    }
+}
+
+pub async fn metrics_endpoint(Extension(m): Extension<Arc<AppMetrics>>) -> impl IntoResponse {
+    (StatusCode::OK, m.render())
+}
+
+pub fn metrics_route(router: Router, metrics: Arc<AppMetrics>) -> Router {
+    router
+        .route("/metrics", axum::routing::get(metrics_endpoint))
+        .layer(Extension(metrics))
+}
+
+#[derive(Clone)]
+pub struct MetricsLayer {
+    metrics: Arc<AppMetrics>,
+}
+
+impl MetricsLayer {
+    pub fn new(metrics: Arc<AppMetrics>) -> Self {
+        Self { metrics }
+    }
+}
+
+impl<S> Layer<S> for MetricsLayer {
+    type Service = MetricsService<S>;
+    fn layer(&self, inner: S) -> Self::Service {
+        MetricsService { inner, metrics: Arc::clone(&self.metrics) }
+    }
+}
+
+#[derive(Clone)]
+pub struct MetricsService<S> {
+    inner: S,
+    metrics: Arc<AppMetrics>,
+}
+
+impl<S, B> Service<Request<B>> for MetricsService<S>
+where
+    S: Service<Request<B>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    B: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<B>) -> Self::Future {
+        let method = req.method().to_string();
+        let path = req.uri().path().to_string();
+        let start = Instant::now();
+        let metrics = Arc::clone(&self.metrics);
+        let mut inner = self.inner.clone();
+        Box::pin(async move {
+            let resp = inner.call(req).await?;
+            let status = resp.status().as_u16().to_string();
+            metrics.requests_total.with_label_values(&[&method, &path, &status]).inc();
+            metrics.request_duration.with_label_values(&[&method, &path]).observe(start.elapsed().as_secs_f64());
+            Ok(resp)
+        })
+    }
+}

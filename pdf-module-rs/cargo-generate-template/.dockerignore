@@ -1,0 +1,42 @@
+# Rust build artifacts
+target/
+**/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+.dockerignore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+CHANGELOG.md
+
+# Test artifacts
+*.log
+*.profraw
+lcov.info
+
+# Dev tools config
+.pre-commit-config.yaml
+.editorconfig
+justfile
+Makefile

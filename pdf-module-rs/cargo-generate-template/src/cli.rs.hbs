@@ -1,0 +1,165 @@
+//! CLI scaffolding — clap derive pattern with subcommands.
+//!
+//! # Structure
+//!
+//! ```text
+//! src/
+//!   cli.rs           → Cli struct + Commands enum
+//!   commands/
+//!     mod.rs         → re-exports all command handlers
+//!     extract.rs     → extract command handler
+//!     config.rs      → config command handler
+//!     health.rs      → health command handler
+//!     search.rs      → search command handler
+//!   output.rs        → OutputFormat enum + CmdResult struct
+//! ```
+//!
+//! # Pattern Highlights
+//!
+//! - `#[command(name = "...")]` for kebab-case aliases
+//! - `#[arg(long, global = true)]` for flags shared across subcommands
+//! - `#[command(subcommand)]` for nested sub-enums
+//! - `CmdResult` with `print(format)` for unified output (JSON or text)
+
+use clap::{Parser, Subcommand};
+use serde::Serialize;
+
+#[derive(Parser)]
+#[command(
+    name = "{{project-name}}",
+    version = env!("CARGO_PKG_VERSION"),
+    about = "{{description}}",
+    long_about = None,
+)]
+pub struct Cli {
+    /// Output as JSON (instead of human-readable text)
+    #[arg(long, global = true)]
+    pub json: bool,
+
+    /// Verbose output (-v for debug, -vv for trace)
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    pub verbose: u8,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Extract text and metadata from a PDF file
+    Extract {
+        /// Path to the PDF file
+        #[arg(value_name = "FILE")]
+        file: String,
+
+        /// Output format: text, json, or markdown
+        #[arg(long, default_value = "text")]
+        format: String,
+
+        /// Page range (e.g. "1-5" or "3")
+        #[arg(long)]
+        pages: Option<String>,
+    },
+
+    /// Search the knowledge base
+    Search {
+        /// Search query
+        #[arg(value_name = "QUERY")]
+        query: String,
+
+        /// Maximum results to return
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+
+    /// Configuration management
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
+    /// Health check
+    Health,
+
+    /// Start interactive mode (guided prompts)
+    Interactive,
+}
+
+#[derive(Subcommand)]
+pub enum ConfigAction {
+    /// Show all configuration values
+    Show,
+    /// Get a specific configuration value
+    Get { key: String },
+    /// Set a configuration value
+    Set { key: String, value: String },
+}
+
+/// Unified command result that can render as JSON or text.
+pub struct CmdResult {
+    pub title: String,
+    pub payload: serde_json::Value,
+}
+
+impl CmdResult {
+    pub fn new(title: impl Into<String>, payload: serde_json::Value) -> Self {
+        Self {
+            title: title.into(),
+            payload,
+        }
+    }
+
+    pub fn success(data: impl Serialize) -> Self {
+        Self {
+            title: "OK".into(),
+            payload: serde_json::to_value(data).unwrap_or_default(),
+        }
+    }
+
+    pub fn print(&self, json: bool) {
+        if json {
+            println!("{}", serde_json::to_string_pretty(&self.payload).unwrap_or_default());
+        } else {
+            println!("── {} ──", self.title);
+            println!("{}", serde_json::to_string_pretty(&self.payload).unwrap_or_default());
+        }
+    }
+}
+
+// ─── Interactive mode with dialoguer ───
+
+#[cfg(feature = "interactive")]
+pub mod interactive {
+    use dialoguer::{Confirm, Input, Select};
+    use std::io::Result;
+
+    pub fn run_interactive() -> Result<()> {
+        println!("Welcome to {{project-name}} interactive mode!\n");
+
+        let file: String = Input::new()
+            .with_prompt("PDF file path")
+            .interact_text()?;
+
+        let choices = &["Extract text", "Extract structured", "Get page count"];
+        let selection = Select::new()
+            .with_prompt("What would you like to do?")
+            .items(choices)
+            .default(0)
+            .interact()?;
+
+        println!("\nSelected: {} on {}", choices[selection], file);
+
+        let confirm = Confirm::new()
+            .with_prompt("Proceed?")
+            .default(true)
+            .interact()?;
+
+        if confirm {
+            println!("Processing... (implement your logic here)");
+        } else {
+            println!("Cancelled.");
+        }
+
+        Ok(())
+    }
+}

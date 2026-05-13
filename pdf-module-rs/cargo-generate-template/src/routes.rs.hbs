@@ -1,0 +1,180 @@
+//! Web routing scaffolding — domain-organized Router composition with Axum.
+//!
+//! # Pattern
+//!
+//! Each domain gets its own sub-router module:
+//!
+//! ```text
+//! src/
+//!   routes/
+//!     mod.rs          → build_app_router() — composes all sub-routers
+//!     health.rs       → GET  /health
+//!     wiki.rs         → GET  /api/wiki/...
+//!     auth.rs         → POST /api/auth/login, POST /api/auth/refresh
+//!     admin.rs        → GET  /api/admin/...  (protected by AuthLayer)
+//!     middleware/
+//!       mod.rs        → re-exports all middleware
+//!       auth.rs       → AuthLayer implementation
+//!       metrics.rs    → MetricsLayer implementation
+//!       request_id.rs → TraceLayer implementation
+//!       cors.rs       → CorsLayer setup
+//! ```
+//!
+//! # Usage
+//!
+//! ```ignore
+//! let app = routes::build_app_router(state)
+//!     .merge(metrics::metrics_router(metrics))
+//!     .merge(api_doc::openapi_router());
+//! ```
+
+use axum::Router;
+
+/// Application-level shared state.
+///
+/// Group all dependencies here so sub-routers can access them
+/// uniformly via `State<Arc<AppState>>`.
+#[derive(Clone)]
+pub struct AppState {
+    pub db_pool: sqlx::AnyPool,
+    pub config: crate::config_loader::AppSettings,
+    pub feature_flags: std::sync::Arc<crate::feature_flags::FeatureFlags>,
+    pub upload_store: std::sync::Arc<crate::upload::UploadStore>,
+}
+
+pub fn build_app_router(state: AppState) -> Router {
+    let shared_state = std::sync::Arc::new(state);
+
+    Router::new()
+        .merge(health::router())
+        .merge(wiki::router(shared_state.clone()))
+        .merge(auth::router(shared_state.clone()))
+        .merge(admin::router(shared_state.clone()))
+}
+
+// ─── Sub-routers ────────────────────────────────────────────
+
+mod health {
+    use axum::{routing::get, Json, Router};
+    use serde_json::{json, Value};
+
+    pub fn router() -> Router {
+        Router::new().route("/health", get(handler))
+    }
+
+    async fn handler() -> Json<Value> {
+        Json(json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
+    }
+}
+
+mod wiki {
+    use super::AppState;
+    use axum::{
+        extract::{Path, Query, State},
+        routing::get,
+        Json, Router,
+    };
+    use serde::Deserialize;
+    use std::sync::Arc;
+
+    pub fn router(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/api/wiki/search", get(search))
+            .route("/api/wiki/entries/{*path}", get(entry))
+            .with_state(state)
+    }
+
+    #[derive(Deserialize)]
+    struct SearchQuery {
+        q: String,
+        #[serde(default = "default_limit")]
+        limit: usize,
+    }
+
+    fn default_limit() -> usize {
+        20
+    }
+
+    async fn search(
+        State(_state): State<Arc<AppState>>,
+        Query(_query): Query<SearchQuery>,
+    ) -> Json<serde_json::Value> {
+        // TODO: implement search
+        Json(serde_json::json!({"results": []}))
+    }
+
+    async fn entry(
+        State(_state): State<Arc<AppState>>,
+        Path(_path): Path<String>,
+    ) -> Json<serde_json::Value> {
+        // TODO: implement entry lookup
+        Json(serde_json::json!({"entry": {}}))
+    }
+}
+
+mod auth {
+    use super::AppState;
+    use axum::{routing::post, Json, Router};
+    use serde::Deserialize;
+    use std::sync::Arc;
+
+    pub fn router(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/api/auth/login", post(login))
+            .route("/api/auth/refresh", post(refresh))
+            .with_state(state)
+    }
+
+    #[derive(Deserialize)]
+    struct LoginRequest {
+        username: String,
+        password: String,
+    }
+
+    async fn login(
+        State(_state): State<Arc<AppState>>,
+        Json(_req): Json<LoginRequest>,
+    ) -> Json<serde_json::Value> {
+        // TODO: implement login
+        Json(serde_json::json!({"token": "placeholder"}))
+    }
+
+    async fn refresh(
+        State(_state): State<Arc<AppState>>,
+    ) -> Json<serde_json::Value> {
+        // TODO: implement token refresh
+        Json(serde_json::json!({"token": "placeholder"}))
+    }
+}
+
+mod admin {
+    use super::AppState;
+    use axum::{
+        routing::get,
+        Json, Router,
+    };
+    use std::sync::Arc;
+
+    pub fn router(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/api/admin/features", get(list_features))
+            .route("/api/admin/stats", get(stats))
+            .with_state(state)
+    }
+
+    async fn list_features(
+        axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    ) -> Json<serde_json::Value> {
+        let names = state.feature_flags.flag_names();
+        Json(serde_json::json!({"features": names}))
+    }
+
+    async fn stats(
+        axum::extract::State(_state): axum::extract::State<Arc<AppState>>,
+    ) -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "uptime_seconds": 0,
+            "active_connections": 0,
+        }))
+    }
+}

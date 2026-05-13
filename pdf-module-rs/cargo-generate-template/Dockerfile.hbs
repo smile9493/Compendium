@@ -1,0 +1,99 @@
+# ============================================================
+# {{project-name}} — Multi-stage Docker Build
+#
+# Build:
+#   docker build -t {{project-name}} .
+#
+# Run (binary):
+#   docker run -p 8000:8000 {{project-name}}
+#
+# Run (library test):
+#   docker build --target test -t {{project-name}}:test .
+# ============================================================
+
+# ─── Stage 0: Dependency planner ───────────────────────────
+FROM rust:1.91-bookworm AS planner
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && \
+    {{#if (eq crate-type "bin")}}
+    echo 'fn main() {}' > src/main.rs && \
+    {{/if}}
+    {{#if (eq crate-type "lib")}}
+    echo 'pub fn dummy() {}' > src/lib.rs && \
+    {{/if}}
+    cargo fetch && \
+    cargo check --all-targets || true
+
+{{#if (eq crate-type "bin")}}
+# ─── Stage 1: Builder ──────────────────────────────────────
+FROM rust:1.91-bookworm AS builder
+
+ARG BUILD_PROFILE=release
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=planner /usr/local/cargo/registry /usr/local/cargo/registry
+COPY --from=planner /usr/local/cargo/git /usr/local/cargo/git
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY tests ./tests 2>/dev/null || true
+
+RUN --mount=type=cache,target=/app/target \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --profile "$BUILD_PROFILE" && \
+    cp target/"$BUILD_PROFILE"/{{project-name}} /{{project-name}}
+
+# ─── Stage 2: Runtime ──────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 appuser
+
+COPY --from=builder /{{project-name}} /usr/local/bin/{{project-name}}
+RUN chmod +x /usr/local/bin/{{project-name}}
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD /usr/local/bin/{{project-name}} --health-check || exit 1
+
+ENTRYPOINT ["{{project-name}}"]
+{{/if}}
+
+{{#if (eq crate-type "lib")}}
+# ─── Stage 1: Test ─────────────────────────────────────────
+FROM rust:1.91-bookworm AS test
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=planner /usr/local/cargo/registry /usr/local/cargo/registry
+COPY --from=planner /usr/local/cargo/git /usr/local/cargo/git
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY tests ./tests 2>/dev/null || true
+COPY benches ./benches 2>/dev/null || true
+
+RUN cargo test --all-targets && \
+    cargo clippy --all-targets -- -D warnings && \
+    cargo doc --no-deps
+{{/if}}

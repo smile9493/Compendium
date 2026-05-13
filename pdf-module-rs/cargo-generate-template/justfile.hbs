@@ -1,0 +1,85 @@
+# ─── {{project-name}} Task Runner ───
+default:
+    @just --list
+
+build:
+    cargo build
+
+build-release:
+    cargo build --release
+
+check:
+    cargo check --all-targets
+
+test:
+    cargo test
+
+test-nocapture:
+    cargo test -- --nocapture
+
+{{#if with-bench}}
+bench:
+    cargo bench
+{{/if}}
+
+fmt:
+    cargo fmt
+
+fmt-check:
+    cargo fmt -- --check
+
+clippy:
+    cargo clippy --all-targets -- -D warnings
+
+clippy-fix:
+    cargo clippy --all-targets --fix --allow-dirty
+
+{{#if with-examples}}
+example name="basic":
+    cargo run --example {{name}}
+{{/if}}
+
+doc:
+    cargo doc --open
+
+clean:
+    cargo clean
+
+# Verify Cargo.toml minimum dependency versions (requires nightly)
+minimal-versions:
+    cargo +nightly update -Z direct-minimal-versions
+    cargo +nightly check --all-targets
+
+# ─── Git hooks ─────────────────────────────────
+#
+# Two approaches are available:
+#
+#   1. pre-commit (Python) — mature ecosystem, many built-in checks
+#      just install-hooks
+#
+#   2. cargo-husky (Rust-native) — no Python dependency, hooks in
+#      .cargo-husky/hooks/, auto-installed on first cargo test
+#      just install-husky
+
+# Install pre-commit hooks (requires Python + pip)
+install-hooks:
+    pip install pre-commit
+    pre-commit install
+    pre-commit install --hook-type pre-push
+    @echo "✓ Hooks installed: pre-commit + pre-push"
+
+run-hooks:
+    pre-commit run --all-files
+
+# Install cargo-husky hooks (Rust-native, no Python required)
+# Hooks auto-install on first `cargo test`; this just triggers it.
+install-husky:
+    cargo test --no-run
+    @echo "✓ cargo-husky hooks installed (via .cargo-husky/hooks/)"
+
+# Remove all git hooks
+uninstall-hooks:
+    pre-commit uninstall 2>/dev/null; true
+    pre-commit uninstall --hook-type pre-push 2>/dev/null; true
+    rm -f .git/hooks/pre-commit .git/hooks/pre-push
+    @echo "✓ All git hooks removed"

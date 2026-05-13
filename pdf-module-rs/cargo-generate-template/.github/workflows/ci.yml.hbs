@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Fast gate ─────────────────────────────────────────
+  check:
+    name: Check (fmt + compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Typecheck (all targets, all features)
+        run: cargo check --all-targets --all-features
+      - name: Typecheck (no default features)
+        run: cargo check --no-default-features
+
+  # ── Clippy strict ─────────────────────────────────────
+  clippy:
+    name: Clippy (strict)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ── Matrix test ───────────────────────────────────────
+  test:
+    name: Test (${{ matrix.toolchain }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        toolchain: [stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run tests
+        run: cargo test --all-features --verbose
+      - name: Run doc tests
+        run: cargo test --doc --all-features --verbose
+
+  # ── Feature matrix ────────────────────────────────────
+  feature-check:
+    name: Feature Matrix
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        feature-set: ["--all-features", "--no-default-features"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check (${{ matrix.feature-set }})
+        run: cargo check ${{ matrix.feature-set }}
+
+  # ── Documentation ─────────────────────────────────────
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build docs
+        run: cargo doc --no-deps --document-private-items --all-features
+
+  # ── Audit ─────────────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-deny
+      - name: Advisories
+        run: cargo deny check advisories
+      - name: Licenses
+        run: cargo deny check licenses
+      - name: Bans & Sources
+        run: cargo deny check bans sources
+
+  # ── Minimal versions ──────────────────────────────────
+  minimal-versions:
+    name: Minimal Versions
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Update to minimum deps
+        run: |
+          cargo +nightly update -Z direct-minimal-versions
+          cargo +nightly check --all-targets

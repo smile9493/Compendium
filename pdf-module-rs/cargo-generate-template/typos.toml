@@ -1,0 +1,29 @@
+[default]
+extend-ignore-re = [
+    "[0-9a-f]{40}",
+    "[0-9a-f]{64}",
+]
+
+[default.extend-words]
+ba = "ba"
+datas = "datas"
+fo = "fo"
+hel = "hel"
+ser = "ser"
+teh = "teh"
+
+[files]
+extend-exclude = [
+    "*.lock",
+    "*.svg",
+    "*.png",
+    "*.ico",
+    "*.tgz",
+    "*.tar.gz",
+    "*.wasm",
+    "target/",
+    "node_modules/",
+    "dist/",
+    ".git/",
+    "Cargo.lock",
+]

@@ -1,0 +1,60 @@
+//! Performance benchmarks for {{project-name}}.
+//!
+//! Powered by [`criterion`](https://docs.rs/criterion) — statistical benchmarking.
+//!
+//! # Usage
+//!
+//! ```bash
+//! cargo bench                                 # Run all benches
+//! cargo bench --bench benchmark               # Run this bench
+//! cargo bench -- --save-baseline main          # Save as baseline
+//! cargo bench -- --baseline main               # Compare to baseline
+//! ```
+//!
+//! CI integration uses [`github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark)
+//! to track performance over time and alert on regressions.
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+fn bench_baseline(c: &mut Criterion) {
+    // Baseline benchmark: verify measurement infrastructure works.
+    // Replace with real benchmarks after adding meaningful code paths.
+    c.bench_function("{{project-name}}_baseline", |b| {
+        b.iter(|| {
+            black_box(42);
+        })
+    });
+}
+
+fn bench_allocation(c: &mut Criterion) {
+    // Benchmark allocation patterns for common data structures.
+    c.bench_function("{{project-name}}_string_alloc_1k", |b| {
+        b.iter(|| {
+            let s = black_box(String::from_iter(std::iter::repeat('a').take(1024)));
+            black_box(s)
+        });
+    });
+}
+
+fn bench_throughput(c: &mut Criterion) {
+    let data: Vec<u8> = (0..8192).map(|i| (i & 0xff) as u8).collect();
+
+    let mut group = c.benchmark_group("{{project-name}}_throughput");
+    group.throughput(criterion::Throughput::Bytes(8192));
+    group.bench_function("process_8kb", |b| {
+        b.iter(|| {
+            let sum: u64 = black_box(&data).iter().map(|&b| b as u64).sum();
+            black_box(sum)
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_baseline,
+    bench_allocation,
+    bench_throughput,
+);
+
+criterion_main!(benches);

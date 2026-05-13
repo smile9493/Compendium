@@ -1,0 +1,213 @@
+//! Error types for {{project-name}}.
+//!
+//! Uses `thiserror` for ergonomic error definitions with automatic
+//! `Display` and `From` implementations.
+//!
+//! # Error Categories
+//!
+//! - `Config` — misconfiguration or missing settings
+//! - `Io` — file/network I/O failures
+//! - `Validation` — input validation failures (4xx)
+//! - `Internal` — unexpected internal errors (5xx)
+
+use thiserror::Error;
+
+/// High-level error classification for monitoring and alerting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ErrorCategory {
+    Config,
+    Io,
+    Validation,
+    Internal,
+}
+
+/// Project-wide error type.
+///
+/// Each variant carries a human-readable message and maps to an HTTP status
+/// code for API server usage.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum Error {
+    // ── Configuration ──
+    #[error("Configuration error: {0}")]
+    Config(String),
+
+    #[error("Missing configuration: {0}")]
+    MissingConfig(String),
+
+    // ── I/O ──
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("File not found: {0}")]
+    FileNotFound(String),
+
+    #[error("File too large: {0} (max: {1} bytes)")]
+    FileTooLarge(String, u64),
+
+    // ── Serialization ──
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
+
+    // ── Validation ──
+    #[error("Validation failed: {0}")]
+    Validation(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    // ── Internal ──
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("Unexpected error: {0}")]
+    Unexpected(String),
+}
+
+impl Error {
+    /// Map this error to an HTTP status code.
+    pub fn status_code(&self) -> u16 {
+        match self {
+            Self::Config(_) | Self::MissingConfig(_) => 500,
+            Self::Io(_) | Self::FileNotFound(_) => 404,
+            Self::FileTooLarge(_, _) => 413,
+            Self::Json(_) | Self::Parse(_) => 400,
+            Self::Validation(_) | Self::InvalidInput(_) => 400,
+            Self::Internal(_) | Self::Unexpected(_) => 500,
+        }
+    }
+
+    /// Classify the error into a high-level category.
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            Self::Config(_) | Self::MissingConfig(_) => ErrorCategory::Config,
+            Self::Io(_) | Self::FileNotFound(_) | Self::FileTooLarge(_, _) => ErrorCategory::Io,
+            Self::Json(_) | Self::Parse(_) => ErrorCategory::Io,
+            Self::Validation(_) | Self::InvalidInput(_) => ErrorCategory::Validation,
+            Self::Internal(_) | Self::Unexpected(_) => ErrorCategory::Internal,
+        }
+    }
+
+    /// Machine-readable error code.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Config(_) => "E001",
+            Self::MissingConfig(_) => "E002",
+            Self::Io(_) => "E010",
+            Self::FileNotFound(_) => "E404",
+            Self::FileTooLarge(_, _) => "E413",
+            Self::Json(_) => "E011",
+            Self::Parse(_) => "E012",
+            Self::Validation(_) => "E400",
+            Self::InvalidInput(_) => "E401",
+            Self::Internal(_) => "E500",
+            Self::Unexpected(_) => "E999",
+        }
+    }
+
+    /// Human-readable help text suggesting a fix.
+    pub fn help(&self) -> Option<&'static str> {
+        match self {
+            Self::Config(_) => Some("Check your configuration file or environment variables."),
+            Self::MissingConfig(key) => Some("This setting is required. Set it via config file or environment variable."),
+            Self::FileNotFound(_) => Some("Verify the file path exists and is accessible."),
+            Self::FileTooLarge(_, _) => Some("Reduce the file size or increase the max size limit."),
+            Self::Validation(_) => Some("Check the input data against the expected schema."),
+            Self::InvalidInput(_) => Some("Review the input format requirements."),
+            Self::Json(_) => Some("Ensure the JSON payload is well-formed."),
+            Self::Parse(_) => Some("Check the data format and encoding."),
+            _ => None,
+        }
+    }
+
+    /// Serialize to JSON for API error responses.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "error": self.code(),
+            "message": self.to_string(),
+            "category": format!("{:?}", self.category()).to_lowercase(),
+            "status_code": self.status_code(),
+            "help": self.help(),
+        })
+    }
+}
+
+/// Convenience type alias.
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let err: Error = io_err.into();
+        assert!(matches!(err, Error::Io(_)));
+        assert_eq!(err.status_code(), 404);
+    }
+
+    #[test]
+    fn json_error_conversion() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let err: Error = json_err.into();
+        assert!(matches!(err, Error::Json(_)));
+    }
+
+    #[test]
+    fn status_codes() {
+        assert_eq!(Error::FileNotFound("x".into()).status_code(), 404);
+        assert_eq!(Error::FileTooLarge("x".into(), 1024).status_code(), 413);
+        assert_eq!(Error::Validation("x".into()).status_code(), 400);
+        assert_eq!(Error::InvalidInput("x".into()).status_code(), 400);
+        assert_eq!(Error::Internal("x".into()).status_code(), 500);
+        assert_eq!(Error::Unexpected("x".into()).status_code(), 500);
+        assert_eq!(Error::Config("x".into()).status_code(), 500);
+    }
+
+    #[test]
+    fn categories() {
+        assert!(matches!(Error::Config("x".into()).category(), ErrorCategory::Config));
+        assert!(matches!(Error::FileNotFound("x".into()).category(), ErrorCategory::Io));
+        assert!(matches!(Error::Validation("x".into()).category(), ErrorCategory::Validation));
+        assert!(matches!(Error::Internal("x".into()).category(), ErrorCategory::Internal));
+    }
+
+    #[test]
+    fn error_codes() {
+        assert_eq!(Error::FileNotFound("x".into()).code(), "E404");
+        assert_eq!(Error::Internal("x".into()).code(), "E500");
+        assert_eq!(Error::Unexpected("x".into()).code(), "E999");
+        assert_eq!(Error::Config("x".into()).code(), "E001");
+    }
+
+    #[test]
+    fn help_text() {
+        assert!(Error::FileNotFound("x".into()).help().is_some());
+        assert!(Error::Config("x".into()).help().is_some());
+        assert!(Error::Validation("x".into()).help().is_some());
+        assert!(Error::Io(std::io::Error::other("x")).help().is_none());
+    }
+
+    #[test]
+    fn to_json_includes_all_fields() {
+        let err = Error::FileNotFound("/tmp/missing.pdf".into());
+        let json = err.to_json();
+        assert_eq!(json["error"], "E404");
+        assert_eq!(json["status_code"], 404);
+        assert!(json["help"].is_string());
+        assert!(json["message"].as_str().unwrap().contains("missing.pdf"));
+    }
+
+    #[test]
+    fn display_formatting() {
+        let err = Error::FileTooLarge("big.pdf".into(), 1024);
+        let msg = err.to_string();
+        assert!(msg.contains("big.pdf"));
+        assert!(msg.contains("1024"));
+    }
+}

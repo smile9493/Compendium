@@ -1,0 +1,40 @@
+//! Database connection pool and migration runner for {{project-name}}.
+//!
+//! Uses `sqlx` with SQLite (default) or PostgreSQL support.
+
+use sqlx::pool::PoolOptions;
+use sqlx::{AnyPool, SqlitePool};
+use std::time::Duration;
+
+pub async fn create_sqlite_pool(database_url: &str, max_connections: u32) -> Result<SqlitePool, sqlx::Error> {
+    let pool = PoolOptions::<sqlx::Sqlite>::new()
+        .max_connections(max_connections)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(database_url)
+        .await?;
+
+    sqlx::query("PRAGMA journal_mode = WAL").execute(&pool).await?;
+    sqlx::query("PRAGMA busy_timeout = 5000").execute(&pool).await?;
+    sqlx::query("PRAGMA foreign_keys = ON").execute(&pool).await?;
+
+    Ok(pool)
+}
+
+pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<AnyPool, sqlx::Error> {
+    PoolOptions::<sqlx::Any>::new()
+        .max_connections(max_connections)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(database_url)
+        .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn sqlite_memory_pool() {
+        let pool = create_sqlite_pool("sqlite::memory:", 1).await;
+        assert!(pool.is_ok());
+    }
+}

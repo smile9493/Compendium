@@ -1,0 +1,62 @@
+{
+    "name": "Rust {{project-name}}",
+    "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+
+    "features": {
+        "ghcr.io/devcontainers/features/rust:1": {
+            "version": "1.91.0",
+            "profile": "complete"
+        }
+    },
+
+    "containerEnv": {
+        "CARGO_BUILD_TARGET_DIR": "/workspaces/${localWorkspaceFolderBasename}/target-devcontainer",
+        "RUST_BACKTRACE": "1"
+    },
+
+    "mounts": [
+        "source=${localWorkspaceFolderBasename}-cargo-registry,target=/usr/local/cargo/registry,type=volume",
+        "source=${localWorkspaceFolderBasename}-cargo-cache,target=/usr/local/cargo/git,type=volume",
+        "source=${localWorkspaceFolderBasename}-target,target=${containerWorkspaceFolder}/target,type=volume"
+    ],
+
+    "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev && sudo rm -rf /var/lib/apt/lists/*",
+
+    "postCreateCommand": "cargo fetch && cargo check --all-targets && cargo install cargo-deny cargo-audit typos-cli taplo-cli just && pip install pre-commit && pre-commit install && pre-commit install --hook-type pre-push && echo 'Dev container ready. Use \"just\" for common tasks.'",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates",
+                "vadimcn.vscode-lldb",
+                "fill-labs.dependi",
+                "usernamehw.errorlens",
+                "yzhang.markdown-all-in-one",
+                "redhat.vscode-yaml",
+                "github.vscode-github-actions",
+                "ms-azuretools.vscode-docker",
+                "skellock.just"
+            ],
+            "settings": {
+                "[rust]": {
+                    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+                    "editor.formatOnSave": true
+                },
+                "[toml]": {
+                    "editor.defaultFormatter": "tamasfe.even-better-toml"
+                },
+                "rust-analyzer.check.command": "clippy",
+                "rust-analyzer.cargo.buildScripts.enable": true,
+                "rust-analyzer.procMacro.enable": true,
+                "evenBetterToml.formatter.allowedBlankLines": 2,
+                "evenBetterToml.formatter.arrayAutoCollapse": true,
+                "evenBetterToml.formatter.indentEntries": true,
+                "evenBetterToml.formatter.indentTables": false
+            }
+        }
+    },
+
+    "remoteUser": "vscode"
+}

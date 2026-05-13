@@ -1,0 +1,34 @@
+//! # {{project-name}}
+//!
+//! {{description}}
+//!
+//! ## Modules
+//!
+//! - [`error`]: Error types
+//! - ...
+
+#![forbid(unsafe_code)]
+#![forbid(unsafe_op_in_unsafe_fn)]
+#![deny(clippy::all)]
+#![deny(clippy::dbg_macro)]
+#![deny(clippy::todo)]
+#![deny(clippy::large_stack_frames)]
+#![warn(clippy::pedantic)]
+#![warn(missing_docs)]
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
+#![cfg_attr(not(test), deny(clippy::expect_used))]
+// Enable once all public items are documented:
+// #![deny(missing_docs)]
+
+pub mod error;
+
+pub use error::{Error, Result};
+
+#[cfg(test)]
+mod tests {
+    /// Verify that the crate compiles and test infrastructure works.
+    #[test]
+    fn it_compiles() {
+        assert!(true, "Crate compiles and basic test infrastructure works");
+    }
+}

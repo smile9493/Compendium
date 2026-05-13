@@ -1,0 +1,67 @@
+[template]
+name = "Rust Workspace Crate Template"
+description = """
+Standard Rust crate scaffold for the rsut-pdf-mcp workspace.
+Provides library or binary crate with:
+- Rust 2024 Edition & MSRV 1.91.0
+- thiserror (lib) / anyhow + clap (bin) pre-configured
+- Complete test scaffold with unit + integration + bench + example
+- rustfmt.toml / clippy.toml / .editorconfig / justfile ready
+- CI coverage & audit integration
+- Optional: protobuf codegen, Axum web routes, CLI, feature flags
+"""
+
+[placeholders]
+crate-type = { type = "string", prompt = "Crate type?", choices = ["lib", "bin"], default = "lib" }
+description = { type = "string", prompt = "Crate description (one line)?", default = "A Rust crate" }
+with-bench = { type = "bool", prompt = "Include benches/ with criterion?", default = true }
+with-examples = { type = "bool", prompt = "Include examples/?", default = true }
+with-protobuf = { type = "bool", prompt = "Include build.rs for protobuf codegen (prost/tonic)?", default = false }
+with-web = { type = "bool", prompt = "Include Axum web routes scaffolding?", default = false }
+with-cli = { type = "bool", prompt = "Include clap CLI scaffolding?", default = false }
+with-feature-flags = { type = "bool", prompt = "Include feature-flag module?", default = false }
+
+[conditional."crate-type == lib"]
+files = [
+    "src/lib.rs",
+]
+
+[conditional."crate-type == bin"]
+files = [
+    "src/main.rs",
+]
+
+[conditional."with-bench == true"]
+files = [
+    "benches/benchmark.rs",
+]
+
+[conditional."with-examples == true"]
+files = [
+    "examples/basic.rs",
+]
+
+[conditional."with-protobuf == true"]
+files = [
+    "build.rs",
+]
+
+[conditional."with-web == true"]
+files = [
+    "src/routes.rs",
+]
+
+[conditional."with-cli == true"]
+files = [
+    "src/cli.rs",
+]
+
+[conditional."with-feature-flags == true"]
+files = [
+    "src/feature_flags.rs",
+]
+
+[hooks]
+post = [
+    ["echo", ">>> Template generated. Run 'just check' to verify."],
+]

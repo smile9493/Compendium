@@ -1,0 +1,19 @@
+#!/bin/sh
+# cargo-husky pre-push hook
+# Thorough checks that run before every push.
+
+set -e
+
+echo "━━━ cargo fmt ━━━"
+cargo fmt --all -- --check
+
+echo "━━━ cargo clippy ━━━"
+cargo clippy --all-targets -- -D warnings
+
+echo "━━━ cargo test ━━━"
+cargo test
+
+echo "━━━ typos ━━━"
+typos --config typos.toml
+
+echo "✓ pre-push checks passed"

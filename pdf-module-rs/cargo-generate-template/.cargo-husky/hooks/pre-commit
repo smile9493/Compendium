@@ -1,0 +1,16 @@
+#!/bin/sh
+# cargo-husky pre-commit hook
+# Fast checks that run before every commit.
+
+set -e
+
+echo "━━━ cargo fmt ━━━"
+cargo fmt --all -- --check
+
+echo "━━━ cargo check ━━━"
+cargo check --all-targets
+
+echo "━━━ typos ━━━"
+typos --config typos.toml
+
+echo "✓ pre-commit checks passed"

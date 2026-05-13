@@ -1,0 +1,126 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91.0"
+description = "{{description}}"
+license = "MIT"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+{{#if (eq crate-type "lib")}}
+[lib]
+name = "{{project-name}}"
+path = "src/lib.rs"
+{{/if}}
+
+{{#if (eq crate-type "bin")}}
+[[bin]]
+name = "{{project-name}}"
+path = "src/main.rs"
+{{/if}}
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+{{#if (eq crate-type "lib")}}
+thiserror = "2.0"
+{{/if}}
+{{#if (eq crate-type "bin")}}
+anyhow = "1.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+{{/if}}
+{{#if (or (eq crate-type "bin") with-web)}}
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+{{/if}}
+{{#if (or (eq crate-type "bin") with-cli)}}
+clap = { version = "4", features = ["derive", "env"] }
+{{/if}}
+{{#if with-web}}
+axum = "0.7"
+{{/if}}
+{{#if with-cli}}
+dialoguer = { version = "0.11", optional = true }
+{{/if}}
+{{#if with-protobuf}}
+prost = "0.13"
+tonic = { version = "0.12", optional = true }
+{{/if}}
+
+[dev-dependencies]
+{{#if with-bench}}
+criterion = { version = "0.5", features = ["html_reports"] }
+{{/if}}
+proptest = "1.5"
+tempfile = "3.10"
+insta = { version = "1", features = ["json", "yaml"] }
+pretty_assertions = "1"
+rstest = "0.22"
+cargo-husky = "1"
+
+{{#if with-protobuf}}
+[build-dependencies]
+prost-build = "0.13"
+tonic-build = { version = "0.12", optional = true }
+{{/if}}
+
+{{#if with-bench}}
+[[bench]]
+name = "benchmark"
+harness = false
+{{/if}}
+
+{{#if (or with-cli with-protobuf)}}
+[features]
+default = []
+{{#if with-cli}}
+interactive = ["dialoguer"]
+{{/if}}
+{{#if with-protobuf}}
+grpc = ["tonic", "tonic-build"]
+{{/if}}
+{{/if}}
+
+# ============================================================
+# Global lints — enforced at compile time (Rust 1.74+)
+# ============================================================
+
+[lints.rust]
+unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "forbid"
+unused_must_use = "deny"
+rust_2018_idioms = "deny"
+rust_2021_compatibility = "deny"
+rust_2024_compatibility = "deny"
+missing_docs = "warn"
+future_incompatible = "deny"
+nonstandard_style = "deny"
+
+[lints.clippy]
+all = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+pedantic = "warn"
+nursery = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+must_use_candidate = "warn"
+large_stack_frames = "deny"
+module_name_repetitions = "allow"
+
+# ============================================================
+# Profile settings
+# ============================================================
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = 'abort'
+strip = "symbols"
