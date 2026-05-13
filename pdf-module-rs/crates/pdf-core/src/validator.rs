@@ -158,40 +158,6 @@ impl FileValidator {
 
         Ok(())
     }
-
-    /// Validate upload parameters
-    /// Corresponds to Python: FileValidator.validate_upload()
-    pub fn validate_upload(&self, filename: &str, content_length: Option<u64>) -> PdfResult<()> {
-        if filename.is_empty() {
-            return Err(PdfModuleError::InvalidFileType(
-                "No filename provided".to_string(),
-            ));
-        }
-
-        let ext = Path::new(filename)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
-        let ext_with_dot = format!(".{}", ext.to_lowercase());
-        if !ALLOWED_EXTENSIONS.contains(&ext_with_dot.as_str()) {
-            return Err(PdfModuleError::InvalidFileType(format!(
-                "Invalid extension '.{}'",
-                ext
-            )));
-        }
-
-        if let Some(len) = content_length {
-            if len > self.max_size_bytes {
-                return Err(PdfModuleError::FileTooLarge(format!(
-                    "Upload size {:.1}MB exceeds limit of {}MB",
-                    len as f64 / 1024.0 / 1024.0,
-                    self.max_size_bytes / 1024 / 1024
-                )));
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -224,22 +190,5 @@ mod tests {
 
         let result = validator.validate(temp_file.path());
         assert!(matches!(result, Err(PdfModuleError::CorruptedFile(_))));
-    }
-
-    #[test]
-    fn test_validate_upload() {
-        let validator = FileValidator::new(200);
-
-        // Valid upload
-        let result = validator.validate_upload("test.pdf", Some(1024));
-        assert!(result.is_ok());
-
-        // Invalid extension
-        let result = validator.validate_upload("test.txt", Some(1024));
-        assert!(matches!(result, Err(PdfModuleError::InvalidFileType(_))));
-
-        // Too large
-        let result = validator.validate_upload("test.pdf", Some(300 * 1024 * 1024));
-        assert!(matches!(result, Err(PdfModuleError::FileTooLarge(_))));
     }
 }

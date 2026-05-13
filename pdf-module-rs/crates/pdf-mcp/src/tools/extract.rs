@@ -331,3 +331,275 @@ pub async fn handle_extrude_to_agent_payload(
 
     Ok(vec![Content::text(markdown)])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::ToolContext;
+    use pdf_core::{McpPdfPipeline, ServerConfig};
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    fn get_test_pdf_path() -> std::path::PathBuf {
+        std::path::PathBuf::from("/opt/pdf-module/深入理解Nginx.PDF")
+    }
+
+    fn create_test_context() -> ToolContext {
+        let config = ServerConfig::from_env().unwrap_or_default();
+        let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
+        ToolContext::new(pipeline)
+    }
+
+    #[tokio::test]
+    async fn test_extract_tool_definitions() {
+        let defs = extract_tool_definitions();
+        assert_eq!(defs.len(), 6);
+        
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
+        assert!(names.contains(&"extract_text"));
+        assert!(names.contains(&"extract_structured"));
+        assert!(names.contains(&"get_page_count"));
+        assert!(names.contains(&"search_keywords"));
+        assert!(names.contains(&"extrude_to_server_wiki"));
+        assert!(names.contains(&"extrude_to_agent_payload"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_text_missing_file_path() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({});
+        let result = handle_extract_text(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing file_path"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_text_file_not_found() {
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": "/nonexistent/path/file.pdf"
+        });
+        let result = handle_extract_text(&ctx, &args).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_extract_text_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap()
+        });
+        
+        let result = handle_extract_text(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                assert!(!content[0].text.is_empty());
+                assert!(content[0].text.contains("Nginx") || content[0].text.contains("nginx"));
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("extract_text failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_page_count_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap()
+        });
+        
+        let result = handle_get_page_count(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                let page_count: u32 = content[0].text.parse().expect("Should be a number");
+                assert!(page_count > 0);
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("get_page_count failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extract_structured_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap()
+        });
+        
+        let result = handle_extract_structured(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                
+                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+                assert!(parsed.get("pages").is_some());
+                assert!(parsed.get("extracted_text").is_some());
+                assert!(parsed.get("page_count").is_some());
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("extract_structured failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_keywords_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap(),
+            "keywords": ["nginx", "HTTP"],
+            "case_sensitive": false,
+            "context_length": 30
+        });
+        
+        let result = handle_search_keywords(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                
+                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+                assert!(parsed.get("total_matches").is_some());
+                assert!(parsed.get("matches").is_some());
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("search_keywords failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_keywords_empty_array() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap(),
+            "keywords": []
+        });
+        
+        let result = handle_search_keywords(&ctx, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Keywords array is empty"));
+    }
+
+    #[tokio::test]
+    async fn test_extrude_to_agent_payload_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap()
+        });
+        
+        let result = handle_extrude_to_agent_payload(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                let text = &content[0].text;
+                assert!(text.starts_with("# "), "Output should start with '# '");
+                assert!(text.contains("Nginx") || text.len() > 100, "Output should contain content");
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("extrude_to_agent_payload failed: {:?}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extrude_to_server_wiki_real_pdf() {
+        let pdf_path = get_test_pdf_path();
+        if !pdf_path.exists() {
+            eprintln!("Skipping test: PDF file not found at {:?}", pdf_path);
+            return;
+        }
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let wiki_path = temp_dir.path().to_str().unwrap();
+
+        let ctx = create_test_context();
+        let args = serde_json::json!({
+            "file_path": pdf_path.to_str().unwrap(),
+            "wiki_base_path": wiki_path
+        });
+        
+        let result = handle_extrude_to_server_wiki(&ctx, &args).await;
+        match result {
+            Ok(content) => {
+                assert_eq!(content.len(), 1);
+                
+                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+                assert_eq!(parsed["status"], "success");
+                assert!(parsed.get("raw_path").is_some());
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                    eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
+                    return;
+                }
+                panic!("extrude_to_server_wiki failed: {:?}", e);
+            }
+        }
+    }
+}

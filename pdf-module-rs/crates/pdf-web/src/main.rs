@@ -1,11 +1,10 @@
 //! # pdf-web
 //!
-//! Lightweight embedded web panel for rsut-pdf-mcp knowledge base management.
-//! Single binary, zero external dependencies — all HTML/CSS/JS is embedded via `rust-embed`.
+//! API server for rsut-pdf-mcp knowledge base management.
+//! The frontend is a separate Leptos SPA served via nginx.
 //!
 //! ## Endpoints
 //!
-//! - `GET /` → Embedded management panel
 //! - `GET /api/health` → JSON health report
 //! - `GET /api/config` → Runtime configuration
 //! - `POST /api/config` → Set configuration key
@@ -19,13 +18,12 @@
 
 use axum::{
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
 };
 use clap::Parser;
-use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -35,10 +33,6 @@ use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
 
 use pdf_core::management::{ConfigManager, HealthReporter};
-
-#[derive(RustEmbed)]
-#[folder = "src/ui/"]
-struct UiAssets;
 
 #[derive(Clone)]
 struct AppState {
@@ -76,7 +70,6 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(Any);
 
     let app = Router::new()
-        .route("/", get(serve_index))
         .route("/api/health", get(api_health))
         .route("/api/config", get(api_config_get).post(api_config_set))
         .route("/api/config/{key}", delete(api_config_remove))
@@ -116,17 +109,6 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
     tracing::info!("Shutting down...");
-}
-
-async fn serve_index() -> impl IntoResponse {
-    match UiAssets::get("index.html") {
-        Some(content) => (
-            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            content.data.to_vec(),
-        )
-            .into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
 }
 
 async fn api_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {

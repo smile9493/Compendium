@@ -8,6 +8,8 @@ use crate::validator::FileValidator;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
+
+#[cfg(feature = "vlm")]
 use vlm_visual_gateway::{MetricsCollector, VlmConfig, VlmGateway};
 
 /// MCP PDF processing pipeline with optional VLM enhancement.
@@ -24,7 +26,6 @@ use vlm_visual_gateway::{MetricsCollector, VlmConfig, VlmGateway};
 /// ├─────────────────┤
 /// │ - FileValidator │ → PDF validation and type detection
 /// │ - VlmGateway    │ → Optional VLM enhancement
-/// │ - MetricsCollector │ → Prometheus metrics
 /// └─────────────────┘
 ///          │
 ///          ▼
@@ -36,8 +37,18 @@ use vlm_visual_gateway::{MetricsCollector, VlmConfig, VlmGateway};
 /// │ - structured    │ → Bounding box extraction
 /// └─────────────────┘
 /// ```
+///
+/// # Metrics ownership
+///
+/// [`MetricsCollector`] is owned by the facade layer (e.g. `pdf-mcp`),
+/// not by `McpPdfPipeline`. The `new_with_metrics` / `new_with_vlm_and_metrics`
+/// constructors accept an externally-owned `Arc<MetricsCollector>` so that
+/// a single shared registry can be used across the whole application.
+/// The legacy `new` / `with_vlm` constructors create a default registry
+/// internally and are intended for backward compatibility and testing.
 pub struct McpPdfPipeline {
     validator: FileValidator,
+    #[cfg(feature = "vlm")]
     vlm_gateway: Option<VlmGateway>,
 }
 
@@ -48,11 +59,72 @@ pub struct ExtractionContext {
 }
 
 impl McpPdfPipeline {
+    /// Create a pipeline operating in local-only (Pdfium) mode.
+    ///
+    /// When the `vlm` feature is enabled, VLM configuration is read from
+    /// environment variables and the gateway is initialized if available.
+    /// When the `vlm` feature is disabled, this always produces a local-only pipeline.
     pub fn new(config: &ServerConfig) -> PdfResult<Self> {
-        let metrics = Arc::new(MetricsCollector::with_default_registry());
+        #[cfg(feature = "vlm")]
+        {
+            let metrics = Arc::new(MetricsCollector::with_default_registry());
+            return Self::build_pipeline(config, metrics, VlmConfig::from_env().ok());
+        }
+        #[cfg(not(feature = "vlm"))]
+        {
+            Ok(Self {
+                validator: FileValidator::new(config.security.max_file_size_mb as u32),
+            })
+        }
+    }
 
-        let vlm_gateway = match VlmConfig::from_env() {
-            Ok(vlm_config) => match VlmGateway::new(vlm_config, metrics) {
+    /// Create a pipeline with an externally-owned [`MetricsCollector`].
+    ///
+    /// VLM configuration is read from environment variables (same as [`new`]).
+    /// This is the preferred constructor for facade-layer consumers that own
+    /// a shared metrics registry.
+    ///
+    /// When the `vlm` feature is disabled, this is equivalent to [`new`].
+    #[cfg(feature = "vlm")]
+    pub fn new_with_metrics(
+        config: &ServerConfig,
+        metrics: Arc<MetricsCollector>,
+    ) -> PdfResult<Self> {
+        Self::build_pipeline(config, metrics, VlmConfig::from_env().ok())
+    }
+
+    /// Create a pipeline with explicit VLM config and default metrics (legacy path).
+    ///
+    /// Prefer [`new_with_vlm_and_metrics`] when the caller already owns a shared
+    /// [`MetricsCollector`].
+    #[cfg(feature = "vlm")]
+    pub fn with_vlm(config: &ServerConfig, vlm_config: VlmConfig) -> PdfResult<Self> {
+        let metrics = Arc::new(MetricsCollector::with_default_registry());
+        Self::build_pipeline(config, metrics, Some(vlm_config))
+    }
+
+    /// Create a pipeline with explicit VLM config and externally-owned [`MetricsCollector`].
+    ///
+    /// This is the preferred constructor when the caller has full control over
+    /// both VLM configuration and metrics collection.
+    #[cfg(feature = "vlm")]
+    pub fn new_with_vlm_and_metrics(
+        config: &ServerConfig,
+        vlm_config: VlmConfig,
+        metrics: Arc<MetricsCollector>,
+    ) -> PdfResult<Self> {
+        Self::build_pipeline(config, metrics, Some(vlm_config))
+    }
+
+    /// Shared pipeline construction logic.
+    #[cfg(feature = "vlm")]
+    fn build_pipeline(
+        config: &ServerConfig,
+        metrics: Arc<MetricsCollector>,
+        vlm_config: Option<VlmConfig>,
+    ) -> PdfResult<Self> {
+        let vlm_gateway = match vlm_config {
+            Some(cfg) => match VlmGateway::new(cfg, metrics) {
                 Ok(gateway) => {
                     info!("VLM gateway initialized successfully");
                     Some(gateway)
@@ -65,7 +137,7 @@ impl McpPdfPipeline {
                     None
                 }
             },
-            Err(_) => {
+            None => {
                 info!("VLM not configured - operating in local-only mode");
                 None
             }
@@ -74,17 +146,6 @@ impl McpPdfPipeline {
         Ok(Self {
             validator: FileValidator::new(config.security.max_file_size_mb as u32),
             vlm_gateway,
-        })
-    }
-
-    pub fn with_vlm(config: &ServerConfig, vlm_config: VlmConfig) -> PdfResult<Self> {
-        let metrics = Arc::new(MetricsCollector::with_default_registry());
-        let vlm_gateway = VlmGateway::new(vlm_config, metrics)
-            .map_err(|e| crate::error::PdfModuleError::Config(format!("VLM gateway: {}", e)))?;
-
-        Ok(Self {
-            validator: FileValidator::new(config.security.max_file_size_mb as u32),
-            vlm_gateway: Some(vlm_gateway),
         })
     }
 
@@ -121,11 +182,30 @@ impl McpPdfPipeline {
                     metadata: None,
                 })
             }
+            #[cfg(feature = "vlm")]
             ExtractionMethod::Vlm => self.extract_text_via_vlm(&ctx).await,
+            #[cfg(feature = "vlm")]
             ExtractionMethod::Hybrid => self.extract_text_hybrid(&ctx).await,
+            #[cfg(not(feature = "vlm"))]
+            _ => {
+                warn!(
+                    "VLM/Hybrid extraction requested but VLM feature is disabled, \
+                     falling back to Pdfium"
+                );
+                let text = PdfiumEngine::extract_text_from_mmap(&ctx.loader)?;
+                Ok(TextExtractionResult {
+                    extracted_text: text,
+                    extraction_metadata: None,
+                    metadata: Some(serde_json::json!({
+                        "method": "pdfium_fallback",
+                        "reason": "vlm_feature_disabled"
+                    })),
+                })
+            }
         }
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_text_via_vlm(
         &self,
         ctx: &ExtractionContext,
@@ -189,6 +269,7 @@ impl McpPdfPipeline {
         })
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_page_text_via_vlm(
         &self,
         gateway: &VlmGateway,
@@ -224,6 +305,7 @@ impl McpPdfPipeline {
         Ok(page_text)
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_text_hybrid(
         &self,
         ctx: &ExtractionContext,
@@ -296,11 +378,22 @@ impl McpPdfPipeline {
             ExtractionMethod::Pdfium => {
                 PdfiumEngine::extract_structured_from_mmap(&ctx.loader, file_path)
             }
+            #[cfg(feature = "vlm")]
             ExtractionMethod::Vlm => self.extract_structured_via_vlm(&ctx, file_path).await,
+            #[cfg(feature = "vlm")]
             ExtractionMethod::Hybrid => self.extract_structured_hybrid(&ctx, file_path).await,
+            #[cfg(not(feature = "vlm"))]
+            _ => {
+                warn!(
+                    "VLM/Hybrid structured extraction requested but VLM feature is disabled, \
+                     falling back to Pdfium"
+                );
+                PdfiumEngine::extract_structured_from_mmap(&ctx.loader, file_path)
+            }
         }
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_structured_via_vlm(
         &self,
         ctx: &ExtractionContext,
@@ -366,6 +459,7 @@ impl McpPdfPipeline {
         })
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_page_structured_via_vlm(
         &self,
         gateway: &VlmGateway,
@@ -420,6 +514,7 @@ impl McpPdfPipeline {
         Ok((page_text, regions))
     }
 
+    #[cfg(feature = "vlm")]
     async fn extract_structured_hybrid(
         &self,
         ctx: &ExtractionContext,
@@ -472,6 +567,8 @@ mod tests {
     fn test_pipeline_creation() {
         let config = ServerConfig::default();
         let pipeline = McpPdfPipeline::new(&config).unwrap();
+        // In local-only mode (no VLM env vars), gateway should be None
+        #[cfg(feature = "vlm")]
         assert!(pipeline.vlm_gateway.is_none());
     }
 }

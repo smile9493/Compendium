@@ -8,10 +8,9 @@ dist/
 *.zip
 
 # ─── Compiled Binaries ──────────────────────────
-pdf-mcp
+pdf-mcp$
 pdf-mcp-cli
 pdf-dashboard
-libpdfium.so
 *.so
 *.dylib
 *.dll

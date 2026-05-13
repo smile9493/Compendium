@@ -245,13 +245,25 @@ impl GraphIndex {
             };
 
             for related in &entry.related {
-                if let Some(&to_idx) = self.path_to_node.get(related) {
+                let related_lower = related.to_lowercase();
+                if let Some(to_idx) = self
+                    .path_to_node
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == related_lower)
+                    .map(|(_, &v)| v)
+                {
                     self.graph.add_edge(from_idx, to_idx, EdgeKind::Related);
                 }
             }
 
             for contra in &entry.contradictions {
-                if let Some(&to_idx) = self.path_to_node.get(contra) {
+                let contra_lower = contra.to_lowercase();
+                if let Some(to_idx) = self
+                    .path_to_node
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == contra_lower)
+                    .map(|(_, &v)| v)
+                {
                     self.graph
                         .add_edge(from_idx, to_idx, EdgeKind::Contradiction);
                 }

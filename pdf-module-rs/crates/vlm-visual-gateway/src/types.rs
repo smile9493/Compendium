@@ -420,10 +420,6 @@ impl VlmPayload {
 #[derive(Debug, Deserialize)]
 pub(crate) struct ChatCompletionResponse {
     pub choices: Vec<ChatCompletionChoice>,
-    /// Usage statistics (for monitoring and cost tracking)
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub usage: Option<UsageStats>,
 }
 
 /// GLM-OCR layout parsing request
@@ -436,53 +432,16 @@ pub(crate) struct GlmOcrRequest {
 /// GLM-OCR layout parsing response
 #[derive(Debug, Deserialize)]
 pub(crate) struct GlmOcrResponse {
-    /// Parsed text content from the document (aggregated text)
     pub text: Option<String>,
-    /// Document metadata
-    #[allow(dead_code)]
-    pub data_info: Option<GlmOcrDataInfo>,
-    /// Detailed layout regions
     pub layout_details: Vec<Vec<GlmOcrLayoutItem>>,
-}
-
-/// GLM-OCR document metadata
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct GlmOcrDataInfo {
-    pub num_pages: usize,
-    pub pages: Vec<GlmOcrPageInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct GlmOcrPageInfo {
-    pub width: usize,
-    pub height: usize,
 }
 
 /// GLM-OCR layout item (one region per page)
 #[derive(Debug, Deserialize)]
 pub(crate) struct GlmOcrLayoutItem {
-    /// Region label: text, image, title, table, caption, header, footer, etc.
     pub label: String,
-    /// Bounding box coordinates [xmin, ymin, xmax, ymax]
     pub bbox_2d: Option<[i64; 4]>,
-    /// Recognized text content (only for text-type regions)
     pub content: Option<String>,
-    /// Page dimensions (for reference, not currently used)
-    #[allow(dead_code)]
-    pub width: Option<i64>,
-    #[allow(dead_code)]
-    pub height: Option<i64>,
-}
-
-/// Token usage statistics
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct UsageStats {
-    pub prompt_tokens: usize,
-    pub completion_tokens: usize,
-    pub total_tokens: usize,
 }
 
 #[derive(Debug, Deserialize)]

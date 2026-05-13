@@ -1,0 +1,41 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 pdfuser
+
+WORKDIR /app
+
+COPY pdf-mcp /usr/local/bin/pdf-mcp
+COPY pdf-web /usr/local/bin/pdf-web
+
+RUN chmod +x /usr/local/bin/pdf-mcp /usr/local/bin/pdf-web && \
+    mkdir -p /app/data /app/kb /app/logs /app/cache && \
+    chown -R pdfuser:pdfuser /app
+
+RUN wget -q -O /tmp/pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz" && \
+    tar -xzf /tmp/pdfium.tgz -C /usr/local && \
+    ldconfig && \
+    rm /tmp/pdfium.tgz
+
+USER pdfuser
+
+ENV RUST_LOG=info
+ENV PDFIUM_LIB_PATH=/usr/local/lib/libpdfium.so
+ENV STORAGE_TYPE=local
+ENV STORAGE_LOCAL_DIR=/app/data
+ENV KB_DEFAULT_PATH=/app/kb
+ENV HTTP_PORT=8000
+ENV MCP_TRANSPORT=stdio
+
+EXPOSE 8000 8001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+CMD ["pdf-web", "--host", "0.0.0.0", "--port", "8000"]

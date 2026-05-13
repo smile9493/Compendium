@@ -12,6 +12,8 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 6. **Dual-Protocol**: stdio (MCP) + HTTP (Wiki), oneshot signal for reliable co-bootstrap.
 7. **Breakwater Architecture**: Facade/Core layered separation — pdf-mcp absorbs protocol chaos, pdf-core maintains deterministic extraction.
 
+> **Note**: 根目录 [`DESIGN.md`](/opt/pdf-module/DESIGN.md) 为 UI 设计系统文档（色彩、排版、组件规范），与本软件架构文档互补但不重叠。软件架构变更不影响 UI 设计系统，反之亦然。
+
 ## Architecture
 
 ```
@@ -92,9 +94,9 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 │  pdf-mcp http.rs (HTTP server with oneshot signal)    │
 ├──────────────────────────────────────────────────────┤
 │  Facade Layer (Web UI)                                │
-│  pdf-dashboard (Web dashboard server)                 │
-│  pdf-web (Web frontend, Yew)                          │
-│  pdf-mcp resources.rs (embedded HTML via rust_embed)  │
+│  pdf-web (Embedded web panel, axum)                   │
+│  pdf-mcp embed.rs (embedded HTML via rust_embed)      │
+│  pdf-frontend (WASM frontend assets)                  │
 ├──────────────────────────────────────────────────────┤
 │  Core Layer                                           │
 │  pdf-core (extraction, knowledge, parallel)           │
@@ -133,9 +135,11 @@ knowledge_base/
 | `pdf-macros` | 过程宏 | `#[derive(Builder)]` |
 | `pdf-core` | PdfiumEngine + FileValidator + VlmPipeline + **KnowledgeEngine** + **FulltextIndex** + **GraphIndex** + **VectorIndex** | TF-IDF embedding, batch_embed_all, community detection |
 | `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 23 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
-| `vlm-visual-gateway` | VLM 条件升级网关 | `catch_unwind` FFI levee, Semaphore rate-limiting, exponential backoff |
-| `pdf-dashboard` | HTTP 监控面板 | System health, metrics |
+| `pdf-cli` | 统一 CLI (双模式: local/remote) | `clap` derive, `reqwest` for remote, file upload, knowledge management |
+| `pdf-web` | 轻量嵌入式 Web 面板 (`axum`) | HTTP wiki browsing, knowledge base management |
+| `pdf-frontend` | 前端资源仓库 | WASM 编译目标，UI 资源 |
 | `pdf-wasm` | WASM 引擎 | `WasmSlice` zero-copy, `bumpalo` arena, `talc` allocator |
+| `vlm-visual-gateway` | VLM 条件升级网关 | `catch_unwind` FFI levee, Semaphore rate-limiting, exponential backoff |
 
 ## Knowledge Engine Module (`pdf-core::knowledge`)
 
@@ -244,13 +248,13 @@ L0  Raw Extraction      (原始提取，PDF → text)
 | `pdfium-render` | 0.8 | PDF text extraction (FFI) |
 | `sha2` | 0.10 | Content hashing (incremental compile) |
 | `serde_yaml` | 0.9 | Front matter serialization |
-| `bincode` | 2.0 | Graph index disk persistence |
-| `bumpalo` | 3.17 | Arena allocation (WASM + pixel buffers) |
+| `bincode` | 1.3 | Graph index disk persistence |
+| `bumpalo` | 3.16 | Arena allocation (WASM + pixel buffers) |
 | `tokio` | 1.x | Async runtime |
-| `axum` | 0.8 | HTTP server (wiki browsing) |
-| `rust_embed` | 8.x | Embedded static assets |
+| `axum` | 0.7 | HTTP server (wiki browsing) |
+| `rust-embed` | 8 | Embedded static assets |
 | `memmap2` | 0.9 | Zero-copy PDF loading |
-| `pulldown_cmark` | 0.12 | Markdown → HTML rendering |
+| `pulldown-cmark` | 0.11 | Markdown → HTML rendering |
 
 ## FFI Levee
 

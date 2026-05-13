@@ -13,7 +13,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "query": {
                         "type": "string",
@@ -24,7 +24,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                         "description": "Maximum number of results (default: 10)"
                     }
                 },
-                "required": ["knowledge_base", "query"]
+                "required": ["query"]
             }),
         },
         ToolDefinition {
@@ -35,10 +35,10 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -49,7 +49,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "entry_path": {
                         "type": "string",
@@ -60,7 +60,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                         "description": "Maximum number of hops to traverse (default: 2)"
                     }
                 },
-                "required": ["knowledge_base", "entry_path"]
+                "required": ["entry_path"]
             }),
         },
         ToolDefinition {
@@ -71,10 +71,10 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -85,7 +85,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "entry_path": {
                         "type": "string",
@@ -96,7 +96,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                         "description": "Maximum number of suggestions (default: 10)"
                     }
                 },
-                "required": ["knowledge_base", "entry_path"]
+                "required": ["entry_path"]
             }),
         },
         ToolDefinition {
@@ -107,7 +107,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     },
                     "entry_path": {
                         "type": "string",
@@ -118,7 +118,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                         "description": "Number of hops to include (default: 2)"
                     }
                 },
-                "required": ["knowledge_base", "entry_path"]
+                "required": ["entry_path"]
             }),
         },
         ToolDefinition {
@@ -129,10 +129,10 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "properties": {
                     "knowledge_base": {
                         "type": "string",
-                        "description": "Absolute path to the knowledge base directory"
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
                 },
-                "required": ["knowledge_base"]
+                "required": []
             }),
         },
     ]
@@ -149,15 +149,8 @@ pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result
     let idx = FulltextIndex::open_or_create(&kb_path)?;
 
     let wiki_dir = kb_path.join("wiki");
-    if wiki_dir.exists() {
-        let sample = idx.search("*", 1);
-        let needs_rebuild = match sample {
-            Ok(results) => results.is_empty(),
-            Err(_) => true,
-        };
-        if needs_rebuild {
-            idx.rebuild(&wiki_dir)?;
-        }
+    if wiki_dir.exists() && idx.is_empty()? {
+        idx.rebuild(&wiki_dir)?;
     }
 
     let hits = idx.search(query, limit)?;
@@ -294,4 +287,60 @@ pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Ve
         "has_warnings": report.has_warnings()
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_tool_definitions() {
+        let defs = index_tool_definitions();
+        assert_eq!(defs.len(), 7);
+        
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
+        assert!(names.contains(&"search_knowledge"));
+        assert!(names.contains(&"rebuild_index"));
+        assert!(names.contains(&"get_entry_context"));
+        assert!(names.contains(&"find_orphans"));
+        assert!(names.contains(&"suggest_links"));
+        assert!(names.contains(&"export_concept_map"));
+        assert!(names.contains(&"check_quality"));
+    }
+
+    #[tokio::test]
+    async fn test_search_knowledge_missing_query() {
+        let args = serde_json::json!({});
+        
+        let result = handle_search_knowledge(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing query"));
+    }
+
+    #[tokio::test]
+    async fn test_get_entry_context_missing_entry_path() {
+        let args = serde_json::json!({});
+        
+        let result = handle_get_entry_context(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
+    }
+
+    #[tokio::test]
+    async fn test_suggest_links_missing_entry_path() {
+        let args = serde_json::json!({});
+        
+        let result = handle_suggest_links(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
+    }
+
+    #[tokio::test]
+    async fn test_export_concept_map_missing_entry_path() {
+        let args = serde_json::json!({});
+        
+        let result = handle_export_concept_map(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
+    }
 }

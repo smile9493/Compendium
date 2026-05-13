@@ -5,6 +5,13 @@
 //! - P1 Maintainability: 语义命名、代码组织
 //! - P2 Compile Time: 无过度泛型化
 //! - P3 Performance: 零拷贝、Arena分配
+//!
+//! ## Cargo Features
+//!
+//! - `knowledge` (default): Knowledge engine, wiki compilation, fulltext/graph/vector indexes.
+//!   Dependencies: tantivy, petgraph, sled, jieba-rs, etc.
+//! - `vlm` (default): VLM-powered PDF enhancement via `vlm-visual-gateway`.
+//!   Without this feature, the pipeline operates in local-only (Pdfium) mode.
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::all)]
@@ -18,24 +25,23 @@
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
-pub mod cache;
 pub mod config;
 pub mod dto;
 pub mod engine;
 pub mod error;
 pub mod extractor;
+#[cfg(feature = "knowledge")]
 pub mod knowledge;
 pub mod management;
 pub mod mmap_loader;
 pub mod parallel;
-pub mod progress;
 pub mod quality_probe;
 pub mod validator;
-pub mod vlm_pipeline;
+#[cfg(feature = "knowledge")]
 pub mod wiki;
 
-pub use cache::LruTtlCache;
 pub use config::ServerConfig;
 pub use extractor::McpPdfPipeline;
+#[cfg(feature = "knowledge")]
 pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};
 pub use validator::{FileValidator, PathValidationConfig};

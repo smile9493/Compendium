@@ -1,0 +1,60 @@
+services:
+  pdf-web:
+    image: pdf-mcp-full:latest
+    container_name: pdf-web
+    ports:
+      - "8000:8000"
+    environment:
+      - RUST_LOG=info
+      - KNOWLEDGE_BASE=/app/kb
+    volumes:
+      - pdf_kb:/app/kb
+      - pdf_data:/app/data
+      - pdf_logs:/app/logs
+    restart: unless-stopped
+    command: ["pdf-web", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pdf-network
+
+  pdf-mcp:
+    image: pdf-mcp-full:latest
+    container_name: pdf-mcp
+    ports:
+      - "8001:8001"
+    environment:
+      - RUST_LOG=info
+      - PDFIUM_LIB_PATH=/usr/local/lib/libpdfium.so
+      - KNOWLEDGE_BASE=/app/kb
+      - HTTP_PORT=8001
+    volumes:
+      - pdf_kb:/app/kb
+      - pdf_data:/app/data
+      - pdf_logs:/app/logs
+    restart: unless-stopped
+    command: ["pdf-mcp"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pdf-network
+
+volumes:
+  pdf_kb:
+    driver: local
+  pdf_data:
+    driver: local
+  pdf_logs:
+    driver: local
+
+networks:
+  pdf-network:
+    driver: bridge

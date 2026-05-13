@@ -322,7 +322,22 @@ fn markdown_to_html(md: &str) -> String {
     let parser = Parser::new_ext(md, options);
     let mut html_output = String::with_capacity(md.len() * 2);
     html::push_html(&mut html_output, parser);
-    html_output
+    process_wikilinks(&html_output)
+}
+
+fn process_wikilinks(html: &str) -> String {
+    let re = regex::Regex::new(r"\[\[([^\]]+)\]\]").unwrap_or_else(|_| {
+        let re = regex::Regex::new(r"^\z").unwrap();
+        re
+    });
+    re.replace_all(html, |caps: &regex::Captures| {
+        let target = &caps[1];
+        format!(
+            r#"<a class="wikilink" href="/api/wiki/entries/{}.md">{}</a>"#,
+            target, target
+        )
+    })
+    .into_owned()
 }
 
 fn split_front_matter(content: &str) -> &str {

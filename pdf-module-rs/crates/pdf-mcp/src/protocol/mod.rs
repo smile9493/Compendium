@@ -44,7 +44,6 @@ pub struct JsonRpcError {
 }
 
 impl JsonRpcError {
-    #[allow(dead_code)]
     pub fn parse_error() -> Self {
         Self {
             code: -32700,
@@ -53,16 +52,6 @@ impl JsonRpcError {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn invalid_request() -> Self {
-        Self {
-            code: -32600,
-            message: "Invalid request".to_string(),
-            data: None,
-        }
-    }
-
-    #[allow(dead_code)]
     pub fn method_not_found(method: &str) -> Self {
         Self {
             code: -32601,
@@ -71,7 +60,6 @@ impl JsonRpcError {
         }
     }
 
-    #[allow(dead_code)]
     pub fn invalid_params(message: &str) -> Self {
         Self {
             code: -32602,
@@ -80,7 +68,6 @@ impl JsonRpcError {
         }
     }
 
-    #[allow(dead_code)]
     pub fn internal_error(message: &str) -> Self {
         Self {
             code: -32603,
@@ -115,6 +102,7 @@ impl JsonRpcResponse {
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema")]
     pub input_schema: Value,
 }
 

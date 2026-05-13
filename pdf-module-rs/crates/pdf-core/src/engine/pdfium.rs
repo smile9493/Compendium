@@ -214,10 +214,6 @@ impl PdfEngine for PdfiumEngine {
         let data = std::fs::read(file_path)?;
         Self::safe_get_page_count(&data)
     }
-
-    fn test_connection(&self) -> bool {
-        true
-    }
 }
 
 #[cfg(test)]

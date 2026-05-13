@@ -7,15 +7,25 @@ use super::{SamplingRequest, SamplingResponse};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::debug;
 
-pub use super::SamplingError;
+#[derive(Debug, Error)]
+pub enum SamplingError {
+    #[error("Channel closed")]
+    ChannelClosed,
+
+    #[error("Response timeout")]
+    ResponseTimeout,
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
 
 type PendingRequests =
     Arc<RwLock<HashMap<u64, oneshot::Sender<Result<SamplingResponse, SamplingError>>>>>;
 
-#[allow(dead_code)]
 pub struct SamplingClient {
     request_tx: mpsc::Sender<OutgoingRequest>,
     pending: PendingRequests,
@@ -28,20 +38,7 @@ pub struct OutgoingRequest {
     pub request: SamplingRequest,
 }
 
-#[allow(dead_code)]
 impl SamplingClient {
-    pub fn new(timeout_secs: u64) -> Self {
-        let (request_tx, _request_rx) = mpsc::channel::<OutgoingRequest>(100);
-        let pending = Arc::new(RwLock::new(HashMap::new()));
-
-        Self {
-            request_tx,
-            pending,
-            next_id: AtomicU64::new(1),
-            timeout_secs,
-        }
-    }
-
     pub fn with_sender(timeout_secs: u64, sender: mpsc::Sender<OutgoingRequest>) -> Self {
         let pending = Arc::new(RwLock::new(HashMap::new()));
 
@@ -142,7 +139,6 @@ pub fn parse_sampling_response(
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct SamplingClientConfig {
     pub timeout_secs: u64,
     pub max_concurrent: usize,
@@ -226,16 +222,6 @@ mod tests {
         let client = SamplingClient::with_sender(5, tx.clone());
         let _pending = client.pending_requests();
 
-        let handle = tokio::spawn(async move {
-            let client = SamplingClient::new(5);
-            let pending_clone = client.pending_requests();
-
-            {
-                let mut p = pending_clone.write().await;
-                p.insert(1, tokio::sync::oneshot::channel().0);
-            }
-        });
-
         let request = SamplingRequest {
             messages: vec![SamplingMessage {
                 role: Role::User,
@@ -262,7 +248,6 @@ mod tests {
             client.handle_response(outgoing.id, Ok(response)).await;
         }
 
-        handle.await.unwrap();
         drop(request_handle);
     }
 }
