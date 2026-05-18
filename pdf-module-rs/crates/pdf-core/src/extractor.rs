@@ -2,7 +2,7 @@ use crate::config::ServerConfig;
 use crate::dto::{ExtractOptions, StructuredExtractionResult, TextExtractionResult};
 use crate::engine::PdfiumEngine;
 use crate::error::PdfResult;
-use crate::extraction::{ExtractionRouter, PdfiumBackend, VlmExtractionBackend};
+use crate::extraction::{ExtractionRouter, PdfiumBackend, RemoteExtractionBackend, VlmExtractionBackend};
 use crate::mmap_loader::MmapPdfLoader;
 use crate::quality_probe::{ExtractionMethod, QualityProbe, QualityReport};
 use crate::validator::FileValidator;

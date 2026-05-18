@@ -214,7 +214,7 @@ pub async fn handle_search_knowledge(
         "mode": format!("{:?}", mode).to_lowercase(),
         "results": hits,
         "total": hits.len()
-    }))?])
+    }))?)])
 }
 
 #[instrument(skip(args))]

@@ -81,7 +81,7 @@ impl SyncRemote for FileSyncRemote {
         if !path.exists() {
             return Ok(None);
         }
-        fs::read(path).map(|Some).map_err(storage_err)
+        fs::read(path).map(Some).map_err(storage_err)
     }
 }
 
@@ -135,10 +135,11 @@ pub fn sync_status(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<
         .transpose()
         .map_err(|e| storage_err(&e.to_string()))?;
     let remote_root = remote_manifest.as_ref().map(|m| m.root_hash.clone());
+    let in_sync = remote_root.as_deref() == Some(local.root_hash.as_str());
     Ok(SyncStatus {
         local_root: local.root_hash,
         remote_root,
-        in_sync: remote_root.as_ref() == Some(&local.root_hash),
+        in_sync,
         local_objects: local.objects.len(),
         remote_objects: remote_manifest.map(|m| m.objects.len()).unwrap_or(0),
     })

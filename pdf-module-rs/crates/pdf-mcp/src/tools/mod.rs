@@ -3,7 +3,7 @@ mod index;
 mod knowledge;
 mod management;
 mod platform;
-mod post_compile;
+pub mod post_compile;
 mod resources;
 
 pub use extract::*;

@@ -53,14 +53,14 @@ fn default_occurrence() -> String {
 }
 
 /// Patch request payload.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WikiPatchRequest {
     pub entry_path: String,
     pub operations: Vec<PatchOp>,
 }
 
 /// Result of applying or previewing a patch.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WikiPatchResult {
     pub entry_path: String,
     pub diff: String,

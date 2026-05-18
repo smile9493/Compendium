@@ -164,7 +164,7 @@ pub async fn handle_register_workspace(
         active: args["active"].as_bool().unwrap_or(false),
     };
     registry.upsert(entry)?;
-    Ok(vec![Content::text("Workspace registered")])
+    Ok(vec![Content::text("Workspace registered".to_string())])
 }
 
 pub async fn handle_list_extraction_plugins(

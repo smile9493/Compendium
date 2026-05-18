@@ -66,7 +66,8 @@ async fn main() -> anyhow::Result<()> {
         .resolve_kb(None, None)
         .ok()
         .or_else(|| {
-            std::env::var("KNOWLEDGE_BASE")
+            std::env::var("KNOWLEDGE_BASE_PATH")
+                .or_else(|_| std::env::var("KNOWLEDGE_BASE"))
                 .ok()
                 .map(std::path::PathBuf::from)
         });

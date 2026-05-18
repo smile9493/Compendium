@@ -117,30 +117,30 @@ export const api = {
   },
 
   getConfig() {
-    return request('/config')
+    return request(withKb('/config'))
   },
 
   setConfig(key, value) {
-    return request('/config', {
+    return request(withKb('/config'), {
       method: 'POST',
       body: JSON.stringify({ key, value }),
     })
   },
 
   removeConfig(key) {
-    return request(`/config/${encodeURIComponent(key)}`, { method: 'DELETE' })
+    return request(withKb(`/config/${encodeURIComponent(key)}`), { method: 'DELETE' })
   },
 
   getHealth() {
-    return request('/health')
+    return request(withKb('/health'))
   },
 
   getCompileStatus() {
-    return request('/compile/status')
+    return request(withKb('/compile/status'))
   },
 
   rebuildIndex() {
-    return request('/index/rebuild', { method: 'POST', retries: 1 })
+    return request(withKb('/index/rebuild'), { method: 'POST', retries: 1 })
   },
 
   uploadPdf(file) {
@@ -155,7 +155,7 @@ export const api = {
   },
 
   compileUploaded(fileId, domain = null) {
-    return request('/compile/upload', {
+    return request(withKb('/compile/upload'), {
       method: 'POST',
       body: JSON.stringify({ file_id: fileId, domain }),
       timeout: 300000,
@@ -163,16 +163,16 @@ export const api = {
   },
 
   triggerIncrementalCompile() {
-    return request('/compile/incremental', { method: 'POST', timeout: 300000 })
+    return request(withKb('/compile/incremental'), { method: 'POST', timeout: 300000 })
   },
 
   getQualitySummary() {
-    return request('/quality/summary')
+    return request(withKb('/quality/summary'))
   },
 
   getQualityIssues(limit = 50, severity = null) {
     const params = new URLSearchParams({ limit: String(limit) })
     if (severity) params.set('severity', severity)
-    return request(`/quality/issues?${params}`)
+    return request(withKb(`/quality/issues?${params}`))
   },
 }

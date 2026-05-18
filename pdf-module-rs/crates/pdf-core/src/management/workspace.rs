@@ -67,7 +67,28 @@ impl WorkspaceRegistry {
             inner: RwLock::new(inner),
         };
         registry.ensure_default_from_env()?;
+        registry.sync_from_env()?;
         Ok(registry)
+    }
+
+    /// When `KNOWLEDGE_BASE_PATH` / `KNOWLEDGE_BASE` is set, align the default workspace to that path.
+    pub fn sync_from_env(&self) -> PdfResult<()> {
+        let Some(raw) = std::env::var("KNOWLEDGE_BASE_PATH")
+            .ok()
+            .or_else(|| std::env::var("KNOWLEDGE_BASE").ok())
+        else {
+            return Ok(());
+        };
+        let path = PathBuf::from(raw);
+        if self.validate_path(&path).is_err() {
+            return Ok(());
+        }
+        self.upsert(WorkspaceEntry {
+            id: "default".to_string(),
+            name: "Default".to_string(),
+            path,
+            active: true,
+        })
     }
 
     pub fn config_path(&self) -> &Path {
