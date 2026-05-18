@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.1] - 2026-05-19
+
+### Changed
+
+- **仓库迁移**: 重命名为 `Compendium`，更新所有文档和脚本中的 GitHub URL
+- **`.gitignore` 完善**: 移除误伤的 `Cargo.lock` 全局忽略（binary crate 应提交 lockfile）、`*.pdf` 和 `*.wasm` 模式；新增 `.md_cache/`、`.cache_db/`、coverage 产物等遗漏项
+- **文档路径修正**: `CLAUDE.md` 和 `ARCHITECTURE.md` 中的 `/opt/pdf-module/` 绝对路径改为相对路径
+
+### Fixed
+
+- **合并冲突解决**: 18 个文件的分支合并冲突全部解决（`feat/architecture-enhancement-and-refactor` → `main`）
+- **重复导入**: `knowledge/mod.rs` 和 `knowledge/index/mod.rs` 中的重复 `pub use` 和 `pub mod` 声明已移除
+
+---
+
 ## [0.5.0] - 2026-05-09
 
 ### 重大变更：架构强化 + 仓库整理

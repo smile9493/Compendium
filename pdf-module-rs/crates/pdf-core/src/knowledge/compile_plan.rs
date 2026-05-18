@@ -122,20 +122,21 @@ impl KnowledgeEngine {
                 let entry = entry.map_err(|e| PdfModuleError::Storage(e.to_string()))?;
                 let path = entry.path();
                 if path.extension().is_some_and(|e| e == "pdf")
-                    && cache.needs_compile(&path).unwrap_or(true) {
-                        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
-                        let prompt = format!("raw/{stem}.compile_prompt.md");
-                        tasks.push(PlanTask {
-                            id: format!("l1-{stem}"),
-                            kind: PlanTaskKind::CreateL1,
-                            depends_on: Vec::new(),
-                            status: PlanTaskStatus::Pending,
-                            payload: serde_json::json!({
-                                "pdf_path": path.to_string_lossy(),
-                                "prompt_path": prompt,
-                            }),
-                        });
-                    }
+                    && cache.needs_compile(&path).unwrap_or(true)
+                {
+                    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+                    let prompt = format!("raw/{stem}.compile_prompt.md");
+                    tasks.push(PlanTask {
+                        id: format!("l1-{stem}"),
+                        kind: PlanTaskKind::CreateL1,
+                        depends_on: Vec::new(),
+                        status: PlanTaskStatus::Pending,
+                        payload: serde_json::json!({
+                            "pdf_path": path.to_string_lossy(),
+                            "prompt_path": prompt,
+                        }),
+                    });
+                }
             }
         }
 

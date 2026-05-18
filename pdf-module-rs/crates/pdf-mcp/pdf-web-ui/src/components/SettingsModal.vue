@@ -218,7 +218,7 @@
                 <BookOpen :size="24" />
               </div>
               <div class="about-info">
-                <div class="about-name">rsut-pdf-mcp</div>
+                <div class="about-name">Compendium</div>
                 <div class="about-desc">知识编译引擎 — 将 PDF 转化为结构化知识图谱</div>
               </div>
             </div>

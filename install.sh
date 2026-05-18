@@ -11,7 +11,7 @@ NC='\033[0m'
 
 INSTALL_DIR="/opt/pdf-module"
 REPO_OWNER="smile9493"
-REPO_NAME="rsut_pdf_mcp"
+REPO_NAME="Compendium"
 API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
 PDFIUM_VERSION="chromium/7529"
 

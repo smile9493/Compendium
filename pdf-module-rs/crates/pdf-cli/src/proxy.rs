@@ -4,7 +4,7 @@
 //! HTTP MCP server. Enables legacy MCP clients that only speak stdio to
 //! transparently connect to a remote server.
 //!
-//! Usage: `rsut-pdf proxy --server http://192.168.2.50:9090`
+//! Usage: `compendium proxy --server http://192.168.2.50:9090`
 
 use crate::config::CliConfig;
 use crate::remote::{RemoteClient, RemoteConfig};

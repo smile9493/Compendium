@@ -29,8 +29,8 @@ classifiers = [
 pdf-mcp = "pdf_mcp:main"
 
 [project.urls]
-Homepage = "https://github.com/smile9493/rsut_pdf_mcp"
-Repository = "https://github.com/smile9493/rsut_pdf_mcp.git"
+Homepage = "https://github.com/smile9493/Compendium"
+Repository = "https://github.com/smile9493/Compendium.git"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pdf_mcp"]

@@ -40,7 +40,7 @@
 
 ### 1. 下载
 
-从 [GitHub Releases](https://github.com/smile9493/rsut_pdf_mcp/releases) 下载对应平台版本：
+从 [GitHub Releases](https://github.com/smile9493/Compendium/releases) 下载对应平台版本：
 
 | 平台 | 文件 | 解压后 |
 |------|------|--------|
@@ -66,8 +66,8 @@ chmod +x pdf-mcp
 ## 方式二: 从源码编译
 
 ```bash
-git clone https://github.com/smile9493/rsut_pdf_mcp.git
-cd rsut_pdf_mcp/pdf-module-rs
+git clone https://github.com/smile9493/Compendium.git
+cd Compendium/pdf-module-rs
 cargo build --release
 ```
 

@@ -1,6 +1,7 @@
 # ─── Rust ───────────────────────────────────────
 **/target/
-**/Cargo.lock
+# Cargo.lock 应提交到仓库（binary crate 需要）
+# 各子 crate 的 .gitignore 负责本地规则
 
 # ─── Build Artifacts ────────────────────────────
 dist/
@@ -47,6 +48,9 @@ __pycache__/
 .venv/
 venv/
 
+# ─── Node.js ────────────────────────────────────
+node_modules/
+
 # ─── Test Artifacts ─────────────────────────────
 test_mcp_*.py
 test_raw_response*.py
@@ -63,12 +67,13 @@ CSS_REFACTOR_SUMMARY.md
 nginx-wiki/
 wiki/
 data/
+test_kb/
 .rsut_index/
 .hash_cache
-test_kb/
+.cache_db/
 
-# ─── PDF Books ───────────────────────────────────
-*.pdf
+# ─── Rendered Markdown Cache ────────────────────
+.md_cache/
 
 # ─── IDE ────────────────────────────────────────
 .idea/
@@ -76,11 +81,31 @@ test_kb/
 .vscode/
 .history/
 *.sublime-*
+.zed/
+.arts/
+.codeartsdoer/
 
 # ─── OS ─────────────────────────────────────────
 .directory
 desktop.ini
+._*
+.Spotlight-V100
+.Trashes
 
 # ─── WASM Build ─────────────────────────────────
 **/pkg/
-*.wasm
+
+# ─── Docker ─────────────────────────────────────
+.docker/
+
+# ─── Database ───────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+surrealdb-data/
+
+# ─── Test Coverage ──────────────────────────────
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+coverage/

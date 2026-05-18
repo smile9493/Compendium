@@ -74,7 +74,6 @@ pub struct HttpState {
 }
 
 fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
-    
     if let Some(id) = kb_id {
         state.workspace_registry.path_for_id(id).ok()
     } else if let Some(ref p) = state.kb_path {
@@ -301,7 +300,7 @@ async fn api_wiki_search(
     let mut opts = SearchOptions::for_api();
     opts.domain = query.domain.clone();
 
-let SearchResponse { hits, meta } = match state.index_cache.search(
+    let SearchResponse { hits, meta } = match state.index_cache.search(
         &kb,
         &query.q,
         query.limit,

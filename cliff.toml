@@ -34,7 +34,7 @@ body = """
 """
 trim = true
 postprocessors = [
-    { pattern = '<REPO>', replace = "https://github.com/loonghao/rsut_pdf_mcp" },
+    { pattern = '<REPO>', replace = "https://github.com/smile9493/Compendium" },
 ]
 
 [git]

@@ -13,6 +13,6 @@
 import { onMounted } from 'vue'
 
 onMounted(() => {
-  document.title = 'rsut-pdf-mcp 知识库'
+  document.title = 'Compendium 知识库'
 })
 </script>

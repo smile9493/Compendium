@@ -336,7 +336,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
                 "messageTypes": ["text", "image"]
             },
             "extensions": {
-                "rsut": {
+                "compendium": {
                     "outputSchema": true,
                     "contractVersion": pdf_mcp_contracts::CONTRACT_VERSION,
                     "toolCount": pdf_mcp_contracts::tool_count(),

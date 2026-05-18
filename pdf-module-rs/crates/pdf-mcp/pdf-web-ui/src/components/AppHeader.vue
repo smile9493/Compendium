@@ -7,7 +7,7 @@
       </button>
       <span class="logo">
         <BookOpen :size="15" />
-        rsut-pdf-mcp
+        Compendium
       </span>
       <select
         v-if="workspaceStore.workspaces.length"
