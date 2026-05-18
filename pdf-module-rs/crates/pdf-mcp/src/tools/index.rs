@@ -11,10 +11,7 @@ use pdf_core::knowledge::{
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{CompileJobStore, QualitySnapshotStore};
 use pdf_mcp_contracts::{
-    AgentCenterOut, CheckQualityOutput, ExportConceptMapOutput, FindOrphansOutput,
-    GetAgentContextOutput, GetCompilationContextInput, GetCompilationContextOutput,
-    GetEntryContextOutput, PatchWikiEntryOutput, PromptExcerptOut, RebuildIndexOutput,
-    RelatedSnippetOut, SearchHitOut, SearchKnowledgeOutput, SearchMetaOut, SuggestLinksOutput,
+    GetCompilationContextInput, GetCompilationContextOutput, PromptExcerptOut,
 };
 use tracing::instrument;
 
