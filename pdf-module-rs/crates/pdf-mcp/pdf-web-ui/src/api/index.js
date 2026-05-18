@@ -75,8 +75,8 @@ export const api = {
     return request(`/wiki/entries/${encodeURIComponent(path)}`)
   },
 
-  searchWiki(query, limit = 30, domain = null, signal = null) {
-    const params = new URLSearchParams({ q: query, limit: String(limit) })
+  searchWiki(query, limit = 30, domain = null, mode = 'hybrid', signal = null) {
+    const params = new URLSearchParams({ q: query, limit: String(limit), mode })
     if (domain) params.set('domain', domain)
     return request(`/wiki/search?${params}`, { signal })
   },
@@ -129,5 +129,27 @@ export const api = {
       skipJsonContentType: true,
       timeout: 120000,
     })
+  },
+
+  compileUploaded(fileId, domain = null) {
+    return request('/compile/upload', {
+      method: 'POST',
+      body: JSON.stringify({ file_id: fileId, domain }),
+      timeout: 300000,
+    })
+  },
+
+  triggerIncrementalCompile() {
+    return request('/compile/incremental', { method: 'POST', timeout: 300000 })
+  },
+
+  getQualitySummary() {
+    return request('/quality/summary')
+  },
+
+  getQualityIssues(limit = 50, severity = null) {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (severity) params.set('severity', severity)
+    return request(`/quality/issues?${params}`)
   },
 }

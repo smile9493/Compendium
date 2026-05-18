@@ -341,7 +341,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
                 "messageTypes": ["text", "image"]
             }
         },
-        "instructions": "Knowledge engine with 26 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, compile_uploaded_pdf, incremental_compile, recompile_entry, aggregate_entries, check_quality. Indexing: search_knowledge, rebuild_index, get_entry_context, find_orphans, suggest_links, export_concept_map. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status.",
+        "instructions": "Knowledge engine with 30 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, compile_uploaded_pdf, incremental_compile, recompile_entry, aggregate_entries, check_quality, save_wiki_entry. Indexing: search_knowledge (hybrid/keyword/semantic), rebuild_index, get_entry_context, get_agent_context, find_orphans, suggest_links, export_concept_map, preview_wiki_patch, patch_wiki_entry. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status, show_wiki_browser.",
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)

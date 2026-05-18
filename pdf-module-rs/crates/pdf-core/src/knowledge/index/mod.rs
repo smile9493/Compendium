@@ -20,7 +20,10 @@ pub mod tokenizer;
 pub mod vector;
 
 pub use community::{detect_communities, Community};
-pub use facade::{graph, rebuild_all, search, wiki_dir, RebuildStats};
+pub use facade::{
+    graph, rebuild_all, rebuild_vectors, reindex_entry, search, search_with_mode, wiki_dir,
+    RebuildStats, SearchMode,
+};
 pub use fulltext::FulltextIndex;
 pub use fulltext_shard::FulltextShardManager;
 pub use graph::GraphIndex;

@@ -2,6 +2,7 @@ mod extract;
 mod index;
 mod knowledge;
 mod management;
+mod post_compile;
 mod resources;
 
 pub use extract::*;
@@ -51,7 +52,7 @@ impl ToolContext {
 }
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(27);
+    let mut tools = Vec::with_capacity(30);
     tools.extend(extract_tool_definitions());
     tools.extend(knowledge_tool_definitions());
     tools.extend(index_tool_definitions());
@@ -78,6 +79,9 @@ pub async fn dispatch_tool(
         "search_knowledge" => handle_search_knowledge(args).await,
         "rebuild_index" => handle_rebuild_index(args).await,
         "get_entry_context" => handle_get_entry_context(args).await,
+        "get_agent_context" => handle_get_agent_context(args).await,
+        "preview_wiki_patch" => handle_preview_wiki_patch(args).await,
+        "patch_wiki_entry" => handle_patch_wiki_entry(args).await,
         "find_orphans" => handle_find_orphans(args).await,
         "suggest_links" => handle_suggest_links(args).await,
         "export_concept_map" => handle_export_concept_map(args).await,
@@ -123,14 +127,14 @@ mod tests {
     #[test]
     fn test_all_tool_definitions_count() {
         let tools = all_tool_definitions();
-        assert_eq!(tools.len(), 27, "Expected 27 tools total");
+        assert_eq!(tools.len(), 30, "Expected 30 tools total");
     }
 
     #[test]
     fn test_all_tool_definitions_unique_names() {
         let tools = all_tool_definitions();
         let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names.len(), 27, "All tool names should be unique");
+        assert_eq!(names.len(), 30, "All tool names should be unique");
     }
 
     #[test]

@@ -33,7 +33,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Json, Redirect};
 use axum::routing::{delete, get, post};
 use axum::Router;
@@ -43,17 +43,23 @@ use tracing::{info, instrument};
 
 use pdf_core::knowledge::index::MetadataStore;
 use pdf_core::knowledge::renderer::WikiRenderer;
-use pdf_core::knowledge::{graph, rebuild_all, search};
-use pdf_core::management::{CompileStatusStore, ConfigManager, HealthReporter};
+use pdf_core::knowledge::quality::analyze_wiki;
+use pdf_core::knowledge::{graph, rebuild_all, search_with_mode, KnowledgeEngine, SearchMode};
+use pdf_core::management::{
+    CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter, QualitySnapshotStore,
+};
+use pdf_core::McpPdfPipeline;
 
 use crate::embed::Assets;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
+use crate::tools::post_compile::post_compile_success;
 use crate::upload::UploadStore;
 
 #[derive(Clone)]
 pub struct HttpState {
     pub kb_path: Option<PathBuf>,
     pub upload_store: Option<Arc<UploadStore>>,
+    pub pipeline: Option<Arc<McpPdfPipeline>>,
     pub http_metrics: Option<Arc<HttpMetrics>>,
 }
 
@@ -93,6 +99,11 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/config/{key}", delete(api_config_remove))
         .route("/api/health", get(api_health))
         .route("/api/compile/status", get(api_compile_status))
+        .route("/api/compile/incremental", post(api_compile_incremental))
+        .route("/api/compile/upload", post(api_compile_upload))
+        .route("/api/upload", post(api_upload))
+        .route("/api/quality/summary", get(api_quality_summary))
+        .route("/api/quality/issues", get(api_quality_issues))
         .route("/api/index/rebuild", post(api_index_rebuild))
         // ── SPA (legacy redirects) ──
         .route("/", get(|| async { Redirect::permanent("/app/") }))
@@ -222,6 +233,8 @@ struct SearchQuery {
     limit: usize,
     #[serde(default)]
     domain: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -243,7 +256,13 @@ async fn api_wiki_search(
         return Json(serde_json::json!({"results": [], "total": 0}));
     }
 
-    let hits = match search(&kb, &query.q, query.limit) {
+    let mode = query
+        .mode
+        .as_deref()
+        .map(SearchMode::parse)
+        .unwrap_or(SearchMode::Hybrid);
+
+    let hits = match search_with_mode(&kb, &query.q, query.limit, mode) {
         Ok(h) => h,
         Err(e) => {
             return Json(serde_json::json!({
@@ -391,21 +410,27 @@ async fn api_health(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
 
     let reporter = HealthReporter::new(&kb);
     match reporter.report() {
-        Ok(report) => Json(serde_json::json!({
-            "total_entries": report.total_entries,
-            "orphan_count": report.orphan_count,
-            "contradiction_count": report.contradiction_count,
-            "broken_link_count": report.broken_link_count,
-            "index_size_mb": report.index_size_bytes / 1024 / 1024,
-            "graph_nodes": report.graph_node_count,
-            "graph_edges": report.graph_edge_count,
-            "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
-            "domains": report.domains,
-            "last_compile": report.last_compile.map(|t| t.to_rfc3339()),
-            "generated_at": report.generated_at.to_rfc3339(),
-            "report_text": report.to_string(),
-        }))
-        .into_response(),
+        Ok(report) => {
+            let quality_snapshot = QualitySnapshotStore::new(&kb)
+                .read()
+                .unwrap_or_default();
+            Json(serde_json::json!({
+                "total_entries": report.total_entries,
+                "orphan_count": report.orphan_count,
+                "contradiction_count": report.contradiction_count,
+                "broken_link_count": report.broken_link_count,
+                "index_size_mb": report.index_size_bytes / 1024 / 1024,
+                "graph_nodes": report.graph_node_count,
+                "graph_edges": report.graph_edge_count,
+                "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
+                "domains": report.domains,
+                "last_compile": report.last_compile.map(|t| t.to_rfc3339()),
+                "generated_at": report.generated_at.to_rfc3339(),
+                "report_text": report.to_string(),
+                "quality_snapshot": quality_snapshot,
+            }))
+            .into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
@@ -494,6 +519,245 @@ async fn api_config_remove(
     }
 }
 
+#[instrument(skip(state, multipart))]
+async fn api_upload(
+    State(state): State<Arc<HttpState>>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let store = match &state.upload_store {
+        Some(s) => s,
+        None => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Upload not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name() != Some("file") {
+            continue;
+        }
+        let filename = field.file_name().unwrap_or("upload.pdf").to_string();
+        let data = match field.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                return (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        };
+        match store.store(&data, &filename) {
+            Ok(file_id) => {
+                return Json(serde_json::json!({
+                    "file_id": file_id,
+                    "filename": filename,
+                    "size_bytes": data.len(),
+                }))
+                .into_response();
+            }
+            Err(e) => {
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    (
+        axum::http::StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({"error": "No file field in multipart body"})),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct CompileUploadBody {
+    file_id: String,
+    domain: Option<String>,
+}
+
+#[instrument(skip(state, body))]
+async fn api_compile_upload(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<CompileUploadBody>,
+) -> impl IntoResponse {
+    let kb = match kb_or_error(&state) {
+        Ok(k) => k,
+        Err(r) => return r,
+    };
+    let pipeline = match &state.pipeline {
+        Some(p) => Arc::clone(p),
+        None => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Pipeline not configured"})),
+            )
+                .into_response();
+        }
+    };
+    let upload_store = match &state.upload_store {
+        Some(s) => s,
+        None => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Upload not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    let uploaded = match upload_store.get(&body.file_id) {
+        Some(u) => u,
+        None => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "File not found or expired"})),
+            )
+                .into_response();
+        }
+    };
+
+    let store = CompileStatusStore::new(&kb);
+    let guard = match store.begin_compile() {
+        Ok(g) => g,
+        Err(e) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let engine = match KnowledgeEngine::new(pipeline, &kb) {
+        Ok(e) => e,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let result = match engine
+        .compile_to_wiki(&uploaded.temp_path, body.domain.as_deref())
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = guard.finish_success(CompileFinishStats {
+        entries_compiled: result.entries.len(),
+        entries_skipped: 0,
+    }) {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response();
+    }
+
+    upload_store.remove(&body.file_id);
+    post_compile_success(&kb);
+
+    Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
+}
+
+#[instrument(skip(state))]
+async fn api_compile_incremental(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    let kb = match kb_or_error(&state) {
+        Ok(k) => k,
+        Err(r) => return r,
+    };
+    let pipeline = match &state.pipeline {
+        Some(p) => Arc::clone(p),
+        None => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Pipeline not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    let store = CompileStatusStore::new(&kb);
+    let guard = match store.begin_compile() {
+        Ok(g) => g,
+        Err(e) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let engine = match KnowledgeEngine::new(pipeline, &kb) {
+        Ok(e) => e,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let raw_dir = engine.raw_dir();
+    let result = match engine.incremental_compile(&raw_dir).await {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = guard.finish_success(CompileFinishStats {
+        entries_compiled: result.compiled,
+        entries_skipped: result.skipped,
+    }) {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response();
+    }
+
+    post_compile_success(&kb);
+    Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
+}
+
+fn kb_or_error(state: &HttpState) -> Result<PathBuf, axum::response::Response> {
+    state.kb_path.clone().ok_or_else(|| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "No knowledge base configured"})),
+        )
+            .into_response()
+    })
+}
+
 #[instrument(skip(state))]
 async fn api_compile_status(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let kb = match &state.kb_path {
@@ -502,14 +766,27 @@ async fn api_compile_status(State(state): State<Arc<HttpState>>) -> impl IntoRes
     };
 
     match CompileStatusStore::new(&kb).read() {
-        Ok(record) => match serde_json::to_value(&record) {
-            Ok(v) => Json(v).into_response(),
+        Ok(record) => {
+            let quality_snapshot = QualitySnapshotStore::new(&kb)
+                .read()
+                .unwrap_or_default();
+            match serde_json::to_value(&record) {
+            Ok(mut v) => {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert(
+                        "quality_snapshot".to_string(),
+                        serde_json::to_value(&quality_snapshot).unwrap_or(serde_json::json!({})),
+                    );
+                }
+                Json(v).into_response()
+            }
             Err(e) => (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": format!("Serialize error: {}", e)})),
             )
                 .into_response(),
-        },
+            }
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
@@ -539,8 +816,78 @@ async fn api_index_rebuild(State(state): State<Arc<HttpState>>) -> impl IntoResp
             "fulltext_entries_indexed": stats.fulltext_entries_indexed,
             "graph_nodes": stats.graph_nodes,
             "graph_edges": stats.graph_edges,
+            "vector_entries_indexed": stats.vector_entries_indexed,
         }))
         .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct QualityIssuesQuery {
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default)]
+    severity: Option<String>,
+}
+
+#[instrument(skip(state))]
+async fn api_quality_summary(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
+    let kb = match &state.kb_path {
+        Some(p) => p.clone(),
+        None => return Json(serde_json::json!({})).into_response(),
+    };
+    match QualitySnapshotStore::new(&kb).read() {
+        Ok(snapshot) => Json(snapshot).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[instrument(skip(state))]
+async fn api_quality_issues(
+    State(state): State<Arc<HttpState>>,
+    Query(query): Query<QualityIssuesQuery>,
+) -> impl IntoResponse {
+    let kb = match &state.kb_path {
+        Some(p) => p.clone(),
+        None => return Json(serde_json::json!({"issues": []})).into_response(),
+    };
+    let wiki_dir = kb.join("wiki");
+    if !wiki_dir.exists() {
+        return Json(serde_json::json!({"issues": []})).into_response();
+    }
+    match analyze_wiki(&wiki_dir) {
+        Ok(report) => {
+            let mut issues: Vec<serde_json::Value> = report
+                .issues
+                .iter()
+                .map(|i| {
+                    serde_json::json!({
+                        "severity": i.severity.to_string(),
+                        "entry_path": i.entry_path,
+                        "message": i.message,
+                    })
+                })
+                .collect();
+            if let Some(ref sev) = query.severity {
+                let s = sev.to_uppercase();
+                issues.retain(|i| {
+                    i.get("severity")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|x| x.to_uppercase().starts_with(&s))
+                });
+            }
+            issues.truncate(query.limit);
+            Json(serde_json::json!({"issues": issues, "total": issues.len()})).into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),

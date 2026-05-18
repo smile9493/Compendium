@@ -17,6 +17,24 @@
           </button>
         </div>
         <div class="search-header-right">
+          <div class="search-mode-toggle">
+            <button
+              type="button"
+              class="search-facet-btn"
+              :class="{ active: searchStore.searchMode === 'hybrid' }"
+              @click="setMode('hybrid')"
+            >
+              混合
+            </button>
+            <button
+              type="button"
+              class="search-facet-btn"
+              :class="{ active: searchStore.searchMode === 'keyword' }"
+              @click="setMode('keyword')"
+            >
+              关键词
+            </button>
+          </div>
           <span class="sh-hint">
             <span class="kbd">↑↓</span> 导航
             <span class="kbd">Enter</span> 打开
@@ -131,6 +149,13 @@ function clearSearch() {
   searchStore.triggerSearch('')
 }
 
+function setMode(mode) {
+  searchStore.searchMode = mode
+  if (searchStore.query.trim().length >= 2) {
+    searchStore.triggerSearch(searchStore.query)
+  }
+}
+
 watch(() => searchStore.open, async (val) => {
   if (val) {
     await nextTick()
@@ -139,9 +164,11 @@ watch(() => searchStore.open, async (val) => {
 })
 
 function scoreTier(score) {
+  if (score >= 0.03) return { label: '极高', cls: 'score-extreme' }
+  if (score >= 0.02) return { label: '高', cls: 'score-high' }
+  if (score >= 0.01) return { label: '中', cls: 'score-med' }
   if (score >= 20) return { label: '极高', cls: 'score-extreme' }
   if (score >= 5) return { label: '高', cls: 'score-high' }
-  if (score >= 1) return { label: '中', cls: 'score-med' }
   return { label: '低', cls: 'score-low' }
 }
 
@@ -150,3 +177,17 @@ function openResult(r) {
   openEntry(r.path)
 }
 </script>
+
+<style scoped>
+.search-mode-toggle {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+.search-header-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+</style>

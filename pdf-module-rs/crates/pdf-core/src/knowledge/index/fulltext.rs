@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
-use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy};
+use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, Term};
 use tracing::{debug, info};
 
 use crate::error::{PdfModuleError, PdfResult};
@@ -136,6 +136,77 @@ impl FulltextIndex {
 
         info!(count = count, "Tantivy index rebuilt");
         Ok(count)
+    }
+
+    /// Upsert a single wiki entry by relative path (e.g. `IT/concept.md`).
+    pub fn upsert_entry(&self, wiki_dir: &Path, rel_path: &str) -> PdfResult<()> {
+        let full_path = wiki_dir.join(rel_path);
+        if !full_path.exists() {
+            return Err(PdfModuleError::FileNotFound(
+                full_path.to_string_lossy().to_string(),
+            ));
+        }
+
+        let schema = self.index.schema();
+        let path_field = schema
+            .get_field(FIELD_PATH)
+            .map_err(|e| PdfModuleError::Storage(format!("Missing path field: {}", e)))?;
+
+        let mut writer: IndexWriter = self.index.writer(50_000_000).map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to create tantivy writer: {}", e))
+        })?;
+
+        writer
+            .delete_term(Term::from_field_text(path_field, rel_path))
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to delete term: {}", e)))?;
+
+        let content = fs::read_to_string(&full_path).map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to read {}: {}", rel_path, e))
+        })?;
+
+        let (title, domain, tags, body) = if let Some(entry) = KnowledgeEntry::from_markdown(&content)
+        {
+            let body = content.split("---").nth(2).unwrap_or(&content).to_string();
+            (entry.title, entry.domain, entry.tags.join(" "), body)
+        } else {
+            let filename = full_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("entry");
+            let title = filename.replace(".md", "").replace('_', " ");
+            let body = if content.starts_with("---") {
+                content.split("---").nth(2).unwrap_or(&content).to_string()
+            } else {
+                content.clone()
+            };
+            (title, String::new(), String::new(), body)
+        };
+
+        let title_field = schema.get_field(FIELD_TITLE).expect("field exists");
+        let domain_field = schema.get_field(FIELD_DOMAIN).expect("field exists");
+        let tags_field = schema.get_field(FIELD_TAGS).expect("field exists");
+        let body_field = schema.get_field(FIELD_BODY).expect("field exists");
+
+        writer
+            .add_document(doc!(
+                path_field => rel_path,
+                title_field => title.as_str(),
+                domain_field => domain.as_str(),
+                tags_field => tags.as_str(),
+                body_field => body.as_str(),
+            ))
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to index document: {}", e)))?;
+
+        writer.commit().map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to commit tantivy index: {}", e))
+        })?;
+
+        self.reader.reload().map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to reload reader: {}", e))
+        })?;
+
+        debug!(path = %rel_path, "Tantivy entry upserted");
+        Ok(())
     }
 
     /// Search the index for a query string.

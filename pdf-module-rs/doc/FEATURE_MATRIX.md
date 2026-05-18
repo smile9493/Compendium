@@ -23,8 +23,18 @@ The following `pdf-common` features were removed as unused scaffolding:
 
 All entry points use:
 
-- `pdf_core::knowledge::{search, graph, rebuild_all}` for indexes
+- `pdf_core::knowledge::{search, search_with_mode, graph, rebuild_all, reindex_entry}` for indexes
+  - **Hybrid search** (default): Tantivy CJK + TF-IDF/jieba vectors + RRF (`SearchMode::Hybrid`)
 - `pdf_core::management::CompileStatusStore` for `.rsut_index/compile_status.json`
+- `pdf_core::management::QualitySnapshotStore` for `.rsut_index/quality_snapshot.json`
+
+## Agent tools (Phase 2)
+
+| Tool | Purpose |
+|------|---------|
+| `get_agent_context` | Token-budget context bundle (center + neighbors + related) |
+| `preview_wiki_patch` | Diff preview without write |
+| `patch_wiki_entry` | Structured patch + `reindex_entry` |
 
 ## Web UI
 
