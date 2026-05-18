@@ -106,7 +106,6 @@ impl FeatureFlags {
                         Ok(p) => FlagConfig::percentage(p),
                         Err(_) => FlagConfig::boolean(false),
                     },
-                    _ => FlagConfig::boolean(false),
                 };
                 flags.insert(flag_name, config);
             }
