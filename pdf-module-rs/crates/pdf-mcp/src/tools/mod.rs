@@ -164,9 +164,14 @@ pub(crate) fn create_test_tool_context() -> ToolContext {
 
     let config = ServerConfig::from_env().unwrap_or_default();
     let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-    let cfg_path = std::env::temp_dir().join("rsut_test_workspaces.toml");
+    static NEXT_TEST_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let id = NEXT_TEST_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let cfg_path = std::env::temp_dir().join(format!(
+        "rsut_test_workspaces_{}_{id}.toml",
+        std::process::id()
+    ));
     let registry = Arc::new(WorkspaceRegistry::load(&cfg_path).expect("registry"));
-    let kb_path = std::env::temp_dir().join("rsut_mcp_test_kb");
+    let kb_path = std::env::temp_dir().join(format!("rsut_mcp_test_kb_{}_{id}", std::process::id()));
     std::fs::create_dir_all(&kb_path).expect("kb dir");
     let _ = registry.upsert(WorkspaceEntry {
         id: "default".into(),
