@@ -55,6 +55,12 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { setActiveKbId } from '@/api'
 import { useKeyboard } from '@/composables/useKeyboard'
 import { markdownExcerpt } from '@/utils/path'
+import {
+  MCP_UI_MESSAGE_TYPES,
+  MCP_UI_PROTOCOL_VERSION,
+  MCP_UI_SOURCE_WIKI_BROWSER,
+  mcpTargetOrigin as resolveMcpOrigin,
+} from '@/mcp/protocol'
 import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import RightBar from '@/components/RightBar.vue'
@@ -104,30 +110,27 @@ onMounted(async () => {
   isMcpMode.value = window.parent !== window
 })
 
-function mcpTargetOrigin() {
-  try {
-    if (document.referrer) {
-      return new URL(document.referrer).origin
-    }
-  } catch {
-    /* ignore */
-  }
-  return window.location.origin
-}
-
 function askAi() {
   const entry = wikiStore.currentEntry
   if (!entry || entry.error) return
 
   const payload = {
-    v: 1,
-    type: 'mcp-ask-ai',
-    source: 'wiki-browser',
+    v: MCP_UI_PROTOCOL_VERSION,
+    type: MCP_UI_MESSAGE_TYPES.ASK_AI,
+    source: MCP_UI_SOURCE_WIKI_BROWSER,
     title: entry.title,
     path: wikiStore.currentPath,
     excerpt: markdownExcerpt(entry.body_markdown || '', 2000),
   }
 
-  window.parent.postMessage(payload, mcpTargetOrigin())
+  let origin = window.location.origin
+  try {
+    if (document.referrer) {
+      origin = new URL(document.referrer).origin
+    }
+  } catch {
+    /* ignore */
+  }
+  window.parent.postMessage(payload, resolveMcpOrigin(origin))
 }
 </script>

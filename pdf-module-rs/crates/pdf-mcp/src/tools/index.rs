@@ -1,224 +1,57 @@
 use std::fs;
 
-use crate::protocol::{Content, ToolDefinition};
+use crate::tools::json::json_content;
 use crate::tools::parse_kb_path;
+use pdf_mcp_contracts::{
+    AgentCenterOut, CheckQualityOutput, ExportConceptMapOutput, FindOrphansOutput,
+    GetAgentContextOutput, GetCompilationContextInput, GetCompilationContextOutput,
+    GetEntryContextOutput, PatchWikiEntryOutput, PromptExcerptOut, RebuildIndexOutput,
+    RelatedSnippetOut, SearchHitOut, SearchKnowledgeOutput, SearchMetaOut, SuggestLinksOutput,
+};
+use pdf_core::management::{build_compile_status_json, CompileJobStore, QualitySnapshotStore};
 use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
-    graph, rebuild_all, reindex_entry, search_with_mode, wiki_dir, KnowledgeEntry, SearchMode,
+    graph, rebuild_all, reindex_entry, search_with_options, wiki_dir, KnowledgeEntry, SearchMode,
+    SearchOptions,
 };
 use pdf_core::management::WorkspaceRegistry;
 use tracing::instrument;
 
-pub fn index_tool_definitions() -> Vec<ToolDefinition> {
-    vec![
-        ToolDefinition {
-            name: "search_knowledge".to_string(),
-            description: "Search wiki entries. Default mode `hybrid` fuses Tantivy CJK (jieba) full-text with TF-IDF vector similarity via RRF — not ONNX.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search query"
-                    },
-                    "limit": {
-                        "type": "number",
-                        "description": "Maximum number of results (default: 10)"
-                    },
-                    "mode": {
-                        "type": "string",
-                        "enum": ["keyword", "semantic", "hybrid"],
-                        "description": "keyword=Tantivy only, semantic=TF-IDF vectors, hybrid=RRF merge (default)"
-                    }
-                },
-                "required": ["query"]
-            }),
-        },
-        ToolDefinition {
-            name: "rebuild_index".to_string(),
-            description: "Rebuild all indexes (Tantivy + petgraph + TF-IDF vectors) from wiki Markdown files.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "get_entry_context".to_string(),
-            description: "Get N-hop neighbors of a knowledge entry (by link relationships, tag co-occurrence). Returns connected entries for context expansion.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "entry_path": {
-                        "type": "string",
-                        "description": "Relative path of the entry within wiki/ (e.g. 'it/http2_multiplex.md')"
-                    },
-                    "hops": {
-                        "type": "number",
-                        "description": "Maximum number of hops to traverse (default: 2)"
-                    }
-                },
-                "required": ["entry_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "find_orphans".to_string(),
-            description: "Find knowledge entries with no incoming or outgoing related/contradiction links. These are candidates for integration.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "suggest_links".to_string(),
-            description: "Suggest potential links for a knowledge entry based on tag similarity (Jaccard index). Helps discover hidden connections.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "entry_path": {
-                        "type": "string",
-                        "description": "Relative path of the entry within wiki/"
-                    },
-                    "top_k": {
-                        "type": "number",
-                        "description": "Maximum number of suggestions (default: 10)"
-                    }
-                },
-                "required": ["entry_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "export_concept_map".to_string(),
-            description: "Export a local concept map around an entry as Mermaid.js text. Shows relationships within N hops for visualization.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "entry_path": {
-                        "type": "string",
-                        "description": "Relative path of the center entry within wiki/"
-                    },
-                    "depth": {
-                        "type": "number",
-                        "description": "Number of hops to include (default: 2)"
-                    }
-                },
-                "required": ["entry_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "check_quality".to_string(),
-            description: "Analyze wiki quality: detect missing tags, orphan entries, broken links, style issues. Returns a comprehensive report.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "get_agent_context".to_string(),
-            description: "Token-efficient context bundle for an entry: center body, graph neighbors, and hybrid-related snippets.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" },
-                    "entry_path": { "type": "string", "description": "Relative path within wiki/ (e.g. IT/concept.md)" },
-                    "hops": { "type": "number", "description": "Graph neighbor hops (default: 2)" },
-                    "max_body_chars": { "type": "number", "description": "Max chars for center body (default: 4000)" },
-                    "related_limit": { "type": "number", "description": "Hybrid search hits for related snippets (default: 3)" }
-                },
-                "required": ["entry_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "preview_wiki_patch".to_string(),
-            description: "Preview a structured patch on a wiki entry (unified diff, no write).".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" },
-                    "entry_path": { "type": "string" },
-                    "operations": {
-                        "type": "array",
-                        "description": "replace_section | replace_front_matter | search_replace ops"
-                    }
-                },
-                "required": ["entry_path", "operations"]
-            }),
-        },
-        ToolDefinition {
-            name: "patch_wiki_entry".to_string(),
-            description: "Apply a structured patch to a wiki entry, then reindex. Prefer over save_wiki_entry for small edits.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" },
-                    "entry_path": { "type": "string" },
-                    "operations": { "type": "array" }
-                },
-                "required": ["entry_path", "operations"]
-            }),
-        },
-    ]
-}
+use crate::protocol::Content;
 
-#[instrument(skip(args))]
+
+#[instrument(skip(ctx, args))]
 pub async fn handle_search_knowledge(
-    registry: &WorkspaceRegistry,
+    ctx: &crate::tools::ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(registry, args)?;
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let query = args["query"].as_str().ok_or_else(|| anyhow::anyhow!("Missing query"))?;
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
     let mode = args["mode"].as_str().map(SearchMode::parse).unwrap_or(SearchMode::Hybrid);
 
-    let hits = search_with_mode(&kb_path, query, limit, mode)?;
+    let mut opts = SearchOptions::for_api();
+    if let Some(d) = args["domain"].as_str() {
+        opts.domain = Some(d.to_string());
+    }
+    let response = ctx.index_cache.search(&kb_path, query, limit, mode, opts)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
-        "mode": format!("{:?}", mode).to_lowercase(),
-        "results": hits,
-        "total": hits.len()
+        "mode": response.meta.mode,
+        "meta": response.meta,
+        "results": response.hits,
+        "total": response.hits.len()
     }))?)])
 }
 
-#[instrument(skip(args))]
+#[instrument(skip(ctx, args))]
 pub async fn handle_rebuild_index(
-    registry: &WorkspaceRegistry,
+    ctx: &crate::tools::ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(registry, args)?;
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let stats = rebuild_all(&kb_path)?;
+    ctx.index_cache.invalidate(&kb_path);
 
     let result = serde_json::json!({
         "status": "success",
@@ -235,7 +68,7 @@ pub async fn handle_rebuild_index(
 pub async fn handle_get_entry_context(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -257,7 +90,7 @@ pub async fn handle_get_entry_context(
 pub async fn handle_find_orphans(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
 
     let graph = graph(&kb_path)?;
@@ -279,7 +112,7 @@ pub async fn handle_find_orphans(
 pub async fn handle_suggest_links(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -300,7 +133,7 @@ pub async fn handle_suggest_links(
 pub async fn handle_export_concept_map(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -322,7 +155,7 @@ pub async fn handle_export_concept_map(
 pub async fn handle_check_quality(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let wiki_dir = kb_path.join("wiki");
 
@@ -352,7 +185,7 @@ pub async fn handle_check_quality(
 pub async fn handle_get_agent_context(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -374,9 +207,16 @@ pub async fn handle_get_agent_context(
     let neighbors = graph.get_neighbors(rel, hops);
 
     let related_query = format!("{} {}", entry.title, entry.tags.join(" "));
-    let related_hits =
-        search_with_mode(&kb_path, &related_query, related_limit, SearchMode::Hybrid)?
-            .into_iter()
+    let related_resp = search_with_options(
+        &kb_path,
+        &related_query,
+        related_limit,
+        SearchMode::Hybrid,
+        SearchOptions::for_api(),
+    )?;
+    let related_hits = related_resp
+        .hits
+        .into_iter()
             .filter(|h| h.path != rel)
             .map(|h| {
                 serde_json::json!({
@@ -435,7 +275,7 @@ fn parse_patch_request(args: &serde_json::Value) -> anyhow::Result<WikiPatchRequ
 pub async fn handle_preview_wiki_patch(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let request = parse_patch_request(args)?;
     let result = preview_patch(&kb_path, &request)?;
@@ -446,12 +286,87 @@ pub async fn handle_preview_wiki_patch(
 pub async fn handle_patch_wiki_entry(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let request = parse_patch_request(args)?;
     let result = apply_patch(&kb_path, &request)?;
     reindex_entry(&kb_path, &request.entry_path)?;
+    // Note: cache invalidation happens on full rebuild; single-entry reindex reloads on next search.
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(registry, args))]
+pub async fn handle_get_compilation_context(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: GetCompilationContextInput = crate::tools::json::parse_args(args)?;
+    let kb_path = parse_kb_path(registry, args)?;
+    let store = CompileJobStore::new(&kb_path);
+
+    let job = if let Some(ref id) = input.job_id {
+        Some(store.load_job(id)?)
+    } else {
+        store.active_job()?
+    };
+
+    let view = store.build_view()?;
+    let quality_snapshot = QualitySnapshotStore::new(&kb_path).read().unwrap_or_default();
+
+    let mut prompt_excerpts = Vec::new();
+    if input.include_prompt_excerpts {
+        if let Some(ref j) = job {
+            let max = input.max_chars as usize;
+            for path in &j.artifacts.prompt_paths {
+                if let Ok(text) = fs::read_to_string(path) {
+                    let excerpt = truncate_chars(&text, max);
+                    prompt_excerpts.push(PromptExcerptOut {
+                        path: path.clone(),
+                        excerpt,
+                    });
+                }
+            }
+        }
+    }
+
+    let suggested = match view.pipeline_status.as_deref() {
+        Some("awaiting_agent") => vec![
+            "save_wiki_entry".to_string(),
+            "get_agent_context".to_string(),
+            "complete_compile_job".to_string(),
+        ],
+        Some("running") => vec!["get_compile_status".to_string()],
+        _ => vec!["compile_to_wiki".to_string(), "incremental_compile".to_string()],
+    };
+
+    let job_json = job.as_ref().map(serde_json::to_value).transpose()?;
+    let stages = job_json
+        .as_ref()
+        .and_then(|j| j.get("stages"))
+        .cloned()
+        .unwrap_or(serde_json::json!([]));
+    let artifacts = job_json
+        .as_ref()
+        .and_then(|j| j.get("artifacts"))
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
+    let stats = job_json
+        .as_ref()
+        .and_then(|j| j.get("stats"))
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
+
+    json_content(&GetCompilationContextOutput {
+        active_job_id: view.active_job_id.clone(),
+        pipeline_status: view.pipeline_status.clone(),
+        job: job_json,
+        stages,
+        artifacts,
+        stats,
+        quality_snapshot: serde_json::to_value(&quality_snapshot)?,
+        suggested_next_tools: suggested,
+        prompt_excerpts,
+    })
 }
 
 #[cfg(test)]
@@ -459,28 +374,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_index_tool_definitions() {
-        let defs = index_tool_definitions();
-        assert_eq!(defs.len(), 10);
+    fn test_index_tool_names_in_manifest() {
+        let names: std::collections::HashSet<_> =
+            pdf_mcp_contracts::all_tool_specs().into_iter().map(|s| s.name).collect();
+        for name in [
+            "search_knowledge",
+            "get_compilation_context",
+            "apply_wiki_patch",
+        ] {
+            assert!(names.contains(name), "missing {name}");
+        }
+    }
 
-        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
-        assert!(names.contains(&"search_knowledge"));
-        assert!(names.contains(&"rebuild_index"));
-        assert!(names.contains(&"get_entry_context"));
-        assert!(names.contains(&"find_orphans"));
-        assert!(names.contains(&"suggest_links"));
-        assert!(names.contains(&"export_concept_map"));
-        assert!(names.contains(&"check_quality"));
-        assert!(names.contains(&"get_agent_context"));
-        assert!(names.contains(&"preview_wiki_patch"));
-        assert!(names.contains(&"patch_wiki_entry"));
+    fn test_ctx() -> crate::tools::ToolContext {
+        use pdf_core::knowledge::IndexCache;
+        use pdf_core::{McpPdfPipeline, ServerConfig};
+        use std::sync::Arc;
+
+        let pipeline = Arc::new(McpPdfPipeline::new(&ServerConfig::default()).unwrap());
+        let registry = Arc::new(
+            pdf_core::management::WorkspaceRegistry::load(
+                &std::env::temp_dir().join("rsut_index_test_workspaces.toml"),
+            )
+            .expect("registry"),
+        );
+        crate::tools::ToolContext::new(pipeline, registry, Arc::new(IndexCache::new()))
     }
 
     #[tokio::test]
     async fn test_search_knowledge_missing_query() {
         let args = serde_json::json!({});
+        let ctx = test_ctx();
 
-        let result = handle_search_knowledge(&args).await;
+        let result = handle_search_knowledge(&ctx, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing query"));
     }
@@ -489,7 +415,8 @@ mod tests {
     async fn test_get_entry_context_missing_entry_path() {
         let args = serde_json::json!({});
 
-        let result = handle_get_entry_context(&args).await;
+        let registry = test_ctx().workspace_registry;
+        let result = handle_get_entry_context(&registry, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
     }
@@ -498,7 +425,8 @@ mod tests {
     async fn test_suggest_links_missing_entry_path() {
         let args = serde_json::json!({});
 
-        let result = handle_suggest_links(&args).await;
+        let registry = test_ctx().workspace_registry;
+        let result = handle_suggest_links(&registry, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
     }
@@ -507,7 +435,8 @@ mod tests {
     async fn test_export_concept_map_missing_entry_path() {
         let args = serde_json::json!({});
 
-        let result = handle_export_concept_map(&args).await;
+        let registry = test_ctx().workspace_registry;
+        let result = handle_export_concept_map(&registry, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
     }

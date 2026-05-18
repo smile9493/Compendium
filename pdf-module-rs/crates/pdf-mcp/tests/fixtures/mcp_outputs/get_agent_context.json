@@ -1,0 +1,13 @@
+{
+  "entry_path": "it/x.md",
+  "center": {
+    "title": "T",
+    "domain": "IT",
+    "tags": [],
+    "front_matter": {},
+    "body": "body"
+  },
+  "neighbors": [],
+  "related_snippets": [],
+  "token_estimate": 10
+}

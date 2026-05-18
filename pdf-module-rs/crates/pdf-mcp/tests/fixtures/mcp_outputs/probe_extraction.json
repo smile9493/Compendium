@@ -1,0 +1,13 @@
+{
+  "backend_id": "pdfium",
+  "extraction_method": "pdfium",
+  "quality_score": 0.95,
+  "needs_vlm": false,
+  "extraction": {
+    "backend_id": "pdfium",
+    "method": "pdfium",
+    "fallback_used": false,
+    "quality_score": 0.95,
+    "needs_vlm": false
+  }
+}

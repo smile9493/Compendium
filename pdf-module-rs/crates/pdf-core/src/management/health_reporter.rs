@@ -79,6 +79,7 @@ impl HealthReporter {
             domains: quality_report.domains.into_iter().collect(),
             last_compile,
             generated_at: Utc::now(),
+            extraction: None,
         })
     }
 

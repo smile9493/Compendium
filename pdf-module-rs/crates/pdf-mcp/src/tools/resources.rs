@@ -14,13 +14,21 @@ pub fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
                 "uri": "ui://wiki/browser",
                 "name": "Wiki Browser",
                 "description": "Interactive wiki knowledge browser with tree navigation, full-text search, concept maps, and backlinks. Built with Vue3 SPA.",
-                "mimeType": "text/html"
+                "mimeType": "text/html",
+                "annotations": {
+                    "audience": ["user"],
+                    "priority": 0.8
+                }
             },
             {
                 "uri": "ui://dashboard/health",
                 "name": "Knowledge Health Dashboard",
                 "description": "Dashboard showing knowledge base health metrics, domain distribution, index statistics, and server configuration.",
-                "mimeType": "text/html"
+                "mimeType": "text/html",
+                "annotations": {
+                    "audience": ["user"],
+                    "priority": 0.7
+                }
             }
         ]
     });

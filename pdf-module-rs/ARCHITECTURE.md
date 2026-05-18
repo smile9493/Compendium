@@ -186,8 +186,9 @@ knowledge_base/
 | `rebuild_index` | 完全重建 Tantivy + petgraph + vector |
 | `get_entry_context` | N 跳邻居发现 |
 | `get_agent_context` | Agent 上下文包 (body + neighbors + related) |
+| `get_compilation_context` | Compile job 上下文 (stages, prompts, suggested tools) |
 | `preview_wiki_patch` | 补丁预览 (unified diff) |
-| `patch_wiki_entry` | 结构化补丁 + 单条 reindex |
+| `patch_wiki_entry` / `apply_wiki_patch` | 结构化补丁 + 单条 reindex（别名） |
 | `find_orphans` | 孤立条目检测 |
 | `suggest_links` | Jaccard 相似度链接建议 |
 | `export_concept_map` | Mermaid.js 概念图导出 |

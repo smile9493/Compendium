@@ -21,7 +21,15 @@
  * @property {string} domain
  * @property {number} score
  * @property {string} snippet
- * @property {number} [match_count]
+ * @property {number} [highlight_count] Display-only snippet highlight count (not Tantivy score)
+ * @property {number} [match_count] @deprecated Use highlight_count
+ */
+
+/** @typedef {object} SearchMeta */
+/**
+ * @property {boolean} index_empty
+ * @property {boolean} used_fallback
+ * @property {string} mode
  */
 
 /** @typedef {object} WikiTreeNode */

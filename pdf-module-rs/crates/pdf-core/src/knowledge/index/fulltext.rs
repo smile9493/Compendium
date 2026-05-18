@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
+use tantivy::query::{BooleanQuery, Occur, QueryParser, TermQuery};
 use tantivy::schema::*;
 use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, Term};
 use tracing::{debug, info};
@@ -15,6 +15,7 @@ use tracing::{debug, info};
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
 use crate::knowledge::index::tokenizer;
+use crate::knowledge::publish_gate::{is_searchable, GateConfig};
 
 /// A single search hit returned by the fulltext index.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -120,8 +121,18 @@ impl FulltextIndex {
             PdfModuleError::Storage(format!("Failed to clear tantivy index: {}", e))
         })?;
 
+        let knowledge_base = wiki_dir.parent().unwrap_or(wiki_dir);
+        let gate_config = GateConfig::load(knowledge_base).unwrap_or_default();
+
         let mut count = 0usize;
-        self.scan_and_index(wiki_dir, wiki_dir, &schema, &mut writer, &mut count)?;
+        self.scan_and_index(
+            wiki_dir,
+            wiki_dir,
+            &schema,
+            &mut writer,
+            &mut count,
+            &gate_config,
+        )?;
 
         writer.commit().map_err(|e| {
             PdfModuleError::Storage(format!("Failed to commit tantivy index: {}", e))
@@ -152,8 +163,21 @@ impl FulltextIndex {
         let content = fs::read_to_string(&full_path)
             .map_err(|e| PdfModuleError::Storage(format!("Failed to read {}: {}", rel_path, e)))?;
 
+        let knowledge_base = wiki_dir.parent().unwrap_or(wiki_dir);
+        let gate_config = GateConfig::load(knowledge_base).unwrap_or_default();
+
         let (title, domain, tags, body) =
             if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                if !is_searchable(&entry, gate_config.quality_min_score) {
+                    writer.commit().map_err(|e| {
+                        PdfModuleError::Storage(format!("Failed to commit tantivy index: {}", e))
+                    })?;
+                    self.reader.reload().map_err(|e| {
+                        PdfModuleError::Storage(format!("Failed to reload reader: {}", e))
+                    })?;
+                    debug!(path = %rel_path, "Skipped non-searchable entry (removed from index)");
+                    return Ok(());
+                }
                 let body = content.split("---").nth(2).unwrap_or(&content).to_string();
                 (entry.title, entry.domain, entry.tags.join(" "), body)
             } else {
@@ -203,7 +227,12 @@ impl FulltextIndex {
         Ok(searcher.num_docs() == 0)
     }
 
-    pub fn search(&self, query_str: &str, limit: usize) -> PdfResult<Vec<SearchHit>> {
+    pub fn search(
+        &self,
+        query_str: &str,
+        limit: usize,
+        domain: Option<&str>,
+    ) -> PdfResult<Vec<SearchHit>> {
         let schema = self.index.schema();
         let body_field = schema
             .get_field(FIELD_BODY)
@@ -229,9 +258,21 @@ impl FulltextIndex {
         let searcher = self.reader.searcher();
         let query_parser =
             QueryParser::for_index(&self.index, vec![title_field, body_field, tags_field]);
-        let query = query_parser.parse_query(query_str).map_err(|e| {
+        let text_query = query_parser.parse_query(query_str).map_err(|e| {
             PdfModuleError::Storage(format!("Invalid query '{}': {}", query_str, e))
         })?;
+
+        let query: Box<dyn tantivy::query::Query> =
+            if let Some(dom) = domain.filter(|d| !d.is_empty()) {
+                let term = Term::from_field_text(domain_field, dom);
+                let domain_query = TermQuery::new(term, IndexRecordOption::Basic);
+                Box::new(BooleanQuery::new(vec![
+                    (Occur::Must, Box::new(text_query)),
+                    (Occur::Must, Box::new(domain_query)),
+                ]))
+            } else {
+                Box::new(text_query)
+            };
 
         let top_docs = searcher
             .search(&query, &TopDocs::with_limit(limit))
@@ -273,6 +314,7 @@ impl FulltextIndex {
         schema: &Schema,
         writer: &mut IndexWriter,
         count: &mut usize,
+        gate_config: &GateConfig,
     ) -> PdfResult<()> {
         if !dir.exists() {
             return Ok(());
@@ -286,7 +328,7 @@ impl FulltextIndex {
             let path = entry.path();
 
             if path.is_dir() {
-                self.scan_and_index(base, &path, schema, writer, count)?;
+                self.scan_and_index(base, &path, schema, writer, count, gate_config)?;
             } else if path.extension().map(|e| e == "md").unwrap_or(false) {
                 let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 // Skip index.md and log.md
@@ -300,6 +342,9 @@ impl FulltextIndex {
 
                     let (title, domain, tags, body) =
                         if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                            if !is_searchable(&entry, gate_config.quality_min_score) {
+                                continue;
+                            }
                             let body = content.split("---").nth(2).unwrap_or(&content).to_string();
                             (entry.title, entry.domain, entry.tags.join(" "), body)
                         } else {

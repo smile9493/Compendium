@@ -1,0 +1,11 @@
+{
+  "active_job_id": "job-1",
+  "pipeline_status": "awaiting_agent",
+  "job": { "job_id": "job-1" },
+  "stages": [],
+  "artifacts": { "prompt_paths": [] },
+  "stats": { "entries_expected": 1, "entries_saved": 0 },
+  "quality_snapshot": {},
+  "suggested_next_tools": ["save_wiki_entry", "complete_compile_job"],
+  "prompt_excerpts": []
+}

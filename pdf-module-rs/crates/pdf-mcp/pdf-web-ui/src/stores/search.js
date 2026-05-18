@@ -12,6 +12,7 @@ export const useSearchStore = defineStore('search', () => {
   const error = ref(null)
   const domainFacets = ref([])
   const searchMode = ref('hybrid')
+  const searchMeta = ref(null)
 
   let debounceTimer = null
   let currentController = null
@@ -24,6 +25,12 @@ export const useSearchStore = defineStore('search', () => {
     selectedIdx.value = -1
     error.value = null
     domainFacets.value = []
+    searchMeta.value = null
+  }
+
+  function clearAndClose() {
+    query.value = ''
+    close()
   }
 
   function setDomainFilter(domain) {
@@ -47,6 +54,7 @@ export const useSearchStore = defineStore('search', () => {
       open.value = false
       error.value = null
       domainFacets.value = []
+      searchMeta.value = null
       return
     }
 
@@ -67,10 +75,14 @@ export const useSearchStore = defineStore('search', () => {
         )
         const entries = data.results || data.entries || data || []
         results.value = entries
+        searchMeta.value = data.meta || null
         open.value = true
         domainFacets.value = data.domain_facets?.length
           ? data.domain_facets
           : extractFacets(entries)
+        if (data.meta?.index_empty && entries.length === 0) {
+          error.value = '全文索引为空，请在编译抽屉中完成编译或重建索引。'
+        }
       } catch (e) {
         if (e.name === 'AbortError') return
         error.value = e.message || 'Search failed'
@@ -114,8 +126,10 @@ export const useSearchStore = defineStore('search', () => {
     error,
     domainFacets,
     searchMode,
+    searchMeta,
     hasResults,
     close,
+    clearAndClose,
     setDomainFilter,
     triggerSearch,
     selectNext,

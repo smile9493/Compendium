@@ -1,188 +1,84 @@
-use crate::protocol::{Content, ToolDefinition};
+use crate::tools::json::{json_content, parse_args};
+use crate::tools::mcp_extraction::envelope_from_router;
 use crate::tools::ToolContext;
 use pdf_core::dto::ExtractOptions;
 use pdf_core::wiki::{AgentPayload, WikiStorage};
+use pdf_mcp_contracts::{
+    ExtrudeToAgentPayloadInput, ExtrudeToAgentPayloadOutput, ExtrudeToServerWikiInput,
+    ExtrudeToServerWikiOutput, ExtractStructuredInput, ExtractStructuredOutput, ExtractTextInput,
+    ExtractTextOutput, GetPageCountInput, GetPageCountOutput, KeywordMatch, SearchKeywordsInput,
+    SearchKeywordsOutput,
+};
 use tracing::instrument;
-
-pub fn extract_tool_definitions() -> Vec<ToolDefinition> {
-    vec![
-        ToolDefinition {
-            name: "extract_text".to_string(),
-            description: "Extract plain text from a PDF file using pdfium engine".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    }
-                },
-                "required": ["file_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "extract_structured".to_string(),
-            description: "Extract structured data (per-page text + bbox) from PDF".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    }
-                },
-                "required": ["file_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "get_page_count".to_string(),
-            description: "Get the number of pages in a PDF file".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    }
-                },
-                "required": ["file_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "search_keywords".to_string(),
-            description: "Search for keywords in a PDF file and return matches with page numbers and context".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    },
-                    "keywords": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Keywords to search for"
-                    },
-                    "case_sensitive": {
-                        "type": "boolean",
-                        "description": "Case sensitive search (default: false)"
-                    },
-                    "context_length": {
-                        "type": "number",
-                        "description": "Characters of context around match (default: 50)"
-                    }
-                },
-                "required": ["file_path", "keywords"]
-            }),
-        },
-        ToolDefinition {
-            name: "extrude_to_server_wiki".to_string(),
-            description: "Extract PDF to server-side wiki (Karpathy paradigm). Rust engine only saves to raw/, AI Agent should read and create atomic wiki entries.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    },
-                    "wiki_base_path": {
-                        "type": "string",
-                        "description": "Base directory for wiki storage (default: ./wiki)"
-                    }
-                },
-                "required": ["file_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "extrude_to_agent_payload".to_string(),
-            description: "Extract PDF and return markdown payload with knowledge compilation instructions for AI Agent to create local wiki entries".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    }
-                },
-                "required": ["file_path"]
-            }),
-        },
-    ]
-}
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_extract_text(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: ExtractTextInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    let extraction = envelope_from_router(ctx, file_path, false)?;
     let result = ctx.pipeline.extract_text(file_path).await?;
-    Ok(vec![Content::text(result.extracted_text)])
+    json_content(&ExtractTextOutput { text: result.extracted_text, extraction })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_extract_structured(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: ExtractStructuredInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    let extraction = envelope_from_router(ctx, file_path, false)?;
     let result = ctx.pipeline.extract_structured(file_path, &ExtractOptions::default()).await?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    let structured = serde_json::to_value(&result)?;
+    json_content(&ExtractStructuredOutput { structured, extraction })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_get_page_count(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: GetPageCountInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    let extraction = envelope_from_router(ctx, file_path, false)?;
     let count = ctx.pipeline.get_page_count(file_path).await?;
-    Ok(vec![Content::text(format!("{}", count))])
+    json_content(&GetPageCountOutput { page_count: count, extraction })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_search_keywords(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: SearchKeywordsInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
-    let keywords: Vec<String> = args["keywords"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("Missing keywords array"))?
-        .iter()
-        .filter_map(|k| k.as_str().map(|s| s.to_string()))
-        .collect();
-
-    if keywords.is_empty() {
+    if input.keywords.is_empty() {
         return Err(anyhow::anyhow!("Keywords array is empty"));
     }
 
-    let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(false);
-    let context_length = args["context_length"].as_u64().unwrap_or(50) as usize;
+    let keywords = &input.keywords;
+    let case_sensitive = input.case_sensitive;
+    let context_length = input.context_length as usize;
+    let extraction = envelope_from_router(ctx, file_path, false)?;
 
     let result = ctx.pipeline.extract_structured(file_path, &ExtractOptions::default()).await?;
     let text = &result.extracted_text;
@@ -242,29 +138,41 @@ pub async fn handle_search_keywords(
         }
     }
 
-    let search_result = serde_json::json!({
-        "total_matches": matches.len(),
-        "pages_with_matches": pages_with_matches.len(),
-        "matches": matches
-    });
+    let parsed_matches: Vec<KeywordMatch> = matches
+        .into_iter()
+        .filter_map(|m| {
+            Some(KeywordMatch {
+                keyword: m["keyword"].as_str()?.to_string(),
+                page: m["page"].as_u64()? as u32,
+                position: m["position"].as_u64()? as usize,
+                context: m["context"].as_str()?.to_string(),
+            })
+        })
+        .collect();
 
-    Ok(vec![Content::text(serde_json::to_string(&search_result)?)])
+    json_content(&SearchKeywordsOutput {
+        total_matches: parsed_matches.len(),
+        pages_with_matches: pages_with_matches.len(),
+        matches: parsed_matches,
+        extraction,
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_extrude_to_server_wiki(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: ExtrudeToServerWikiInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
-    let wiki_base_path = args["wiki_base_path"]
-        .as_str()
+    let extraction = envelope_from_router(ctx, file_path, false)?;
+    let wiki_base_path = input
+        .wiki_base_path
+        .as_deref()
         .map(std::path::Path::new)
         .unwrap_or_else(|| std::path::Path::new("./wiki"));
 
@@ -281,31 +189,31 @@ pub async fn handle_extrude_to_server_wiki(
         .save_raw(&result, file_path, 0.85)
         .map_err(|e| anyhow::anyhow!("Failed to save: {}", e))?;
 
-    let response = serde_json::json!({
-        "status": "success",
-        "raw_path": wiki_result.raw_path.to_string_lossy().to_string(),
-        "index_path": wiki_result.index_path.to_string_lossy().to_string(),
-        "log_path": wiki_result.log_path.to_string_lossy().to_string(),
-        "page_count": wiki_result.page_count,
-        "message": "PDF extracted to raw/. AI Agent should process and create wiki entries.",
-        "next_step": "Use extrude_to_agent_payload to get the prompt for AI Agent, or manually process raw/ content."
-    });
-
-    Ok(vec![Content::text(serde_json::to_string_pretty(&response)?)])
+    json_content(&ExtrudeToServerWikiOutput {
+        status: "success".to_string(),
+        raw_path: wiki_result.raw_path.to_string_lossy().into_owned(),
+        index_path: wiki_result.index_path.to_string_lossy().into_owned(),
+        log_path: wiki_result.log_path.to_string_lossy().into_owned(),
+        page_count: wiki_result.page_count,
+        message: "PDF extracted to raw/. AI Agent should process and create wiki entries."
+            .to_string(),
+        next_step: "Use extrude_to_agent_payload to get the prompt for AI Agent, or manually process raw/ content.".to_string(),
+        extraction,
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_extrude_to_agent_payload(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
-    let file_path_str =
-        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
-    let file_path = std::path::Path::new(file_path_str);
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let input: ExtrudeToAgentPayloadInput = parse_args(args)?;
+    let file_path = std::path::Path::new(&input.file_path);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    let extraction = envelope_from_router(ctx, file_path, false)?;
     let result = ctx
         .pipeline
         .extract_structured(file_path, &ExtractOptions::default())
@@ -315,7 +223,7 @@ pub async fn handle_extrude_to_agent_payload(
     let payload = AgentPayload::from_extraction(&result, file_path, 0.85);
     let markdown = payload.to_markdown();
 
-    Ok(vec![Content::text(markdown)])
+    json_content(&ExtrudeToAgentPayloadOutput { payload: markdown, extraction })
 }
 
 #[cfg(test)]
@@ -331,29 +239,7 @@ mod tests {
     }
 
     fn create_test_context() -> ToolContext {
-        let config = ServerConfig::from_env().unwrap_or_default();
-        let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        let registry = Arc::new(
-            pdf_core::management::WorkspaceRegistry::load(
-                std::env::temp_dir().join("rsut_test_workspaces.toml"),
-            )
-            .expect("registry"),
-        );
-        ToolContext::new(pipeline, registry)
-    }
-
-    #[tokio::test]
-    async fn test_extract_tool_definitions() {
-        let defs = extract_tool_definitions();
-        assert_eq!(defs.len(), 6);
-
-        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
-        assert!(names.contains(&"extract_text"));
-        assert!(names.contains(&"extract_structured"));
-        assert!(names.contains(&"get_page_count"));
-        assert!(names.contains(&"search_keywords"));
-        assert!(names.contains(&"extrude_to_server_wiki"));
-        assert!(names.contains(&"extrude_to_agent_payload"));
+        crate::tools::create_test_tool_context()
     }
 
     #[tokio::test]
@@ -362,7 +248,7 @@ mod tests {
         let args = serde_json::json!({});
         let result = handle_extract_text(&ctx, &args).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing file_path"));
+        assert!(result.unwrap_err().to_string().contains("Invalid tool params"));
     }
 
     #[tokio::test]
@@ -392,8 +278,11 @@ mod tests {
         match result {
             Ok(content) => {
                 assert_eq!(content.len(), 1);
-                assert!(!content[0].text.is_empty());
-                assert!(content[0].text.contains("Nginx") || content[0].text.contains("nginx"));
+                let parsed: serde_json::Value =
+                    serde_json::from_str(&content[0].text).expect("JSON output");
+                let text = parsed["text"].as_str().unwrap_or("");
+                assert!(!text.is_empty());
+                assert!(text.contains("Nginx") || text.contains("nginx"));
             }
             Err(e) => {
                 let err_msg = e.to_string();

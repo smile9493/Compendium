@@ -9,8 +9,13 @@ license = "MIT"
 name = "pdf-mcp"
 path = "src/main.rs"
 
+[lib]
+name = "pdf_mcp"
+path = "src/lib.rs"
+
 [dependencies]
 pdf-core = { workspace = true }
+pdf-mcp-contracts = { workspace = true }
 vlm-visual-gateway = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -22,7 +27,6 @@ anyhow = { workspace = true }
 tokio-util = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }
-pulldown-cmark = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
 tower-http = { workspace = true, features = ["fs"] }
 tower = "0.5"

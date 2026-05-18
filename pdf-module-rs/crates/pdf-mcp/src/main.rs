@@ -70,11 +70,14 @@ async fn main() -> anyhow::Result<()> {
     // Create shared upload store (used by both HTTP and MCP tools)
     let upload_store = Arc::new(upload::UploadStore::new()?);
 
+    let index_cache = Arc::new(pdf_core::knowledge::IndexCache::new());
+
     // Build ToolContext with upload store reference
     let tool_ctx = tools::ToolContext::new_with_upload_store(
         Arc::clone(&pipeline),
         Some(Arc::clone(&upload_store)),
         Arc::clone(&workspace_registry),
+        Arc::clone(&index_cache),
     );
 
     if let Some(port) = http_port {
@@ -88,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
             upload_store: Some(Arc::clone(&upload_store)),
             pipeline: Some(Arc::clone(&pipeline)),
             http_metrics: Some(Arc::clone(&http_metrics)),
+            index_cache: Arc::clone(&index_cache),
         };
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 

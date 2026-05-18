@@ -4,6 +4,7 @@ members = [
     "crates/pdf-common",
     "crates/pdf-macros",
     "crates/pdf-core",
+    "crates/pdf-mcp-contracts",
     "crates/pdf-mcp",
     "crates/pdf-web",
     "crates/pdf-cli",
@@ -40,6 +41,8 @@ parking_lot = "0.12"
 pdf-common = { path = "crates/pdf-common", version = "0.3.0" }
 pdf-macros = { path = "crates/pdf-macros", version = "0.1.0" }
 pdf-core = { path = "crates/pdf-core", version = "0.3.0" }
+pdf-mcp-contracts = { path = "crates/pdf-mcp-contracts", version = "0.3.0" }
+schemars = { version = "0.8", features = ["chrono"] }
 vlm-visual-gateway = { path = "crates/vlm-visual-gateway", version = "0.1.0" }
 prometheus = "0.14"
 memmap2 = "0.9"

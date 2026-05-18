@@ -1,0 +1,8 @@
+{
+  "text": "Sample PDF text",
+  "extraction": {
+    "backend_id": "pdfium",
+    "method": "pdfium",
+    "fallback_used": false
+  }
+}
