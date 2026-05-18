@@ -126,7 +126,7 @@ pub fn sync_status(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<
         .get_manifest("HEAD")?
         .map(|b| serde_json::from_slice::<SyncManifest>(&b))
         .transpose()
-        .map_err(|e| storage_err(&e.to_string()))?;
+        .map_err(|e| storage_err(e.to_string()))?;
     let remote_root = remote_manifest.as_ref().map(|m| m.root_hash.clone());
     let in_sync = remote_root.as_deref() == Some(local.root_hash.as_str());
     Ok(SyncStatus {
@@ -149,7 +149,7 @@ pub fn sync_push(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<Sy
             pushed += 1;
         }
     }
-    let raw = serde_json::to_vec(&manifest).map_err(|e| storage_err(&e.to_string()))?;
+    let raw = serde_json::to_vec(&manifest).map_err(|e| storage_err(e.to_string()))?;
     remote.put_manifest("HEAD", &raw)?;
     persist_local_head(knowledge_base, &manifest)?;
     Ok(SyncReport { pushed, pulled: 0, rebuilt_index_recommended: false })
@@ -160,7 +160,7 @@ pub fn sync_pull(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<Sy
         return Err(PdfModuleError::Storage("remote has no HEAD manifest".into()));
     };
     let manifest: SyncManifest =
-        serde_json::from_slice(&raw).map_err(|e| storage_err(&e.to_string()))?;
+        serde_json::from_slice(&raw).map_err(|e| storage_err(e.to_string()))?;
     let mut pulled = 0usize;
     for (rel, hash) in &manifest.objects {
         let dest = knowledge_base.join(rel);
@@ -180,7 +180,7 @@ fn persist_local_head(knowledge_base: &Path, manifest: &SyncManifest) -> PdfResu
     let dir = sync_dir(knowledge_base);
     fs::create_dir_all(&dir).map_err(storage_err)?;
     fs::write(dir.join("HEAD"), &manifest.root_hash).map_err(storage_err)?;
-    let raw = serde_json::to_vec_pretty(manifest).map_err(|e| storage_err(&e.to_string()))?;
+    let raw = serde_json::to_vec_pretty(manifest).map_err(|e| storage_err(e.to_string()))?;
     fs::write(dir.join("manifest.json"), raw).map_err(storage_err)
 }
 

@@ -13,6 +13,7 @@ pub fn parse_args<T: serde::de::DeserializeOwned>(args: &serde_json::Value) -> a
 }
 
 /// Wrap arbitrary handler JSON in the standard `{ "result": ... }` output envelope.
+#[allow(dead_code)]
 pub fn result_output(value: serde_json::Value) -> serde_json::Value {
     serde_json::json!({ "result": value })
 }

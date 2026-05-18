@@ -25,6 +25,7 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
+#[allow(dead_code)]
 static DEFAULT_FILTER: LazyLock<EnvFilter> =
     LazyLock::new(|| EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")));
 

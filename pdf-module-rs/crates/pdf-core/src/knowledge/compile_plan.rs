@@ -121,8 +121,8 @@ impl KnowledgeEngine {
             {
                 let entry = entry.map_err(|e| PdfModuleError::Storage(e.to_string()))?;
                 let path = entry.path();
-                if path.extension().is_some_and(|e| e == "pdf") {
-                    if cache.needs_compile(&path).unwrap_or(true) {
+                if path.extension().is_some_and(|e| e == "pdf")
+                    && cache.needs_compile(&path).unwrap_or(true) {
                         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
                         let prompt = format!("raw/{stem}.compile_prompt.md");
                         tasks.push(PlanTask {
@@ -136,7 +136,6 @@ impl KnowledgeEngine {
                             }),
                         });
                     }
-                }
             }
         }
 

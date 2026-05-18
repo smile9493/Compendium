@@ -468,15 +468,19 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
         .ok_or_else(|| PdfModuleError::Storage("Failed to parse front matter".to_string()))?;
     let body = content.split("---").nth(2).unwrap_or("").to_string();
 
-    let mut v_idx = load_vector_index(knowledge_base)
-        .or_else(|_| VectorIndex::open_or_create(knowledge_base, VECTOR_DIM))?;
-    if v_idx.is_empty() {
-        let _ = rebuild_vectors(knowledge_base)?;
-        v_idx = load_vector_index(knowledge_base)?;
-    } else {
-        v_idx.index_entry(rel, &entry.title, &entry.domain, &body);
-        v_idx.save()?;
-    }
+    let mut v_idx = {
+        let idx = load_vector_index(knowledge_base)
+            .or_else(|_| VectorIndex::open_or_create(knowledge_base, VECTOR_DIM))?;
+        if idx.is_empty() {
+            let _ = rebuild_vectors(knowledge_base)?;
+            load_vector_index(knowledge_base)
+                .or_else(|_| VectorIndex::open_or_create(knowledge_base, VECTOR_DIM))?
+        } else {
+            idx
+        }
+    };
+    v_idx.index_entry(rel, &entry.title, &entry.domain, &body);
+    v_idx.save()?;
 
     let mut g_idx = GraphIndex::new();
     let _ = g_idx.rebuild(&wd)?;
@@ -580,7 +584,10 @@ fn fs_fallback_search(
             if fp.extension().is_none_or(|e| e != "md") {
                 continue;
             }
-            let rel_path = format!("{}/{}", domain, fp.file_name().unwrap().to_string_lossy());
+            let Some(name) = fp.file_name() else {
+                continue;
+            };
+            let rel_path = format!("{}/{}", domain, name.to_string_lossy());
             let title = fp.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
 
             let Ok(content) = fs::read_to_string(&fp) else {

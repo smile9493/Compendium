@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used)]
-#![allow(clippy::ambiguous_glob_reexports, ambiguous_glob_reexports)]
+#![allow(ambiguous_glob_reexports)]
 
 pub const CONTRACT_VERSION: &str = "1.0.0";
 

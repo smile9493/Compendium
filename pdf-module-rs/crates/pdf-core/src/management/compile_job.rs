@@ -407,8 +407,7 @@ impl CompileJobStore {
             });
         let pipeline_status = job
             .as_ref()
-            .map(|j| serde_json::to_value(&j.pipeline_status).ok())
-            .flatten()
+            .and_then(|j| serde_json::to_value(&j.pipeline_status).ok())
             .and_then(|v| v.as_str().map(String::from));
         Ok(CompileJobView {
             running,
@@ -527,6 +526,25 @@ fn default_record() -> CompileStatusRecord {
     }
 }
 
+/// Build unified compile status JSON for MCP/HTTP (includes optional quality snapshot).
+#[cfg(feature = "knowledge")]
+pub fn build_compile_status_json(knowledge_base: &Path) -> PdfResult<serde_json::Value> {
+    use crate::management::quality_snapshot::QualitySnapshotStore;
+
+    let store = CompileJobStore::new(knowledge_base);
+    let view = store.build_view()?;
+    let mut value = serde_json::to_value(&view)
+        .map_err(|e| PdfModuleError::Storage(format!("Failed to serialize compile view: {e}")))?;
+    let snapshot = QualitySnapshotStore::new(knowledge_base).read().unwrap_or_default();
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "quality_snapshot".to_string(),
+            serde_json::to_value(&snapshot).unwrap_or(serde_json::json!({})),
+        );
+    }
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,23 +589,4 @@ mod tests {
         assert_eq!(view.pipeline_status.as_deref(), Some("awaiting_agent"));
         assert_eq!(view.last_outcome, None);
     }
-}
-
-/// Build unified compile status JSON for MCP/HTTP (includes optional quality snapshot).
-#[cfg(feature = "knowledge")]
-pub fn build_compile_status_json(knowledge_base: &Path) -> PdfResult<serde_json::Value> {
-    use crate::management::quality_snapshot::QualitySnapshotStore;
-
-    let store = CompileJobStore::new(knowledge_base);
-    let view = store.build_view()?;
-    let mut value = serde_json::to_value(&view)
-        .map_err(|e| PdfModuleError::Storage(format!("Failed to serialize compile view: {e}")))?;
-    let snapshot = QualitySnapshotStore::new(knowledge_base).read().unwrap_or_default();
-    if let Some(obj) = value.as_object_mut() {
-        obj.insert(
-            "quality_snapshot".to_string(),
-            serde_json::to_value(&snapshot).unwrap_or(serde_json::json!({})),
-        );
-    }
-    Ok(value)
 }

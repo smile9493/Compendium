@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_default_chain_has_pdfium() {
         let router = ExtractionRouter::default_chain();
-        assert!(router.backend_ids().iter().any(|id| *id == "pdfium"));
+        assert!(router.backend_ids().contains(&"pdfium"));
     }
 
     #[test]

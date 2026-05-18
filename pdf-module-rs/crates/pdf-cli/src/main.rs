@@ -244,8 +244,10 @@ async fn main() -> Result<()> {
         Commands::Index { action } => cmd_index(&cfg, mode, action),
         Commands::Server { action } => cmd_server(action),
         Commands::Proxy => cmd_proxy(&cfg).await,
-        Commands::Workspace { action } => commands::platform::run_workspace(&cfg, action, format)?,
-        Commands::Sync { action } => commands::platform::run_sync(&cfg, mode, action, format)?,
+        Commands::Workspace { action } => {
+            Ok(commands::platform::run_workspace(&cfg, action.clone(), format)?)
+        }
+        Commands::Sync { action } => Ok(commands::platform::run_sync(&cfg, mode, action.clone(), format)?),
     }?;
 
     result.print(format);

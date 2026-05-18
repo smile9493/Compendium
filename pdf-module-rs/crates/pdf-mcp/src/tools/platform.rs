@@ -13,9 +13,7 @@ use crate::tools::mcp_extraction::envelope_from_router;
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::quality_probe::{ExtractionMethod, QualityProbe};
 use pdf_mcp_contracts::{
-    ApplyPatchProposalOutput, ListExtractionPluginsOutput, ListWorkspacesOutput,
-    ProbeExtractionInput, ProbeExtractionOutput, RegisterWorkspaceOutput, SetActiveWorkspaceOutput,
-    SubmitPatchProposalOutput, SyncPullOutput, SyncPushOutput, SyncStatusOutput,
+    ProbeExtractionInput, ProbeExtractionOutput,
 };
 
 pub async fn handle_list_workspaces(

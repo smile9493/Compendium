@@ -11,7 +11,7 @@ use super::{CmdResult, Mode};
 use crate::config::CliConfig;
 use crate::output::OutputFormat;
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 pub enum WorkspaceAction {
     /// List registered workspaces
     List,
@@ -31,7 +31,7 @@ pub enum WorkspaceAction {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 pub enum SyncAction {
     Status {
         #[arg(long)]

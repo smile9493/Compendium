@@ -26,6 +26,7 @@ knowledge = [
 ]
 vlm = ["dep:vlm-visual-gateway"]
 dhat-heap = ["dhat"]
+axum-tracing = []
 
 [dependencies]
 # Always-required: core runtime and serialization

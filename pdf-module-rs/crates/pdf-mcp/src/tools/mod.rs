@@ -198,8 +198,8 @@ pub async fn attach_compile_sampling(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdf_core::{McpPdfPipeline, ServerConfig};
-    use std::sync::Arc;
+    
+    
 
     fn create_test_context() -> ToolContext {
         create_test_tool_context()

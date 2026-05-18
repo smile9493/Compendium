@@ -197,13 +197,12 @@ pub async fn handle_hypothesis_test(
 
     let quality_issues: Vec<_> = enriched
         .iter()
-        .map(|p| {
+        .flat_map(|p| {
             pdf_core::knowledge::quality_issues::issues_from_contradictions(&[(
                 p.entry_a.clone(),
                 p.entry_b.clone(),
             )])
         })
-        .flatten()
         .collect();
 
     let result = serde_json::json!({
@@ -424,8 +423,8 @@ pub async fn handle_mark_plan_task_done(
 mod tests {
     use super::*;
     use crate::tools::ToolContext;
-    use pdf_core::{McpPdfPipeline, ServerConfig};
-    use std::sync::Arc;
+    
+    
 
     fn get_test_pdf_path() -> std::path::PathBuf {
         std::path::PathBuf::from("/opt/pdf-module/深入理解Nginx.PDF")

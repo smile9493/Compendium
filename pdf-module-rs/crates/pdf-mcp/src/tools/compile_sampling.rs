@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use pdf_core::management::compile_job::{CompileJobStore, PipelineStatus};
 use tracing::warn;
 
-use crate::sampling::{Role, SamplingClient, SamplingContent, SamplingMessage, SamplingRequest};
+use crate::sampling::{Role, SamplingContent, SamplingMessage, SamplingRequest};
 use crate::tools::ToolContext;
 
 /// Summary attached to compile tool JSON when sampling succeeds.

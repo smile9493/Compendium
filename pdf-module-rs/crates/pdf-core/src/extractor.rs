@@ -86,12 +86,12 @@ impl McpPdfPipeline {
         #[cfg(feature = "vlm")]
         {
             let metrics = Arc::new(MetricsCollector::with_default_registry());
-            return Self::build_pipeline_with_router(
+            Self::build_pipeline_with_router(
                 config,
                 metrics,
                 VlmConfig::from_env().ok(),
                 Some(router),
-            );
+            )
         }
         #[cfg(not(feature = "vlm"))]
         {
@@ -119,7 +119,7 @@ impl McpPdfPipeline {
         #[cfg(feature = "vlm")]
         {
             let metrics = Arc::new(MetricsCollector::with_default_registry());
-            return Self::build_pipeline(config, metrics, VlmConfig::from_env().ok());
+            Self::build_pipeline(config, metrics, VlmConfig::from_env().ok())
         }
         #[cfg(not(feature = "vlm"))]
         {
@@ -280,6 +280,7 @@ impl McpPdfPipeline {
     }
 
     #[cfg(feature = "vlm")]
+    #[allow(dead_code)]
     async fn extract_text_via_vlm(
         &self,
         ctx: &ExtractionContext,

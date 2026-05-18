@@ -9,12 +9,9 @@ use pdf_core::knowledge::{
     SearchOptions,
 };
 use pdf_core::management::WorkspaceRegistry;
-use pdf_core::management::{build_compile_status_json, CompileJobStore, QualitySnapshotStore};
+use pdf_core::management::{CompileJobStore, QualitySnapshotStore};
 use pdf_mcp_contracts::{
-    AgentCenterOut, CheckQualityOutput, ExportConceptMapOutput, FindOrphansOutput,
-    GetAgentContextOutput, GetCompilationContextInput, GetCompilationContextOutput,
-    GetEntryContextOutput, PatchWikiEntryOutput, PromptExcerptOut, RebuildIndexOutput,
-    RelatedSnippetOut, SearchHitOut, SearchKnowledgeOutput, SearchMetaOut, SuggestLinksOutput,
+    GetCompilationContextInput, GetCompilationContextOutput, PromptExcerptOut,
 };
 use tracing::instrument;
 

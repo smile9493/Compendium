@@ -61,7 +61,6 @@ use pdf_core::McpPdfPipeline;
 use crate::embed::Assets;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
 use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_from_pipeline};
-use crate::tools::post_compile::post_compile_success;
 use crate::upload::UploadStore;
 
 #[derive(Clone)]
@@ -75,14 +74,14 @@ pub struct HttpState {
 }
 
 fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
-    let resolved = if let Some(id) = kb_id {
+    
+    if let Some(id) = kb_id {
         state.workspace_registry.path_for_id(id).ok()
     } else if let Some(ref p) = state.kb_path {
         Some(p.clone())
     } else {
         state.workspace_registry.resolve_kb(None, None).ok()
-    };
-    resolved
+    }
 }
 
 fn normalize_wiki_entry_path(path: &str) -> String {
@@ -672,7 +671,7 @@ async fn api_compile_upload(
 ) -> impl IntoResponse {
     let kb = match kb_or_error(&state, q.kb_id.as_deref()) {
         Ok(k) => k,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let pipeline = match &state.pipeline {
         Some(p) => Arc::clone(p),
@@ -746,7 +745,7 @@ async fn api_compile_incremental(
 ) -> impl IntoResponse {
     let kb = match kb_or_error(&state, q.kb_id.as_deref()) {
         Ok(k) => k,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let pipeline = match &state.pipeline {
         Some(p) => Arc::clone(p),
@@ -789,13 +788,15 @@ async fn api_compile_incremental(
 fn kb_or_error(
     state: &HttpState,
     kb_id: Option<&str>,
-) -> Result<PathBuf, axum::response::Response> {
+) -> Result<PathBuf, Box<axum::response::Response>> {
     resolve_kb_from_request(state, kb_id).ok_or_else(|| {
-        (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "No knowledge base configured"})),
+        Box::new(
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No knowledge base configured"})),
+            )
+                .into_response(),
         )
-            .into_response()
     })
 }
 
@@ -993,10 +994,10 @@ fn count_entries_by_domain(wiki_dir: &PathBuf) -> std::collections::HashMap<Stri
                     if let Ok(files) = std::fs::read_dir(&dp) {
                         for f in files.flatten() {
                             let fp = f.path();
-                            if fp.extension().map_or(false, |e| e == "md")
+                            if fp.extension().is_some_and(|e| e == "md")
                                 && fp
                                     .file_name()
-                                    .map_or(false, |n| !n.to_string_lossy().starts_with('.'))
+                                    .is_some_and(|n| !n.to_string_lossy().starts_with('.'))
                             {
                                 count += 1;
                             }

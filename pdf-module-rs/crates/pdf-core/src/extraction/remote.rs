@@ -54,7 +54,7 @@ impl RemoteExtractionBackend {
     ) -> PdfResult<Vec<Arc<dyn ExtractionBackend>>> {
         let mut backends: Vec<Arc<dyn ExtractionBackend>> = Vec::new();
         let mut sorted = configs;
-        sorted.sort_by(|a, b| b.priority.cmp(&a.priority));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.priority));
         for cfg in sorted {
             backends.push(Arc::new(Self::new(cfg)?));
         }

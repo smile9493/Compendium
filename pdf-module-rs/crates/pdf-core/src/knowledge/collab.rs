@@ -51,7 +51,7 @@ pub struct AuditEvent {
 pub fn append_audit(knowledge_base: &Path, event: AuditEvent) -> PdfResult<()> {
     let dir = rsut_dir(knowledge_base);
     fs::create_dir_all(&dir).map_err(storage_err)?;
-    let line = serde_json::to_string(&event).map_err(|e| storage_err(&e.to_string()))?;
+    let line = serde_json::to_string(&event).map_err(|e| storage_err(e.to_string()))?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -89,7 +89,7 @@ pub fn submit_patch_proposal(
     let dir = proposals_dir(knowledge_base);
     fs::create_dir_all(&dir).map_err(storage_err)?;
     let path = dir.join(format!("{id}.json"));
-    let raw = serde_json::to_string_pretty(&proposal).map_err(|e| storage_err(&e.to_string()))?;
+    let raw = serde_json::to_string_pretty(&proposal).map_err(|e| storage_err(e.to_string()))?;
     fs::write(&path, raw).map_err(storage_err)?;
     append_audit(
         knowledge_base,
@@ -134,7 +134,7 @@ pub fn list_patch_proposals(
         }
         let raw = fs::read_to_string(&path).map_err(storage_err)?;
         let proposal: PatchProposal =
-            serde_json::from_str(&raw).map_err(|e| storage_err(&e.to_string()))?;
+            serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))?;
         if let Some(filter) = status_filter {
             if proposal.status != filter {
                 continue;
@@ -161,7 +161,7 @@ pub fn apply_patch_proposal(
     let raw = fs::read_to_string(&path)
         .map_err(|_| PdfModuleError::Storage(format!("proposal not found: {proposal_id}")))?;
     let proposal: PatchProposal =
-        serde_json::from_str(&raw).map_err(|e| storage_err(&e.to_string()))?;
+        serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))?;
     ensure_lock_free(knowledge_base, &proposal.request.entry_path)?;
     let result = apply_patch(knowledge_base, &proposal.request)?;
     append_audit(
@@ -212,7 +212,7 @@ pub fn acquire_lock(
         holder: holder.to_string(),
         expires_at: now_secs() + ttl,
     };
-    let raw = serde_json::to_string(&lock).map_err(|e| storage_err(&e.to_string()))?;
+    let raw = serde_json::to_string(&lock).map_err(|e| storage_err(e.to_string()))?;
     fs::write(&lock_path, raw).map_err(storage_err)?;
     Ok(lock)
 }
@@ -255,7 +255,7 @@ fn lock_file_path(knowledge_base: &Path, entry_path: &str) -> PathBuf {
 
 fn read_lock(path: &Path) -> PdfResult<EntryLock> {
     let raw = fs::read_to_string(path).map_err(storage_err)?;
-    serde_json::from_str(&raw).map_err(|e| storage_err(&e.to_string()))
+    serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))
 }
 
 fn lock_expired(lock: &EntryLock) -> bool {

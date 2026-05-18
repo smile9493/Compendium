@@ -230,8 +230,8 @@ pub async fn handle_extrude_to_agent_payload(
 mod tests {
     use super::*;
     use crate::tools::ToolContext;
-    use pdf_core::{McpPdfPipeline, ServerConfig};
-    use std::sync::Arc;
+    
+    
     use tempfile::TempDir;
 
     fn get_test_pdf_path() -> std::path::PathBuf {

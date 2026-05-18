@@ -24,8 +24,7 @@ use axum::{
     Json, Router,
 };
 use clap::Parser;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
