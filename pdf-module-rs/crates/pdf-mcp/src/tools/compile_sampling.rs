@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use pdf_core::management::compile_job::{CompileJobStore, PipelineStatus};
 use tracing::warn;
 
-use crate::sampling::{Role, SamplingContent, SamplingMessage, SamplingRequest};
+use crate::sampling::{Role, SamplingClient, SamplingContent, SamplingMessage, SamplingRequest};
 use crate::tools::ToolContext;
 
 /// Summary attached to compile tool JSON when sampling succeeds.
@@ -177,14 +177,14 @@ mod tests {
         let client = Arc::new(SamplingClient::with_sender(5, tx));
         let pipeline = Arc::new(McpPdfPipeline::new(&ServerConfig::default()).expect("pipeline"));
         let registry = Arc::new(
-            pdf_core::management::WorkspaceRegistry::load(&dir.path().join("ws.toml"))
+pdf_core::management::WorkspaceRegistry::load(&dir.path().join("ws.toml"))
                 .expect("reg"),
         );
         let ctx = ToolContext::new(pipeline, registry, Arc::new(IndexCache::new()))
             .with_sampling(Arc::clone(&client));
 
         let job_id = job.job_id.clone();
-        let handle =
+let handle =
             tokio::spawn(async move { maybe_run_compile_sampling(&ctx, &kb, &job_id).await });
 
         if let Some(outgoing) = rx.recv().await {

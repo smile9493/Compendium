@@ -191,6 +191,12 @@ watch(() => props.open, async (val) => {
   }
 })
 
+watch(() => wikiStore.darkTheme, () => {
+  if (props.open && tab.value === 'visual') {
+    renderMermaid()
+  }
+})
+
 function esc(s) {
   if (!s) return ''
   const d = document.createElement('div')

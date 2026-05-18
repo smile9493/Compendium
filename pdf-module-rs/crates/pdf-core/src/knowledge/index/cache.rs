@@ -71,7 +71,14 @@ impl IndexCache {
         opts: SearchOptions,
     ) -> PdfResult<SearchResponse> {
         let indexes = self.get_or_load(knowledge_base)?;
-        search_with_options_ft(knowledge_base, query, limit, mode, opts, Some(&indexes.fulltext))
+search_with_options_ft(
+            knowledge_base,
+            query,
+            limit,
+            mode,
+            opts,
+            Some(&indexes.fulltext),
+        )
     }
 
     pub fn graph(&self, knowledge_base: &Path) -> PdfResult<Arc<KbIndexes>> {

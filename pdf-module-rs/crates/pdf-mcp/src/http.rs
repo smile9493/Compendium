@@ -301,7 +301,7 @@ async fn api_wiki_search(
     let mut opts = SearchOptions::for_api();
     opts.domain = query.domain.clone();
 
-    let SearchResponse { hits, meta } = match state.index_cache.search(
+let SearchResponse { hits, meta } = match state.index_cache.search(
         &kb,
         &query.q,
         query.limit,

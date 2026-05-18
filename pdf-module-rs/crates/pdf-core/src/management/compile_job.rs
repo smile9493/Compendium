@@ -580,7 +580,9 @@ mod tests {
         let store = CompileJobStore::new(dir.path());
 
         let first = store.begin_job(CompileTrigger::SinglePdf).unwrap();
-        store.complete_job(&first.job_id, PipelineStatus::Completed, Some("first".into())).unwrap();
+        store
+            .complete_job(&first.job_id, PipelineStatus::Completed, Some("first".into()))
+            .unwrap();
 
         let second = store.begin_job(CompileTrigger::SinglePdf).unwrap();
         store.set_awaiting_agent(&second.job_id).unwrap();

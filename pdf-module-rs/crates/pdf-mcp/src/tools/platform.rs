@@ -13,12 +13,12 @@ use crate::tools::mcp_extraction::envelope_from_router;
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::quality_probe::{ExtractionMethod, QualityProbe};
 use pdf_mcp_contracts::{
-    ProbeExtractionInput, ProbeExtractionOutput,
+    ApplyPatchProposalOutput, ListExtractionPluginsOutput, ListWorkspacesOutput,
+    ProbeExtractionInput, ProbeExtractionOutput, RegisterWorkspaceOutput, SetActiveWorkspaceOutput,
+    SubmitPatchProposalOutput, SyncPullOutput, SyncPushOutput, SyncStatusOutput,
 };
 
-pub async fn handle_list_workspaces(
-    registry: &WorkspaceRegistry,
-) -> anyhow::Result<Vec<crate::protocol::Content>> {
+pub async fn handle_list_workspaces(registry: &WorkspaceRegistry) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let workspaces = registry.list()?;
     let active = registry.active_id()?;
     let body = serde_json::json!({ "workspaces": workspaces, "active_kb_id": active });

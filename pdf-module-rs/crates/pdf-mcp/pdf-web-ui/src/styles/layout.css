@@ -40,8 +40,10 @@
   align-items: center;
   gap: var(--space-sm);
   padding: 0 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
   box-shadow: var(--shadow-sm);
   z-index: var(--z-header);
   height: var(--header-h);
@@ -298,8 +300,10 @@
 /* ── Sidebar ── */
 .app-sidebar {
   grid-row: 2;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid var(--glass-border);
   box-shadow: 1px 0 0 rgba(0,0,0,0.04);
   overflow-y: auto;
   overflow-x: hidden;
@@ -359,7 +363,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background var(--transition-fast), color var(--transition-fast), padding-left var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), padding-left var(--transition-fast), transform var(--transition-fast);
   border-left: 2px solid transparent;
   position: relative;
   letter-spacing: -0.01em;
@@ -371,6 +375,7 @@
 }
 
 .tree-node:active {
+  transform: scale(0.98);
   background: color-mix(in oklch, var(--surface-hover) 60%, var(--bg));
 }
 
@@ -505,8 +510,10 @@
 /* ── Right Bar ── */
 .app-rightbar {
   grid-row: 2;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid var(--glass-border);
   overflow-y: auto;
   padding: var(--space-sm) 0;
   font-size: 0.71875rem;

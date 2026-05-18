@@ -198,8 +198,6 @@ pub async fn attach_compile_sampling(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     fn create_test_context() -> ToolContext {
         create_test_tool_context()

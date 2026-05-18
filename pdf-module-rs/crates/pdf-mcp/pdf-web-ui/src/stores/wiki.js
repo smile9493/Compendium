@@ -4,6 +4,8 @@ import { api } from '@/api'
 import { i18n } from '@/i18n'
 import { normalizeWikiPath } from '@/utils/path'
 
+import { getMermaid } from '@/api/mermaid'
+
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 export const useWikiStore = defineStore('wiki', () => {
@@ -133,8 +135,13 @@ export const useWikiStore = defineStore('wiki', () => {
 
   function toggleTheme() {
     darkTheme.value = !darkTheme.value
-    document.documentElement.setAttribute('data-theme', darkTheme.value ? 'dark' : 'light')
-    localStorage.setItem('pdf-wiki-theme', darkTheme.value ? 'dark' : 'light')
+    const themeStr = darkTheme.value ? 'dark' : 'light'
+    document.documentElement.setAttribute('data-theme', themeStr)
+    localStorage.setItem('pdf-wiki-theme', themeStr)
+    const mermaid = getMermaid()
+    if (mermaid) {
+      mermaid.initialize({ theme: darkTheme.value ? 'dark' : 'default' })
+    }
   }
 
   function setActiveDomain(domain) {

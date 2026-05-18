@@ -207,6 +207,7 @@ watch(
   () => wikiStore.currentEntry,
   async (entry) => {
     if (!entry || entry.error) return
+    document.title = `${entry.title || 'Untitled'} - rsut-pdf-mcp 知识库`
     await nextTick()
     setupProgress()
     restoreScroll()

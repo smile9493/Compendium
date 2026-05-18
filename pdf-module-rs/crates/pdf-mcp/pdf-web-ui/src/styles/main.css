@@ -250,6 +250,10 @@
   box-shadow: var(--shadow-sm);
 }
 
+.link-card:active {
+  transform: scale(0.97);
+}
+
 .link-card.contradiction {
   color: var(--error);
   border-color: color-mix(in oklch, var(--error) 30%, transparent);
@@ -259,6 +263,10 @@
 .link-card.contradiction:hover {
   border-color: var(--error);
   background: color-mix(in oklch, var(--error) 8%, transparent);
+}
+
+.link-card.contradiction:active {
+  transform: scale(0.97);
 }
 
 /* ── Overlays / Dialogs ── */
@@ -1589,10 +1597,10 @@
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--surface-hover) 0%, color-mix(in oklch, var(--surface-hover) 50%, var(--surface)) 50%, var(--surface-hover) 100%);
+  background: linear-gradient(90deg, var(--shimmer-bg) 0%, var(--shimmer-highlight) 50%, var(--shimmer-bg) 100%);
   background-size: 800px 100%;
   border-radius: var(--radius-sm);
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 .skeleton-text {
@@ -1626,9 +1634,9 @@
   height: 1.25rem;
   width: 60px;
   border-radius: 12px;
-  background: linear-gradient(90deg, var(--surface-hover) 0%, color-mix(in oklch, var(--surface-hover) 50%, var(--surface)) 50%, var(--surface-hover) 100%);
+  background: linear-gradient(90deg, var(--shimmer-bg) 0%, var(--shimmer-highlight) 50%, var(--shimmer-bg) 100%);
   background-size: 800px 100%;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 .skeleton-entry {

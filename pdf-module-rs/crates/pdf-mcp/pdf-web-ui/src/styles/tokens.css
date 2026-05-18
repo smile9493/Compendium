@@ -74,6 +74,12 @@
   --z-dialog: 40;
   --z-toast: 50;
   --z-search: 15;
+
+  /* Glassmorphism & Shimmer */
+  --glass-bg: color-mix(in oklch, var(--surface) 75%, transparent);
+  --glass-border: color-mix(in oklch, var(--border) 50%, transparent);
+  --shimmer-bg: oklch(0.25 0.01 250);
+  --shimmer-highlight: oklch(0.35 0.01 250);
 }
 
 /* Light theme */
@@ -85,6 +91,10 @@
   --text: oklch(0.20 0.01 250);
   --text-secondary: oklch(0.45 0.01 250);
   --text-muted: oklch(0.60 0.01 250);
+  --glass-bg: color-mix(in oklch, var(--surface) 75%, transparent);
+  --glass-border: color-mix(in oklch, var(--border) 50%, transparent);
+  --shimmer-bg: oklch(0.90 0.005 250);
+  --shimmer-highlight: oklch(0.98 0.005 250);
 }
 
 /* ── Reset ── */

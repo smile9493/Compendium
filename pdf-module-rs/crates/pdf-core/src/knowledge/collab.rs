@@ -134,7 +134,7 @@ pub fn list_patch_proposals(
         }
         let raw = fs::read_to_string(&path).map_err(storage_err)?;
         let proposal: PatchProposal =
-            serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))?;
+serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))?;
         if let Some(filter) = status_filter {
             if proposal.status != filter {
                 continue;
