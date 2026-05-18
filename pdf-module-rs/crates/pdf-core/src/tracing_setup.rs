@@ -274,6 +274,14 @@ pub fn init(config: TracingConfig) -> tracing::Level {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    fn with_test_subscriber() -> tracing::subscriber::DefaultGuard {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_test_writer()
+            .set_default()
+    }
 
     #[test]
     fn default_config_is_pretty() {
@@ -298,18 +306,21 @@ mod tests {
 
     #[test]
     fn request_span_generates_id() {
+        let _guard = with_test_subscriber();
         let span = request_span(None);
         assert!(!span.is_disabled());
     }
 
     #[test]
     fn request_span_uses_provided_id() {
+        let _guard = with_test_subscriber();
         let span = request_span(Some("abc-123"));
         assert!(!span.is_disabled());
     }
 
     #[test]
     fn request_span_empty_string_generates() {
+        let _guard = with_test_subscriber();
         let span = request_span(Some(""));
         assert!(!span.is_disabled());
     }

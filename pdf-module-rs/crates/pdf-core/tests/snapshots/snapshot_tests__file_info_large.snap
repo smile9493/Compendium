@@ -1,0 +1,10 @@
+---
+source: crates/pdf-core/tests/snapshot_tests.rs
+assertion_line: 37
+expression: "&info"
+---
+{
+  "file_path": "/data/very-large-report.pdf",
+  "file_size": 536870912,
+  "file_size_mb": 512.0
+}

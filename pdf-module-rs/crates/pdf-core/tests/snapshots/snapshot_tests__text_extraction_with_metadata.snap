@@ -1,0 +1,14 @@
+---
+source: crates/pdf-core/tests/snapshot_tests.rs
+assertion_line: 73
+expression: "&result"
+---
+extracted_text: Structured content
+extraction_metadata:
+  whisper_hash: abc123def456
+  line_metadata:
+    encoding: utf-8
+    has_images: false
+    lines: 42
+metadata:
+  source: snapshot

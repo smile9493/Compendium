@@ -26,8 +26,8 @@ fn tool_names_unique() {
 #[test]
 fn expected_tool_count() {
     // 6 extract + 12 knowledge + 12 index (incl. apply_wiki_patch alias + get_compilation_context)
-    // + 9 management + 10 platform = 49
-    assert_eq!(tool_count(), 49);
+    // + 9 management + 11 platform = 50
+    assert_eq!(tool_count(), 50);
 }
 
 #[test]

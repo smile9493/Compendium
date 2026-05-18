@@ -12,7 +12,7 @@
 //!
 //! Install cargo-insta: `cargo install cargo-insta`
 
-use pdf_core::dto::{FileInfo, TextExtractionResult};
+use pdf_core::dto::{FileInfo, TextExtractionMetadata, TextExtractionResult};
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -49,6 +49,7 @@ fn snapshot_text_extraction_result() {
     let result = TextExtractionResult {
         extracted_text: "Hello World\nThis is page 1 content.".to_string(),
         extraction_metadata: None,
+        metadata: None,
     };
 
     insta::assert_json_snapshot!("text_extraction_result", &result);
@@ -56,8 +57,6 @@ fn snapshot_text_extraction_result() {
 
 #[test]
 fn snapshot_text_extraction_with_metadata() {
-    use pdf_common::dto::TextExtractionMetadata;
-
     let result = TextExtractionResult {
         extracted_text: "Structured content".to_string(),
         extraction_metadata: Some(TextExtractionMetadata {
@@ -68,6 +67,7 @@ fn snapshot_text_extraction_with_metadata() {
                 "has_images": false
             })),
         }),
+        metadata: Some(serde_json::json!({ "source": "snapshot" })),
     };
 
     insta::assert_yaml_snapshot!("text_extraction_with_metadata", &result);
