@@ -262,7 +262,7 @@ pdf-module/
 │   │   ├── pdf-core/      # 提取/知识/并行引擎
 │   │   ├── pdf-mcp/       # MCP 协议服务器
 │   │   ├── pdf-wasm/      # WASM 编译目标
-│   │   ├── pdf-web/       # Web 前端 (Yew)
+│   │   ├── pdf-web/       # 已弃用：管理 API sidecar（请用 pdf-mcp + pdf-web-ui）
 │   │   ├── pdf-cli/       # CLI 工具
 │   │   ├── pdf-dashboard/ # 仪表板服务
 │   │   ├── pdf-macros/    # 派生宏

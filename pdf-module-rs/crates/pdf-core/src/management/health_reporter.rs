@@ -98,26 +98,18 @@ impl HealthReporter {
         if !wiki_dir.exists() {
             return (0, 0);
         }
-        let mut graph = crate::knowledge::GraphIndex::new();
-        match graph.rebuild(wiki_dir) {
-            Ok(node_count) => (node_count, graph.edge_count()),
+        match crate::knowledge::graph(&self.kb_path) {
+            Ok(g) => (g.node_count(), g.edge_count()),
             Err(_) => (0, 0),
         }
     }
 
     /// Read the last compile timestamp from the status file.
     fn read_last_compile_time(&self) -> Option<chrono::DateTime<chrono::Utc>> {
-        let status_path = self.kb_path.join(".rsut_index").join("compile_status.json");
-        if !status_path.exists() {
-            return None;
-        }
-        let content = std::fs::read_to_string(&status_path).ok()?;
-        let record: serde_json::Value = serde_json::from_str(&content).ok()?;
-        record
-            .get("last_finished")
-            .and_then(|v| v.as_str())
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc))
+        super::CompileStatusStore::new(&self.kb_path)
+            .read()
+            .ok()
+            .and_then(|r| r.last_finished)
     }
 }
 

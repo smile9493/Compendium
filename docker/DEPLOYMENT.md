@@ -39,8 +39,8 @@ curl http://localhost:8001/api/health
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| pdf-web | 8000 | Web管理面板 + REST API |
-| pdf-mcp | 8001 | MCP服务器 + HTTP API |
+| pdf-mcp | 8001 | **推荐**：MCP + 统一 HTTP + 内嵌 Wiki UI (`pdf-web-ui`) |
+| pdf-web | 8000 | **已弃用**：仅管理 API sidecar，与 pdf-mcp 重复 |
 
 ## API 端点
 

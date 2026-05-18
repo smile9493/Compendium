@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
 
-/// Rendered Markdown entry with parsed front matter and HTML body.
+/// Rendered Markdown entry with parsed front matter for the Vue SPA.
 #[derive(Debug, Clone, Serialize)]
 pub struct RenderedEntry {
     pub title: String,
@@ -22,9 +22,11 @@ pub struct RenderedEntry {
     pub quality_score: f32,
     pub status: String,
     pub version: u32,
-    /// Markdown body without YAML front matter (for client-side rendering).
+    /// Markdown body without YAML front matter (rendered client-side via `marked`).
     pub body_markdown: String,
-    pub body_html: String,
+    /// Deprecated: server-side HTML is no longer generated; use `body_markdown`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_html: Option<String>,
     pub related: Vec<String>,
     pub contradictions: Vec<String>,
     pub backlinks: Vec<String>,
@@ -172,7 +174,6 @@ impl WikiRenderer {
 
         let body_md = split_front_matter(&content);
         let body_markdown = body_md.to_string();
-        let body_html = markdown_to_html(body_md);
 
         let light = parse_light_meta(&content);
         let entry = KnowledgeEntry::from_markdown(&content);
@@ -244,7 +245,7 @@ impl WikiRenderer {
             status,
             version: entry.as_ref().map(|e| e.version).unwrap_or(0),
             body_markdown,
-            body_html,
+            body_html: None,
             related,
             contradictions,
             backlinks,
@@ -555,9 +556,10 @@ Paragraph with **bold** text.
         let entry = renderer.render_entry("test-entry.md").unwrap();
         assert!(!entry.body_markdown.is_empty());
         assert!(entry.body_markdown.contains("# Hello"));
-        assert!(!entry.body_html.is_empty());
+        assert!(entry.body_html.is_none());
 
         let json = serde_json::to_value(&entry).unwrap();
+        assert!(json.get("body_html").is_none());
         let md = json.get("body_markdown").and_then(|v| v.as_str());
         assert!(md.is_some_and(|s| !s.is_empty()));
     }

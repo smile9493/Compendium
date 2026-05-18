@@ -94,8 +94,8 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 │  pdf-mcp http.rs (HTTP server with oneshot signal)    │
 ├──────────────────────────────────────────────────────┤
 │  Facade Layer (Web UI)                                │
-│  pdf-web (Embedded web panel, axum)                   │
-│  pdf-mcp embed.rs (embedded Vue3 SPA via rust_embed)  │
+│  pdf-mcp http.rs + embed.rs (Vue3 SPA via rust_embed)  │
+│  pdf-web (deprecated legacy management sidecar)       │
 ├──────────────────────────────────────────────────────┤
 │  Core Layer                                           │
 │  pdf-core (extraction, knowledge, parallel)           │
@@ -107,6 +107,8 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 │  pdf-macros (derive macros)                           │
 └──────────────────────────────────────────────────────┘
 ```
+
+See [FEATURE_MATRIX.md](doc/FEATURE_MATRIX.md) for Cargo feature status.
 
 ## Knowledge Base Layout
 
@@ -135,7 +137,7 @@ knowledge_base/
 | `pdf-core` | PdfiumEngine + FileValidator + VlmPipeline + **KnowledgeEngine** + **FulltextIndex** + **GraphIndex** + **VectorIndex** | TF-IDF embedding, batch_embed_all, community detection |
 | `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 23 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
 | `pdf-cli` | 统一 CLI (双模式: local/remote) | `clap` derive, `reqwest` for remote, file upload, knowledge management |
-| `pdf-web` | 轻量嵌入式 Web 面板 (`axum`) | HTTP wiki browsing, knowledge base management |
+| `pdf-web` | **已弃用** 管理 API sidecar (`axum`) | 请使用 `pdf-mcp`（Wiki + 管理 API + 内嵌 `pdf-web-ui`） |
 | `pdf-wasm` | WASM 引擎 | `WasmSlice` zero-copy, `bumpalo` arena, `talc` allocator |
 | `vlm-visual-gateway` | VLM 条件升级网关 | `catch_unwind` FFI levee, Semaphore rate-limiting, exponential backoff |
 

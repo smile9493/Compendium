@@ -1,7 +1,7 @@
-//! # pdf-web
+//! # pdf-web (deprecated)
 //!
-//! API server for rsut-pdf-mcp knowledge base management.
-//! The frontend is a separate Leptos SPA served via nginx.
+//! Legacy management API sidecar. **Use `pdf-mcp` instead**, which serves the same
+//! management endpoints plus the embedded Vue3 wiki UI (`pdf-web-ui`).
 //!
 //! ## Endpoints
 //!
@@ -32,7 +32,10 @@ use std::sync::Arc;
 use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
 
-use pdf_core::management::{ConfigManager, HealthReporter};
+use pdf_core::knowledge::rebuild_all;
+use pdf_core::management::{
+    CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter,
+};
 
 #[derive(Clone)]
 struct AppState {
@@ -58,6 +61,10 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+
+    tracing::warn!(
+        "pdf-web is deprecated; use pdf-mcp for unified HTTP + wiki UI (pdf-web-ui)"
+    );
 
     let cli = Cli::parse();
     let state = AppState {
@@ -204,25 +211,12 @@ async fn api_config_remove(
 }
 
 async fn api_compile_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let status_path = state.kb_path.join(".rsut_index").join("compile_status.json");
-    if !status_path.exists() {
-        return Json(serde_json::json!({
-            "running": false,
-            "last_started": null,
-            "last_finished": null,
-            "last_duration_ms": null,
-            "last_outcome": null,
-            "message": "No compile performed yet.",
-            "history": [],
-        }))
-        .into_response();
-    }
-    match std::fs::read_to_string(&status_path) {
-        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+    match CompileStatusStore::new(&state.kb_path).read() {
+        Ok(record) => match serde_json::to_value(&record) {
             Ok(v) => Json(v).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Parse error: {}", e)})),
+                Json(serde_json::json!({"error": format!("Serialize error: {}", e)})),
             )
                 .into_response(),
         },
@@ -256,35 +250,46 @@ async fn api_compile_trigger(State(state): State<Arc<AppState>>) -> impl IntoRes
                 .into_response()
         }
     };
+    let store = CompileStatusStore::new(&state.kb_path);
+    let guard = match store.begin_compile() {
+        Ok(g) => g,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
     let raw_dir = engine.raw_dir();
     match engine.incremental_compile(&raw_dir).await {
         Ok(result) => {
-            let status_path = state.kb_path.join(".rsut_index").join("compile_status.json");
-            if let Some(parent) = status_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+            if let Err(e) = guard.finish_success(CompileFinishStats {
+                entries_compiled: result.compiled,
+                entries_skipped: result.skipped,
+            }) {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response();
             }
-            let status = serde_json::json!({
-                "running": false,
-                "last_finished": chrono::Utc::now().to_rfc3339(),
-                "last_outcome": "success",
-                "entries_compiled": result.compiled,
-                "entries_skipped": result.skipped,
-                "message": format!("{} compiled, {} skipped", result.compiled, result.skipped),
-            });
-            let _ = std::fs::write(&status_path, serde_json::to_string_pretty(&status).unwrap_or_default());
             Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     }
 }
 
 async fn api_index_rebuild(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let wiki_dir = state.kb_path.join("wiki");
-    if !wiki_dir.exists() {
+    if !state.kb_path.join("wiki").exists() {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "Wiki directory not found"})),
@@ -292,44 +297,18 @@ async fn api_index_rebuild(State(state): State<Arc<AppState>>) -> impl IntoRespo
             .into_response();
     }
 
-    let ft_idx = match pdf_core::FulltextIndex::open_or_create(&state.kb_path) {
-        Ok(idx) => idx,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-    let ft_count = match ft_idx.rebuild(&wiki_dir) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-
-    let mut g_idx = pdf_core::GraphIndex::new();
-    let g_count = match g_idx.rebuild(&wiki_dir) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-
-    Json(serde_json::json!({
-        "status": "success",
-        "fulltext_entries_indexed": ft_count,
-        "graph_nodes": g_count,
-        "graph_edges": g_idx.edge_count(),
-    }))
-    .into_response()
+    match rebuild_all(&state.kb_path) {
+        Ok(stats) => Json(serde_json::json!({
+            "status": "success",
+            "fulltext_entries_indexed": stats.fulltext_entries_indexed,
+            "graph_nodes": stats.graph_nodes,
+            "graph_edges": stats.graph_edges,
+        }))
+        .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
 }

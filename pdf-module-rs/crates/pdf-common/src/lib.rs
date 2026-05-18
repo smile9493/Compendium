@@ -37,12 +37,6 @@ pub mod dto;
 pub mod error;
 pub mod traits;
 
-#[cfg(feature = "auth")]
-pub mod auth;
-#[cfg(feature = "crypto")]
-pub mod crypto;
-#[cfg(feature = "database")]
-pub mod db;
 pub mod feature_flags;
 #[cfg(feature = "i18n")]
 pub mod i18n;
@@ -52,7 +46,5 @@ pub use config::AppConfig;
 pub use config_loader::{load_config, load_config_with_profile, AppSettings};
 #[cfg(feature = "diagnostics")]
 pub use diagnostics::DiagnosticExt;
-#[cfg(feature = "database")]
-pub use db::{create_pool, create_sqlite_pool, run_migrations};
 pub use dto::{ToolContext, ToolExecutionOptions};
 pub use error::{ErrorCategory, PdfError, Result};

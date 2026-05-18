@@ -2,7 +2,7 @@
 name = "pdf-web"
 version = "0.1.0"
 edition = "2021"
-description = "Lightweight embedded web panel for rsut-pdf-mcp knowledge base management"
+description = "Deprecated management API sidecar — use pdf-mcp (HTTP + pdf-web-ui) instead"
 license = "MIT"
 
 [[bin]]

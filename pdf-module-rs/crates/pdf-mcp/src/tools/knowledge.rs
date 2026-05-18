@@ -1,6 +1,7 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::dto::ExtractOptions;
+use pdf_core::management::{CompileFinishStats, CompileStatusStore};
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -169,8 +170,26 @@ pub async fn handle_compile_to_wiki(
     pdf_core::FileValidator::validate_path_safety(pdf_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    let store = CompileStatusStore::new(&kb_path);
+    let guard = store
+        .begin_compile()
+        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
+
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let result = engine.compile_to_wiki(pdf_path, domain).await?;
+    let result = match engine.compile_to_wiki(pdf_path, domain).await {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return Err(e.into());
+        }
+    };
+
+    guard
+        .finish_success(CompileFinishStats {
+            entries_compiled: result.entries.len(),
+            entries_skipped: 0,
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -181,9 +200,27 @@ pub async fn handle_incremental_compile(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
+    let store = CompileStatusStore::new(&kb_path);
+    let guard = store
+        .begin_compile()
+        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
+
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let raw_dir = engine.raw_dir();
-    let result = engine.incremental_compile(&raw_dir).await?;
+    let result = match engine.incremental_compile(&raw_dir).await {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return Err(e.into());
+        }
+    };
+
+    guard
+        .finish_success(CompileFinishStats {
+            entries_compiled: result.compiled,
+            entries_skipped: result.skipped,
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -372,8 +409,26 @@ pub async fn handle_compile_uploaded_pdf(
     let kb_path = parse_kb_path(args)?;
     let domain = args["domain"].as_str();
 
+    let store = CompileStatusStore::new(&kb_path);
+    let guard = store
+        .begin_compile()
+        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
+
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let result = engine.compile_to_wiki(&uploaded.temp_path, domain).await?;
+    let result = match engine.compile_to_wiki(&uploaded.temp_path, domain).await {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return Err(e.into());
+        }
+    };
+
+    guard
+        .finish_success(CompileFinishStats {
+            entries_compiled: result.entries.len(),
+            entries_skipped: 0,
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
     // Clean up the uploaded temp file after successful compile
     upload_store.remove(file_id);

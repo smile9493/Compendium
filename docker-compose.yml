@@ -42,7 +42,7 @@ services:
       - pdf-network
     command: ["pdf-mcp"]
 
-  # ==================== PDF Web Dashboard ====================
+  # ==================== PDF Web (deprecated — use pdf-mcp for Wiki UI) ====================
   pdf-web:
     build:
       context: .

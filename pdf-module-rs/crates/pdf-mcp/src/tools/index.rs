@@ -1,6 +1,6 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::parse_kb_path;
-use pdf_core::{FulltextIndex, GraphIndex};
+use pdf_core::knowledge::{graph, rebuild_all, search};
 use tracing::instrument;
 
 pub fn index_tool_definitions() -> Vec<ToolDefinition> {
@@ -146,33 +146,20 @@ pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
 
-    let idx = FulltextIndex::open_or_create(&kb_path)?;
-
-    let wiki_dir = kb_path.join("wiki");
-    if wiki_dir.exists() && idx.is_empty()? {
-        idx.rebuild(&wiki_dir)?;
-    }
-
-    let hits = idx.search(query, limit)?;
+    let hits = search(&kb_path, query, limit)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&hits)?)])
 }
 
 #[instrument(skip(args))]
 pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
-    let wiki_dir = kb_path.join("wiki");
-
-    let ft_idx = FulltextIndex::open_or_create(&kb_path)?;
-    let ft_count = ft_idx.rebuild(&wiki_dir)?;
-
-    let mut g_idx = GraphIndex::new();
-    let g_count = g_idx.rebuild(&wiki_dir)?;
+    let stats = rebuild_all(&kb_path)?;
 
     let result = serde_json::json!({
         "status": "success",
-        "fulltext_entries_indexed": ft_count,
-        "graph_nodes": g_count,
-        "graph_edges": g_idx.edge_count(),
+        "fulltext_entries_indexed": stats.fulltext_entries_indexed,
+        "graph_nodes": stats.graph_nodes,
+        "graph_edges": stats.graph_edges,
         "message": "All indexes rebuilt from wiki/ files."
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
@@ -186,10 +173,7 @@ pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Resul
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let hops = args["hops"].as_u64().unwrap_or(2) as u32;
 
-    let mut graph = GraphIndex::new();
-    let wiki_dir = kb_path.join("wiki");
-    graph.rebuild(&wiki_dir)?;
-
+    let graph = graph(&kb_path)?;
     let neighbors = graph.get_neighbors(entry_path, hops);
 
     let result = serde_json::json!({
@@ -205,10 +189,7 @@ pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Resul
 pub async fn handle_find_orphans(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
 
-    let mut graph = GraphIndex::new();
-    let wiki_dir = kb_path.join("wiki");
-    graph.rebuild(&wiki_dir)?;
-
+    let graph = graph(&kb_path)?;
     let orphans = graph.find_orphans();
 
     let result = serde_json::json!({
@@ -231,10 +212,7 @@ pub async fn handle_suggest_links(args: &serde_json::Value) -> anyhow::Result<Ve
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let top_k = args["top_k"].as_u64().unwrap_or(10) as usize;
 
-    let mut graph = GraphIndex::new();
-    let wiki_dir = kb_path.join("wiki");
-    graph.rebuild(&wiki_dir)?;
-
+    let graph = graph(&kb_path)?;
     let suggestions = graph.suggest_links(entry_path, top_k);
 
     let result = serde_json::json!({
@@ -253,10 +231,7 @@ pub async fn handle_export_concept_map(args: &serde_json::Value) -> anyhow::Resu
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let depth = args["depth"].as_u64().unwrap_or(2) as u32;
 
-    let mut graph = GraphIndex::new();
-    let wiki_dir = kb_path.join("wiki");
-    graph.rebuild(&wiki_dir)?;
-
+    let graph = graph(&kb_path)?;
     let mermaid = graph.export_concept_map(entry_path, depth);
 
     let result = serde_json::json!({
