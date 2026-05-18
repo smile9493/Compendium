@@ -30,7 +30,7 @@ pub fn extract_page_text(pdf_data: &[u8], page_index: u32) -> String {
     let mut out = String::new();
     let text = String::from_utf8_lossy(pdf_data);
     for line in text.lines() {
-        if line.contains(&marker) {
+        if line.contains(marker) {
             if found == page_index {
                 out.push_str(line);
                 out.push('\n');
