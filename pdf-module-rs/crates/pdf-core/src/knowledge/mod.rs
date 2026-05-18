@@ -28,8 +28,8 @@ pub mod quality_issues;
 pub mod renderer;
 
 pub use collab::{
-    acquire_lock, append_audit, apply_patch_proposal, release_lock, submit_patch_proposal,
-    AuditAction, AuditEvent, EntryLock, PatchProposal,
+    acquire_lock, append_audit, apply_patch_proposal, list_patch_proposals, release_lock,
+    submit_patch_proposal, AuditAction, AuditEvent, EntryLock, PatchProposal, PatchProposalSummary,
 };
 pub use compile_pipeline::{
     complete_compile_job, run_incremental_extract, run_single_pdf_extract, CompleteCompileJobResult,

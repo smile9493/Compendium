@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * Writes minimal generated API types from the Rust OpenAPI test fixture.
- * Run `cargo test -p pdf-mcp api_doc::tests::write_openapi_fixture -- --ignored` first
- * to refresh pdf-mcp/tests/fixtures/openapi.json when schemas change.
+ * Generates TypeScript types from the Rust OpenAPI test fixture.
+ *
+ * Refresh fixture:
+ *   cargo test -p pdf-mcp api_doc::tests::write_openapi_fixture -- --ignored
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = dirname(fileURLToPath(import.meta.url))
-const fixture = join(root, '../../../tests/fixtures/openapi.json')
+const fixture = join(root, '../../tests/fixtures/openapi.json')
 const out = join(root, '../src/api/generated.d.ts')
 
 const fallback = `/** Auto-generated API types (fallback stub). */
@@ -36,10 +38,24 @@ export interface IndexRebuildResponse {
 }
 `
 
-if (existsSync(fixture)) {
-  writeFileSync(out, `/** Generated from ${fixture} — run npm run generate:api after OpenAPI changes. */\nexport {}\n`)
-  console.log('OpenAPI fixture found; extend export-openapi-types.mjs to invoke openapi-typescript.')
-} else {
+if (!existsSync(fixture)) {
   writeFileSync(out, fallback)
-  console.log('Wrote fallback generated.d.ts')
+  console.warn('OpenAPI fixture missing; wrote fallback generated.d.ts')
+  process.exit(0)
 }
+
+const uiRoot = join(root, '..')
+const localBin = join(uiRoot, 'node_modules', 'openapi-typescript', 'bin', 'cli.js')
+const cmd = existsSync(localBin) ? process.execPath : 'npx'
+const args = existsSync(localBin)
+  ? [localBin, fixture, '-o', out]
+  : ['openapi-typescript', fixture, '-o', out]
+
+const result = spawnSync(cmd, args, { cwd: uiRoot, stdio: 'inherit', shell: false })
+
+if (result.status !== 0) {
+  console.warn('openapi-typescript unavailable; keeping committed generated.d.ts in sync manually')
+  process.exit(0)
+}
+
+console.log(`Wrote ${out} from ${fixture}`)

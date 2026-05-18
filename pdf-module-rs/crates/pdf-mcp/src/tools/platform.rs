@@ -1,6 +1,8 @@
 //! Phase 3 platform tools: workspaces, extraction plugins, sync, collaboration.
 
-use pdf_core::knowledge::{apply_patch_proposal, submit_patch_proposal, WikiPatchRequest};
+use pdf_core::knowledge::{
+    apply_patch_proposal, list_patch_proposals, submit_patch_proposal, WikiPatchRequest,
+};
 use pdf_core::management::{
     sync_pull, sync_push, sync_status, FileSyncRemote, WorkspaceEntry, WorkspaceRegistry,
 };
@@ -139,4 +141,16 @@ pub async fn handle_apply_patch_proposal(
     let result = apply_patch_proposal(&kb, proposal_id, args["actor"].as_str().map(str::to_string))
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+pub async fn handle_list_patch_proposals(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb = parse_kb_path(registry, args)?;
+    let status = args["status"].as_str();
+    let proposals = list_patch_proposals(&kb, status).map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(vec![Content::text(
+        serde_json::to_string_pretty(&serde_json::json!({ "proposals": proposals }))?,
+    )])
 }

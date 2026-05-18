@@ -128,6 +128,20 @@ pub struct ApplyPatchProposalOutput {
     pub result: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ListPatchProposalsInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ListPatchProposalsOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub proposals: serde_json::Value,
+}
+
 pub fn tool_specs() -> Vec<McpToolSpec> {
     vec![
         McpToolSpec::new::<ListWorkspacesInput, ListWorkspacesOutput>(
@@ -169,6 +183,10 @@ pub fn tool_specs() -> Vec<McpToolSpec> {
         McpToolSpec::new::<ApplyPatchProposalInput, ApplyPatchProposalOutput>(
             "apply_patch_proposal",
             "Apply a pending patch proposal by id",
+        ),
+        McpToolSpec::new::<ListPatchProposalsInput, ListPatchProposalsOutput>(
+            "list_patch_proposals",
+            "List pending or filtered patch proposals for a knowledge base",
         ),
     ]
 }

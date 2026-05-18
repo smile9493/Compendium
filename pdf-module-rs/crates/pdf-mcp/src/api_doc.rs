@@ -122,11 +122,31 @@ mod tests {
         assert!(!doc.paths.paths.is_empty(), "OpenAPI paths must not be empty");
     }
 
+    fn fixture_path() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openapi.json")
+    }
+
+    #[test]
+    fn openapi_fixture_matches_code() {
+        let expected = super::openapi_json();
+        let path = fixture_path();
+        assert!(
+            path.exists(),
+            "missing tests/fixtures/openapi.json — run: cargo test -p pdf-mcp api_doc::tests::write_openapi_fixture -- --ignored"
+        );
+        let on_disk = std::fs::read_to_string(&path).expect("read openapi fixture");
+        assert_eq!(
+            on_disk.trim(),
+            expected.trim(),
+            "OpenAPI fixture out of date — run: cargo test -p pdf-mcp api_doc::tests::write_openapi_fixture -- --ignored && npm run generate:api"
+        );
+    }
+
     #[test]
     #[ignore = "run manually to refresh tests/fixtures/openapi.json"]
     fn write_openapi_fixture() {
         let json = super::openapi_json();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openapi.json");
+        let path = fixture_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create fixtures dir");
         }

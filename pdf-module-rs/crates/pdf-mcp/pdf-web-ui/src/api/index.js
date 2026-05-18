@@ -131,14 +131,17 @@ export const api = {
     return request(withKb(`/config/${encodeURIComponent(key)}`), { method: 'DELETE' })
   },
 
+  /** @returns {Promise<import('./generated').components['schemas']['HealthReportHttp']>} */
   getHealth() {
     return request(withKb('/health'))
   },
 
+  /** @returns {Promise<import('./types').CompileStatusRecord>} */
   getCompileStatus() {
     return request(withKb('/compile/status'))
   },
 
+  /** @returns {Promise<import('./generated').components['schemas']['IndexRebuildHttp']>} */
   rebuildIndex() {
     return request(withKb('/index/rebuild'), { method: 'POST', retries: 1 })
   },

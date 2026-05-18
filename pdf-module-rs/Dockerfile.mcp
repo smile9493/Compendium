@@ -36,14 +36,17 @@ COPY crates ./crates
 
 RUN cargo build --release --bin pdf-mcp
 
-# ── Stage 3: Alpine runtime ──
-FROM alpine:3.19
+# ── Stage 3: Debian slim runtime ──
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/pdf-mcp /usr/local/bin/pdf-mcp
 
-RUN adduser -D -s /bin/false pdfuser
+RUN useradd -m -s /bin/false pdfuser
 
 ENV HTTP_PORT=8001
 ENV KNOWLEDGE_BASE=/data
@@ -53,6 +56,6 @@ EXPOSE 8001
 USER pdfuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:8001/api/health || exit 1
+    CMD curl -sf http://localhost:8001/api/health || exit 1
 
 ENTRYPOINT ["pdf-mcp"]

@@ -141,6 +141,7 @@ pub async fn dispatch_tool(
             handle_submit_patch_proposal(&ctx.workspace_registry, args).await
         }
         "apply_patch_proposal" => handle_apply_patch_proposal(&ctx.workspace_registry, args).await,
+        "list_patch_proposals" => handle_list_patch_proposals(&ctx.workspace_registry, args).await,
         _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
     }
 }

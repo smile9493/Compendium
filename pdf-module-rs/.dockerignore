@@ -44,7 +44,6 @@ lcov.info
 # Examples and benches (not needed for production build)
 examples/
 **/examples/
-**/benches/
 **/fuzz/
 
 # Dev tools config

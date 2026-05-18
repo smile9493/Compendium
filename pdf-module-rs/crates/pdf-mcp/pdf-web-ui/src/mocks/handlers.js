@@ -6,6 +6,12 @@ const sampleStages = [
 ]
 
 export const handlers = [
+  http.get('/api/v1/workspaces', () =>
+    HttpResponse.json({
+      workspaces: [{ id: 'default', name: 'Default', path: '/tmp/kb', active: true }],
+      active_kb_id: 'default',
+    })
+  ),
   http.get('/api/health', () =>
     HttpResponse.json({
       total_entries: 3,
@@ -28,6 +34,16 @@ export const handlers = [
       job: { stages: sampleStages },
       history: [],
       message: '',
+    })
+  ),
+  http.get('/api/share/:token/wiki/entries/*', () =>
+    HttpResponse.json({
+      entry: {
+        title: 'Shared',
+        body_markdown: '# Shared\n\nRead-only body.',
+        domain: 'IT',
+        tags: [],
+      },
     })
   ),
   http.get('/api/wiki/search', ({ request }) => {

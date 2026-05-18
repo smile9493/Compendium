@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
+import { i18n } from '@/i18n'
 import { normalizeWikiPath } from '@/utils/path'
 
 const CACHE_TTL_MS = 5 * 60 * 1000
@@ -78,7 +79,7 @@ export const useWikiStore = defineStore('wiki', () => {
     const normalized = normalizeWikiPath(path)
     if (!normalized) {
       currentPath.value = null
-      currentEntry.value = { error: '无效的条目路径' }
+      currentEntry.value = { error: i18n.global.t('entry.invalidPath') }
       return
     }
 
@@ -99,7 +100,7 @@ export const useWikiStore = defineStore('wiki', () => {
       if (data.error) throw new Error(data.error)
       const entry = data.entry
       if (!entry?.body_markdown?.trim()) {
-        currentEntry.value = { error: '条目无 Markdown 正文' }
+        currentEntry.value = { error: i18n.global.t('entry.noBody') }
         return
       }
       currentEntry.value = entry

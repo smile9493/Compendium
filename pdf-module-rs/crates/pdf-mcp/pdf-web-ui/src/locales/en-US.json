@@ -14,7 +14,28 @@
     "tabTrigger": "Compile",
     "tabHistory": "History",
     "tabStatus": "Status",
-    "tabQuality": "Quality"
+    "tabQuality": "Quality",
+    "close": "Close",
+    "singleMode": "Single file",
+    "incrementalMode": "Incremental",
+    "uploadHint": "Drag or click to upload PDF",
+    "incrementalHint": "Scan raw/ for changed PDFs and recompile.",
+    "processing": "Processing…",
+    "startIncremental": "Start incremental compile",
+    "uploadAndCompile": "Upload and compile",
+    "entriesSummary": "{compiled} entries / {skipped} skipped",
+    "noHistory": "No compile history",
+    "currentStatus": "Current status",
+    "neverRun": "Never run",
+    "awaitingAgent": "Waiting for agent to write wiki…",
+    "pollingHint": "Compiling, refreshing every 2s…",
+    "issues": "Issues",
+    "orphans": "Orphans",
+    "contradictions": "Contradiction pairs",
+    "blocked": "Blocked",
+    "qualityAfterCompile": "Quality snapshot appears after compile completes",
+    "qualityFooter": "Quality: {issues} issues · {pairs} contradiction pairs",
+    "selectPdf": "Please select a PDF file"
   },
   "settings": {
     "title": "Settings",
@@ -35,5 +56,28 @@
     "copyLink": "Copy share link",
     "copied": "Copied",
     "readOnly": "Read-only share"
+  },
+  "rightbar": {
+    "toc": "On this page",
+    "backTop": "Back to top",
+    "selectEntry": "Select an entry to view",
+    "conceptGraph": "Concept graph"
+  },
+  "header": {
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "kbWorkspace": "Knowledge base workspace",
+    "allDomains": "All domains",
+    "kbStats": "Knowledge base stats",
+    "knowledgeGraph": "Knowledge graph",
+    "readingMode": "Reading mode",
+    "toggleTheme": "Toggle theme",
+    "settings": "Settings",
+    "expandRightbar": "Expand info panel",
+    "collapseRightbar": "Collapse info panel"
+  },
+  "entry": {
+    "invalidPath": "Invalid entry path",
+    "noBody": "Entry has no Markdown body"
   }
 }
