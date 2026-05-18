@@ -15,3 +15,7 @@ label-size = 大小
 status-processing = 处理中...
 status-complete = 已完成
 status-error = 错误
+health-rebuild-success = 索引重建成功
+health-rebuild-failed = 索引重建失败：{ $reason }
+compile-status-running = 编译进行中
+compile-status-awaiting = 等待 Agent 写入 wiki

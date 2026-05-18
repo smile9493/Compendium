@@ -4,7 +4,7 @@ mod index;
 mod json;
 mod knowledge;
 mod management;
-mod mcp_extraction;
+pub mod mcp_extraction;
 mod platform;
 pub mod post_compile;
 mod resources;

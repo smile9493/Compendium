@@ -44,15 +44,55 @@
 
 /** @typedef {'keyword' | 'semantic' | 'hybrid'} SearchMode */
 
+/** @typedef {object} ExtractionHealth */
+/**
+ * @property {string[]} backends
+ * @property {boolean} vlm_configured
+ * @property {string} default_method
+ */
+
+/** @typedef {object} CompileStageRecord */
+/**
+ * @property {string} stage
+ * @property {string} status
+ * @property {string} [started_at]
+ * @property {string} [finished_at]
+ * @property {number} [duration_ms]
+ * @property {string} [error]
+ * @property {boolean} [retryable]
+ */
+
+/** @typedef {object} CompileJob */
+/**
+ * @property {string} job_id
+ * @property {string} pipeline_status
+ * @property {CompileStageRecord[]} stages
+ * @property {string} [message]
+ */
+
 /** @typedef {object} CompileStatusRecord */
 /**
  * @property {boolean} running
+ * @property {string} [pipeline_status]
+ * @property {string} [active_job_id]
+ * @property {CompileJob} [job]
  * @property {string} [last_started]
  * @property {string} [last_finished]
  * @property {string} [last_outcome]
  * @property {string} message
  * @property {CompileHistoryEntry[]} history
  * @property {QualitySnapshot} [quality_snapshot]
+ */
+
+/** @typedef {object} HealthReport */
+/**
+ * @property {number} total_entries
+ * @property {number} orphan_count
+ * @property {number} contradiction_count
+ * @property {number} graph_nodes
+ * @property {number} graph_edges
+ * @property {string} avg_quality_score
+ * @property {ExtractionHealth} [extraction]
  */
 
 /** @typedef {object} CompileHistoryEntry */

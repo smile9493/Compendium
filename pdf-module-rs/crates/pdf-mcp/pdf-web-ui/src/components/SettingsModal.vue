@@ -122,10 +122,47 @@
                 <div class="hl">质量分</div>
               </div>
             </div>
-            <div v-else class="settings-loading">
+            <div
+              v-if="configStore.healthData?.extraction"
+              class="settings-section-title extraction-panel-title"
+            >
+              提取栈
+            </div>
+            <div v-if="configStore.healthData?.extraction" class="extraction-detail">
+              <div class="extraction-row">
+                <span class="extraction-label">默认方法</span>
+                <span class="mono">{{ configStore.healthData.extraction.default_method }}</span>
+              </div>
+              <div class="extraction-row">
+                <span class="extraction-label">VLM</span>
+                <span
+                  class="status-badge"
+                  :class="configStore.healthData.extraction.vlm_configured ? 'status-ok' : ''"
+                >
+                  {{ configStore.healthData.extraction.vlm_configured ? '已配置' : '未配置' }}
+                </span>
+              </div>
+              <div class="extraction-row">
+                <span class="extraction-label">后端</span>
+                <span class="mono extraction-backends">
+                  {{ (configStore.healthData.extraction.backends || []).join(', ') }}
+                </span>
+              </div>
+            </div>
+            <div v-else-if="!configStore.healthData" class="settings-loading">
               <span class="dots-loading"></span>
               <span>正在加载健康数据…</span>
             </div>
+            <div v-if="indexRebuildStats" class="index-rebuild-stats">
+              <div class="settings-section-title">上次索引重建</div>
+              <div class="mono index-stats-line">
+                全文 {{ indexRebuildStats.fulltext_entries_indexed ?? 0 }} · 图
+                {{ indexRebuildStats.graph_nodes ?? 0 }}/{{ indexRebuildStats.graph_edges ?? 0 }}
+              </div>
+            </div>
+            <p v-if="indexRebuildMessage" class="compile-hint" :class="indexRebuildError ? 'compile-error' : ''">
+              {{ indexRebuildMessage }}
+            </p>
             <div class="settings-actions">
               <button class="btn btn-primary" :disabled="configStore.loading" @click="rebuildIndex">
                 <RefreshCw :size="14" />
@@ -149,6 +186,7 @@
               <div class="compile-status-time">
                 {{ configStore.compileStatus.last_finished || configStore.compileStatus.last_started || '从未运行' }}
               </div>
+              <CompileStageList :stages="compilePipelineStages" />
             </div>
             <div v-else class="settings-loading">
               <span class="dots-loading"></span>
@@ -159,6 +197,17 @@
             <div class="upload-area">
               <input type="file" ref="fileInput" accept=".pdf" @change="uploadFile" class="upload-input" />
               <div class="upload-hint">拖拽或点击上传 PDF 文件以触发编译</div>
+            </div>
+          </div>
+
+          <!-- Locale -->
+          <div v-if="activeTab === 'locale'" class="settings-section">
+            <div class="form-group">
+              <label>{{ t('settings.language') }}</label>
+              <select :value="locale" @change="onLocaleChange">
+                <option value="zh-CN">{{ t('settings.langZh') }}</option>
+                <option value="en-US">{{ t('settings.langEn') }}</option>
+              </select>
             </div>
           </div>
 
@@ -196,11 +245,14 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { setLocale } from '@/i18n'
 import { useConfigStore } from '@/stores/config'
 import { useWikiStore } from '@/stores/wiki'
 import { api } from '@/api'
 import { formatQuality } from '@/utils/format'
 import { X, Settings, Server, Activity, Upload, Info, Check, Trash2, Plus, RefreshCw, RotateCcw, BookOpen } from 'lucide-vue-next'
+import CompileStageList from '@/components/CompileStageList.vue'
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['close'])
@@ -213,7 +265,10 @@ const tabs = [
   { id: 'health', label: '知识库健康', icon: Activity },
   { id: 'compile', label: '编译队列', icon: Upload },
   { id: 'about', label: '关于', icon: Info },
+  { id: 'locale', label: '语言', icon: Info },
 ]
+
+const { t, locale } = useI18n()
 
 const vlmModel = ref('')
 const vlmApiKey = ref('')
@@ -221,6 +276,13 @@ const vlmEndpoint = ref('')
 const newKey = ref('')
 const newValue = ref('')
 const fileInput = ref(null)
+const indexRebuildStats = ref(null)
+const indexRebuildMessage = ref('')
+const indexRebuildError = ref(false)
+
+const compilePipelineStages = computed(
+  () => configStore.compileStatus?.job?.stages || []
+)
 
 const compileStatusClass = computed(() => {
   if (configStore.compileStatus?.running) return 'status-warn'
@@ -270,15 +332,28 @@ async function addConfig() {
 
 async function rebuildIndex() {
   const wikiStore = useWikiStore()
-  const result = await configStore.triggerRebuild()
-  wikiStore.clearEntryCache()
-  await wikiStore.loadTree()
-  if (result) configStore.loadHealth()
+  indexRebuildMessage.value = ''
+  indexRebuildError.value = false
+  try {
+    const result = await configStore.triggerRebuild()
+    indexRebuildStats.value = result
+    indexRebuildMessage.value = '索引重建成功'
+    wikiStore.clearEntryCache()
+    await wikiStore.loadTree()
+    await configStore.loadHealth()
+  } catch (err) {
+    indexRebuildError.value = true
+    indexRebuildMessage.value = err?.message || '索引重建失败'
+  }
 }
 
 async function refreshHealth() {
   await configStore.loadHealth()
   await configStore.loadCompileStatus()
+}
+
+function onLocaleChange(e) {
+  setLocale(e.target.value)
 }
 
 async function uploadFile(e) {

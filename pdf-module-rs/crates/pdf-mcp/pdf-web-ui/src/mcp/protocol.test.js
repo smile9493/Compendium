@@ -27,4 +27,8 @@ describe('mcp protocol', () => {
   it('mcpTargetOrigin falls back to location', () => {
     expect(mcpTargetOrigin('https://parent.test')).toBe('https://parent.test')
   })
+
+  it('defines compile-status message type', () => {
+    expect(MCP_UI_MESSAGE_TYPES.COMPILE_STATUS).toBe('mcp-compile-status')
+  })
 })

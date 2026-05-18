@@ -33,6 +33,7 @@
     />
 
     <SearchOverlay />
+    <OpsBanner />
 
     <StatsDialog :open="uiStore.statsOpen" @close="uiStore.statsOpen = false" />
     <DomainDialog :open="uiStore.domainOpen" @close="uiStore.domainOpen = false" />
@@ -47,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useUiStore } from '@/stores/ui'
 import { useCompileStore } from '@/stores/compile'
@@ -65,6 +66,7 @@ import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import RightBar from '@/components/RightBar.vue'
 import SearchOverlay from '@/components/SearchOverlay.vue'
+import OpsBanner from '@/components/OpsBanner.vue'
 import StatsDialog from '@/components/StatsDialog.vue'
 import DomainDialog from '@/components/DomainDialog.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
@@ -107,8 +109,22 @@ onMounted(async () => {
     setActiveKbId(workspaceStore.activeKbId)
   }
   wikiStore.loadTree()
+  compileStore.startBackgroundWatch()
   isMcpMode.value = window.parent !== window
+  window.addEventListener('message', onMcpMessage)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('message', onMcpMessage)
+})
+
+function onMcpMessage(event) {
+  const data = event.data
+  if (!data || data.v !== MCP_UI_PROTOCOL_VERSION) return
+  if (data.type === MCP_UI_MESSAGE_TYPES.COMPILE_STATUS && data.status) {
+    compileStore.applySnapshot(data.status)
+  }
+}
 
 function askAi() {
   const entry = wikiStore.currentEntry

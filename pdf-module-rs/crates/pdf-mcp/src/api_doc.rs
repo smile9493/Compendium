@@ -1,50 +1,38 @@
 //! OpenAPI documentation with `utoipa` and Swagger UI.
-//!
-//! Auto-generates OpenAPI 3.1 spec from Rust type annotations and
-//! serves Swagger UI at `/swagger-ui` for interactive API exploration.
-//!
-//! # Usage
-//!
-//! 1. Annotate request/response types with `#[derive(ToSchema)]`
-//! 2. Annotate handlers with `#[utoipa::path(...)]`
-//! 3. Call `openapi_router()` to get a Router with `/swagger-ui` mounted
-//!
-//! ```ignore
-//! let app = Router::new()
-//!     .merge(api_doc::openapi_router())
-//!     .merge(api_routes());
-//! ```
 
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
+
+use crate::http_schemas::{ErrorBody, ExtractionHealthHttp, HealthReportHttp, IndexRebuildHttp};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Rust PDF MCP API",
         version = "0.3.0",
-        description = "PDF extraction, knowledge compilation, and full-text search API",
-        contact(name = "rsut-pdf-mcp", url = "https://github.com/loonghao/rsut_pdf_mcp"),
+        description = "PDF extraction, knowledge compilation, and full-text search HTTP API",
     ),
     servers(
         (url = "http://localhost:8000", description = "Local development"),
-        (url = "/api", description = "Production"),
     ),
     tags(
-        (name = "extraction", description = "PDF text and structure extraction"),
-        (name = "knowledge", description = "Knowledge base compilation and search"),
-        (name = "management", description = "Server configuration and health"),
+        (name = "wiki", description = "Wiki browser read API"),
+        (name = "management", description = "Health, compile, and index management"),
+        (name = "collaboration", description = "Share links"),
     ),
     modifiers(&SecurityAddon),
     paths(
-        // Register api handlers here as they get #[utoipa::path] annotations
-        // crate::http::api_health,
-        // crate::http::api_wiki_tree,
-        // crate::http::api_wiki_search,
+        crate::api_doc::health_path,
+        crate::api_doc::compile_status_path,
+        crate::api_doc::index_rebuild_path,
+        crate::api_doc::index_status_path,
     ),
     components(schemas(
-        // Register DTO types here as they get #[derive(ToSchema)]
+        HealthReportHttp,
+        ExtractionHealthHttp,
+        IndexRebuildHttp,
+        ErrorBody,
     )),
 )]
 pub struct ApiDoc;
@@ -60,13 +48,58 @@ impl Modify for SecurityAddon {
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("JWT")
-                        .description(Some("Enter JWT token: Bearer <token>"))
                         .build(),
                 ),
             );
         }
     }
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "management",
+    params(("kb_id" = Option<String>, Query, description = "Knowledge base id")),
+    responses(
+        (status = 200, description = "Health report", body = HealthReportHttp),
+        (status = 500, description = "Error", body = ErrorBody),
+    )
+)]
+#[allow(dead_code)]
+fn health_path() {}
+
+#[utoipa::path(
+    get,
+    path = "/api/compile/status",
+    tag = "management",
+    params(("kb_id" = Option<String>, Query, description = "Knowledge base id")),
+    responses((status = 200, description = "Compile job view JSON object")),
+)]
+#[allow(dead_code)]
+fn compile_status_path() {}
+
+#[utoipa::path(
+    post,
+    path = "/api/index/rebuild",
+    tag = "management",
+    params(("kb_id" = Option<String>, Query, description = "Knowledge base id")),
+    responses(
+        (status = 200, description = "Rebuild stats", body = IndexRebuildHttp),
+        (status = 500, description = "Error", body = ErrorBody),
+    ),
+)]
+#[allow(dead_code)]
+fn index_rebuild_path() {}
+
+#[utoipa::path(
+    get,
+    path = "/api/index/status",
+    tag = "management",
+    params(("kb_id" = Option<String>, Query, description = "Knowledge base id")),
+    responses((status = 200, description = "Last index rebuild metadata")),
+)]
+#[allow(dead_code)]
+fn index_status_path() {}
 
 /// Build a Router with Swagger UI at `/swagger-ui`.
 pub fn openapi_router() -> axum::Router {
@@ -76,4 +109,27 @@ pub fn openapi_router() -> axum::Router {
 /// Get the raw OpenAPI JSON spec.
 pub fn openapi_json() -> String {
     ApiDoc::openapi().to_pretty_json().unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ApiDoc;
+    use utoipa::OpenApi;
+
+    #[test]
+    fn openapi_has_registered_paths() {
+        let doc = ApiDoc::openapi();
+        assert!(!doc.paths.paths.is_empty(), "OpenAPI paths must not be empty");
+    }
+
+    #[test]
+    #[ignore = "run manually to refresh tests/fixtures/openapi.json"]
+    fn write_openapi_fixture() {
+        let json = super::openapi_json();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openapi.json");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create fixtures dir");
+        }
+        std::fs::write(path, json).expect("write openapi.json");
+    }
 }

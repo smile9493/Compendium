@@ -37,6 +37,9 @@
             <span class="badge badge-quality">质量 {{ qualityScore }}</span>
             <span v-if="wikiStore.currentEntry.version" class="badge badge-version">v{{ wikiStore.currentEntry.version }}</span>
             <span v-if="wikiStore.currentEntry.source" class="badge badge-source">源: {{ wikiStore.currentEntry.source }}</span>
+            <button type="button" class="btn btn-sm share-link-btn" @click="copyShareLink">
+              {{ shareCopied ? $t('share.copied') : $t('share.copyLink') }}
+            </button>
           </div>
           <div v-if="hasTags" class="tag-list">
             <span v-for="tag in wikiStore.currentEntry.tags" :key="tag" class="tag-item">{{ tag }}</span>
@@ -102,9 +105,11 @@
 </template>
 
 <script setup>
-import { computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { computed, watch, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWikiStore } from '@/stores/wiki'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { api } from '@/api'
 import { useReadingProgress } from '@/composables/useReadingProgress'
 import { openEntry, openHome } from '@/composables/useWikiNavigation'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
@@ -112,6 +117,25 @@ import ErrorState from '@/components/ErrorState.vue'
 
 const route = useRoute()
 const wikiStore = useWikiStore()
+const workspaceStore = useWorkspaceStore()
+const shareCopied = ref(false)
+
+async function copyShareLink() {
+  const kbId = workspaceStore.activeKbId
+  const path = wikiStore.currentPath
+  if (!kbId || !path) return
+  try {
+    const { token } = await api.createShareLink(kbId, path)
+    const url = `${window.location.origin}${window.location.pathname}#/share/${token}/${path.replace(/^\//, '')}`
+    await navigator.clipboard.writeText(url)
+    shareCopied.value = true
+    setTimeout(() => {
+      shareCopied.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('Share link failed', e)
+  }
+}
 
 const { progress, setup: setupProgress } = useReadingProgress()
 
