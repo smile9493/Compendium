@@ -10,6 +10,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum ErrorCategory {
     /// File system errors (4xx)
     FileSystem,
@@ -34,6 +35,7 @@ pub enum ErrorCategory {
 /// Replaces the previous `PdfModuleError` (pdf-core) and `EtlError` (pdf-etl).
 #[derive(Debug, Error)]
 #[non_exhaustive]
+#[allow(clippy::upper_case_acronyms)]
 pub enum PdfError {
     // === File System Errors ===
     #[error("File not found: {0}")]
