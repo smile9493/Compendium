@@ -115,7 +115,7 @@ pub async fn handle_micro_compile(
         text
     );
 
-json_content(&MicroCompileOutput { result: serde_json::json!({ "markdown": output }) })
+    json_content(&MicroCompileOutput { result: serde_json::json!({ "markdown": output }) })
 }
 
 fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
@@ -244,7 +244,7 @@ pub async fn handle_recompile_entry(
 
     let result = engine.recompile_entry(std::path::Path::new(entry_path))?;
 
-json_content(&RecompileEntryOutput { result: serde_json::to_value(&result)? })
+    json_content(&RecompileEntryOutput { result: serde_json::to_value(&result)? })
 }
 
 #[instrument(skip(ctx, args))]
@@ -369,7 +369,7 @@ pub async fn handle_complete_compile_job(
     let force = args["force"].as_bool().unwrap_or(false);
     let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
     ctx.index_cache.invalidate(&kb_path);
-json_content(&CompleteCompileJobOutput { result: serde_json::to_value(&result)? })
+    json_content(&CompleteCompileJobOutput { result: serde_json::to_value(&result)? })
 }
 
 #[instrument(skip(ctx, args))]
@@ -399,7 +399,7 @@ pub async fn handle_get_compile_plan(
     let plan = CompilePlanStore::new(&kb_path)
         .read()?
         .ok_or_else(|| anyhow::anyhow!("No compile plan; call generate_compile_plan first"))?;
-json_content(&GetCompilePlanOutput { result: serde_json::to_value(&plan)? })
+    json_content(&GetCompilePlanOutput { result: serde_json::to_value(&plan)? })
 }
 
 #[instrument(skip(ctx, args))]
@@ -423,8 +423,6 @@ pub async fn handle_mark_plan_task_done(
 mod tests {
     use super::*;
     use crate::tools::ToolContext;
-    
-    
 
     fn get_test_pdf_path() -> std::path::PathBuf {
         std::path::PathBuf::from("/opt/pdf-module/深入理解Nginx.PDF")

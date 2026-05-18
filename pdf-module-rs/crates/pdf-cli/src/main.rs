@@ -247,7 +247,9 @@ async fn main() -> Result<()> {
         Commands::Workspace { action } => {
             Ok(commands::platform::run_workspace(&cfg, action.clone(), format)?)
         }
-        Commands::Sync { action } => Ok(commands::platform::run_sync(&cfg, mode, action.clone(), format)?),
+        Commands::Sync { action } => {
+            Ok(commands::platform::run_sync(&cfg, mode, action.clone(), format)?)
+        }
     }?;
 
     result.print(format);

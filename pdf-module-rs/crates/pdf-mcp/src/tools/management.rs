@@ -176,8 +176,7 @@ pub async fn handle_show_wiki_browser() -> anyhow::Result<Vec<crate::protocol::C
 mod tests {
     use super::*;
     use crate::tools::ToolContext;
-    
-    
+
     use tempfile::TempDir;
 
     fn create_test_context() -> ToolContext {

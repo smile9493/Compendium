@@ -18,7 +18,9 @@ use pdf_mcp_contracts::{
     SubmitPatchProposalOutput, SyncPullOutput, SyncPushOutput, SyncStatusOutput,
 };
 
-pub async fn handle_list_workspaces(registry: &WorkspaceRegistry) -> anyhow::Result<Vec<crate::protocol::Content>> {
+pub async fn handle_list_workspaces(
+    registry: &WorkspaceRegistry,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let workspaces = registry.list()?;
     let active = registry.active_id()?;
     let body = serde_json::json!({ "workspaces": workspaces, "active_kb_id": active });
