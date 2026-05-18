@@ -86,8 +86,11 @@ fn print_value(value: &Value, depth: usize) {
                             println!("{}{}: {}", indent, k, s);
                         }
                     }
-                    Value::Array(arr) if arr.len() <= 3 && arr.iter().all(|e| matches!(e, Value::String(_))) => {
-                        let items: Vec<&str> = arr.iter().map(|e| e.as_str().unwrap_or("")).collect();
+                    Value::Array(arr)
+                        if arr.len() <= 3 && arr.iter().all(|e| matches!(e, Value::String(_))) =>
+                    {
+                        let items: Vec<&str> =
+                            arr.iter().map(|e| e.as_str().unwrap_or("")).collect();
                         println!("{}{}: [{}]", indent, k, items.join(", "));
                     }
                     _ => {
@@ -105,10 +108,7 @@ pub fn format_compile_result(result: &Value) -> String {
     let source = result.get("source").and_then(|s| s.as_str()).unwrap_or("unknown");
     let page_count = result.get("page_count").and_then(|p| p.as_u64()).unwrap_or(0);
     let entries = result.get("entries").and_then(|e| e.as_array()).map(|a| a.len()).unwrap_or(0);
-    format!(
-        "Compiled: {} ({} pages, {} entries pending)",
-        source, page_count, entries
-    )
+    format!("Compiled: {} ({} pages, {} entries pending)", source, page_count, entries)
 }
 
 /// Format incremental compile result.
@@ -116,8 +116,5 @@ pub fn format_incremental_result(result: &Value) -> String {
     let compiled = result.get("compiled").and_then(|c| c.as_u64()).unwrap_or(0);
     let skipped = result.get("skipped").and_then(|s| s.as_u64()).unwrap_or(0);
     let total = result.get("total_scanned").and_then(|t| t.as_u64()).unwrap_or(0);
-    format!(
-        "Scanned {} files — {} compiled, {} skipped",
-        total, compiled, skipped
-    )
+    format!("Scanned {} files — {} compiled, {} skipped", total, compiled, skipped)
 }

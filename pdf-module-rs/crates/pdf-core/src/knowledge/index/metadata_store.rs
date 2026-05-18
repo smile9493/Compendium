@@ -180,11 +180,7 @@ impl MetadataStore {
         meta.insert("domains", domain_bytes)
             .map_err(|e| PdfError::Storage(format!("Failed to write domain list: {}", e)))?;
 
-        info!(
-            count = count,
-            domains = domains.len(),
-            "MetadataStore populated from wiki"
-        );
+        info!(count = count, domains = domains.len(), "MetadataStore populated from wiki");
         Ok(count)
     }
 
@@ -263,11 +259,8 @@ impl MetadataStore {
             } else if path.extension().map(|e| e == "md").unwrap_or(false) {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                        let rel = path
-                            .strip_prefix(base)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .to_string();
+                        let rel =
+                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                         self.upsert_entry(&rel, &entry)?;
                         *count += 1;
                     } else {
@@ -398,15 +391,9 @@ Content here."#;
         let dir = TempDir::new().unwrap();
         let store = MetadataStore::open(dir.path()).unwrap();
 
-        store
-            .upsert_entry("it/a.md", &make_entry("A", "it"))
-            .unwrap();
-        store
-            .upsert_entry("it/b.md", &make_entry("B", "it"))
-            .unwrap();
-        store
-            .upsert_entry("rust/c.md", &make_entry("C", "rust"))
-            .unwrap();
+        store.upsert_entry("it/a.md", &make_entry("A", "it")).unwrap();
+        store.upsert_entry("it/b.md", &make_entry("B", "it")).unwrap();
+        store.upsert_entry("rust/c.md", &make_entry("C", "rust")).unwrap();
 
         assert_eq!(store.total_entries().unwrap(), 3);
         assert_eq!(store.len().unwrap(), 3);

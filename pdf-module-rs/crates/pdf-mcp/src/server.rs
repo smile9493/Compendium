@@ -101,8 +101,7 @@ impl ToolStats {
 
     pub fn record_success(&self, tool: &str, latency_ms: u64) {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_latency_ms
-            .fetch_add(latency_ms, Ordering::Relaxed);
+        self.total_latency_ms.fetch_add(latency_ms, Ordering::Relaxed);
         self.files_processed.fetch_add(1, Ordering::Relaxed);
 
         if let Some(m) = self.metrics.get(tool) {
@@ -134,11 +133,8 @@ impl ToolStats {
         let errors = self.total_errors.load(Ordering::Relaxed);
         let latency = self.total_latency_ms.load(Ordering::Relaxed);
 
-        let tools_json: serde_json::Map<String, serde_json::Value> = self
-            .metrics
-            .iter()
-            .map(|(k, v)| ((*k).to_string(), v.to_json()))
-            .collect();
+        let tools_json: serde_json::Map<String, serde_json::Value> =
+            self.metrics.iter().map(|(k, v)| ((*k).to_string(), v.to_json())).collect();
 
         serde_json::json!({
             "uptime_secs": self.uptime_secs(),
@@ -190,10 +186,8 @@ pub async fn run_stdio_with_tool_ctx(
 
     let sampling_config = SamplingClientConfig::default();
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingRequest>(100);
-    let sampling_client = Arc::new(SamplingClient::with_sender(
-        sampling_config.timeout_secs,
-        outgoing_tx.clone(),
-    ));
+    let sampling_client =
+        Arc::new(SamplingClient::with_sender(sampling_config.timeout_secs, outgoing_tx.clone()));
     let pending_requests = sampling_client.pending_requests();
 
     let stdout = std::io::stdout();
@@ -341,7 +335,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
                 "messageTypes": ["text", "image"]
             }
         },
-        "instructions": "Knowledge engine with 30 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, compile_uploaded_pdf, incremental_compile, recompile_entry, aggregate_entries, check_quality, save_wiki_entry. Indexing: search_knowledge (hybrid/keyword/semantic), rebuild_index, get_entry_context, get_agent_context, find_orphans, suggest_links, export_concept_map, preview_wiki_patch, patch_wiki_entry. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status, show_wiki_browser.",
+        "instructions": "Knowledge engine. Compile loop: compile_to_wiki/incremental_compile → job_id + awaiting_agent → save_wiki_entry(job_id) → complete_compile_job → searchable index. Quality: list_quality_issues, fix_suggest, apply_quality_gate. Plan: generate_compile_plan, get_compile_plan, mark_plan_task_done, aggregate_entries. PDF: extract_*, compile_uploaded_pdf. Wiki: save_wiki_entry, patch_wiki_entry, search_knowledge, rebuild_index, check_quality, hypothesis_test, recompile_entry. Management: get_compile_status (stages + quality_snapshot), get_health_report, get/set_config.",
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)
@@ -370,10 +364,7 @@ async fn handle_tools_call(
         }
     };
 
-    let arguments = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or(serde_json::json!({}));
+    let arguments = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
 
     let start = std::time::Instant::now();
     let result = tools::dispatch_tool(ctx, tool_name, &arguments).await;
@@ -382,17 +373,11 @@ async fn handle_tools_call(
     match result {
         Ok(content) => {
             stats.record_success(tool_name, latency_ms);
-            JsonRpcResponse::success(
-                request.id.clone(),
-                serde_json::json!({ "content": content }),
-            )
+            JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "content": content }))
         }
         Err(e) => {
             stats.record_error(tool_name);
-            JsonRpcResponse::error(
-                request.id.clone(),
-                JsonRpcError::internal_error(&e.to_string()),
-            )
+            JsonRpcResponse::error(request.id.clone(), JsonRpcError::internal_error(&e.to_string()))
         }
     }
 }

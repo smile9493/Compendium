@@ -24,9 +24,7 @@ pub struct PdfiumGuard {
 
 impl PdfiumGuard {
     pub fn new() -> Self {
-        Self {
-            lock: Mutex::new(()),
-        }
+        Self { lock: Mutex::new(()) }
     }
 
     /// Execute a closure inside the Pdfium serialisation + panic-isolation boundary.

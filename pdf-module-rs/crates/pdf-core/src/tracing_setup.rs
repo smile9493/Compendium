@@ -25,9 +25,8 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
-static DEFAULT_FILTER: LazyLock<EnvFilter> = LazyLock::new(|| {
-    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
-});
+static DEFAULT_FILTER: LazyLock<EnvFilter> =
+    LazyLock::new(|| EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogFormat {
@@ -116,20 +115,19 @@ where
         .with_line_number(config.with_file_line);
 
     match config.format {
-        LogFormat::Json => Box::new(layer.json().with_span_events(
-            if config.with_span_events {
-                tracing_subscriber::fmt::format::FmtSpan::CLOSE
+        LogFormat::Json => Box::new(layer.json().with_span_events(if config.with_span_events {
+            tracing_subscriber::fmt::format::FmtSpan::CLOSE
+        } else {
+            tracing_subscriber::fmt::format::FmtSpan::NONE
+        })),
+        LogFormat::Pretty => {
+            Box::new(layer.pretty().with_span_events(if config.with_span_events {
+                tracing_subscriber::fmt::format::FmtSpan::NEW
+                    | tracing_subscriber::fmt::format::FmtSpan::CLOSE
             } else {
                 tracing_subscriber::fmt::format::FmtSpan::NONE
-            },
-        )),
-        LogFormat::Pretty => Box::new(layer.pretty().with_span_events(
-            if config.with_span_events {
-                tracing_subscriber::fmt::format::FmtSpan::NEW | tracing_subscriber::fmt::format::FmtSpan::CLOSE
-            } else {
-                tracing_subscriber::fmt::format::FmtSpan::NONE
-            },
-        )),
+            }))
+        }
         LogFormat::Compact => Box::new(layer.compact()),
     }
 }
@@ -182,9 +180,7 @@ pub fn current_request_id() -> Option<String> {
         subscriber
             .downcast_ref::<Registry>()
             .and_then(|reg| reg.span(id))
-            .and_then(|span_ref| {
-                span_ref.extensions().get::<RequestId>().map(|rid| rid.0.clone())
-            })
+            .and_then(|span_ref| span_ref.extensions().get::<RequestId>().map(|rid| rid.0.clone()))
     })
     .flatten()
 }
@@ -198,17 +194,11 @@ pub struct RequestId(pub String);
 /// The request ID is first read from `x-request-id` header, then from
 /// `traceparent`, then auto-generated as a short random string.
 pub fn request_span(request_id: Option<&str>) -> tracing::Span {
-    let rid = request_id
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let ts = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis();
-            format!("{:04x}", (ts & 0xFFFF) as u16)
-        });
+    let rid = request_id.filter(|s| !s.is_empty()).map(|s| s.to_string()).unwrap_or_else(|| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+        format!("{:04x}", (ts & 0xFFFF) as u16)
+    });
 
     let span = tracing::info_span!("request", request_id = %rid);
     span.record("request_id", &rid);
@@ -268,9 +258,7 @@ pub mod axum_layer {
             let span = super::request_span(request_id.as_deref());
 
             let _guard = span.enter();
-            span.extensions_mut().insert(RequestId(
-                request_id.unwrap_or_else(|| "unknown".into()),
-            ));
+            span.extensions_mut().insert(RequestId(request_id.unwrap_or_else(|| "unknown".into())));
 
             self.inner.call(req)
         }

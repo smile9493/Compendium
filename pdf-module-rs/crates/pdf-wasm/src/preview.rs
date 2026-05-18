@@ -25,7 +25,7 @@ pub fn extract_page_text(pdf_data: &[u8], page_index: u32) -> String {
     if page_index as usize >= pages {
         return String::new();
     }
-    let marker = format!("/Page");
+    let marker = "/Page";
     let mut found = 0u32;
     let mut out = String::new();
     let text = String::from_utf8_lossy(pdf_data);
@@ -53,7 +53,7 @@ pub fn extract_page_text(pdf_data: &[u8], page_index: u32) -> String {
 pub fn render_page_thumbnail_rgba(page_index: u32, max_px: u32) -> Vec<u8> {
     let size = max_px.clamp(32, 512);
     let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let hue = ((page_index as u32).wrapping_mul(97)) % 255;
+    let hue = page_index.wrapping_mul(97) % 255;
     for y in 0..size {
         for x in 0..size {
             let i = ((y * size + x) * 4) as usize;

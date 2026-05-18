@@ -2,7 +2,9 @@ use crate::config::ServerConfig;
 use crate::dto::{ExtractOptions, StructuredExtractionResult, TextExtractionResult};
 use crate::engine::PdfiumEngine;
 use crate::error::PdfResult;
-use crate::extraction::{ExtractionRouter, PdfiumBackend, RemoteExtractionBackend, VlmExtractionBackend};
+use crate::extraction::{
+    ExtractionRouter, PdfiumBackend, RemoteExtractionBackend, VlmExtractionBackend,
+};
 use crate::mmap_loader::MmapPdfLoader;
 use crate::quality_probe::{ExtractionMethod, QualityProbe, QualityReport};
 use crate::validator::FileValidator;
@@ -190,10 +192,7 @@ impl McpPdfPipeline {
                     Some(Arc::new(gateway))
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to initialize VLM gateway: {} - operating in local-only mode",
-                        e
-                    );
+                    warn!("Failed to initialize VLM gateway: {} - operating in local-only mode", e);
                     None
                 }
             },
@@ -254,10 +253,7 @@ impl McpPdfPipeline {
             "PDF quality analysis complete"
         );
 
-        Ok(ExtractionContext {
-            quality_report,
-            loader,
-        })
+        Ok(ExtractionContext { quality_report, loader })
     }
 
     #[tracing::instrument(skip(self))]
@@ -266,16 +262,10 @@ impl McpPdfPipeline {
 
         match ctx.quality_report.extraction_method {
             ExtractionMethod::Pdfium => {
-                self.extraction_router
-                    .extract_text(&ctx, Some("pdfium"))
-                    .await
+                self.extraction_router.extract_text(&ctx, Some("pdfium")).await
             }
             #[cfg(feature = "vlm")]
-            ExtractionMethod::Vlm => {
-                self.extraction_router
-                    .extract_text(&ctx, Some("vlm"))
-                    .await
-            }
+            ExtractionMethod::Vlm => self.extraction_router.extract_text(&ctx, Some("vlm")).await,
             #[cfg(feature = "vlm")]
             ExtractionMethod::Hybrid => self.extract_text_hybrid(&ctx).await,
             #[cfg(not(feature = "vlm"))]
@@ -284,9 +274,7 @@ impl McpPdfPipeline {
                     "VLM/Hybrid extraction requested but VLM feature is disabled, \
                      falling back to Pdfium"
                 );
-                self.extraction_router
-                    .extract_text(&ctx, Some("pdfium"))
-                    .await
+                self.extraction_router.extract_text(&ctx, Some("pdfium")).await
             }
         }
     }
@@ -316,10 +304,7 @@ impl McpPdfPipeline {
         let mut pages_processed = 0u32;
 
         for page_idx in 0..page_count {
-            match self
-                .extract_page_text_via_vlm(gateway, pdf_data, page_idx)
-                .await
-            {
+            match self.extract_page_text_via_vlm(gateway, pdf_data, page_idx).await {
                 Ok(page_text) => {
                     all_text.push_str(&page_text);
                     all_text.push_str("\n\n");
@@ -373,12 +358,9 @@ impl McpPdfPipeline {
             page_number: page_idx + 1,
         };
 
-        let layout = gateway
-            .perceive_layout(&rgba, None, &metadata)
-            .await
-            .map_err(|e| {
-                crate::error::PdfModuleError::Extraction(format!("VLM perceive: {}", e))
-            })?;
+        let layout = gateway.perceive_layout(&rgba, None, &metadata).await.map_err(|e| {
+            crate::error::PdfModuleError::Extraction(format!("VLM perceive: {}", e))
+        })?;
 
         let mut page_text = String::new();
         for region in &layout.regions {
@@ -417,10 +399,7 @@ impl McpPdfPipeline {
         let mut pages_enhanced = 0u32;
 
         for page_idx in 0..page_count {
-            match self
-                .extract_page_text_via_vlm(gateway, pdf_data, page_idx)
-                .await
-            {
+            match self.extract_page_text_via_vlm(gateway, pdf_data, page_idx).await {
                 Ok(page_text) if !page_text.trim().is_empty() => {
                     vlm_text.push_str(&page_text);
                     vlm_text.push_str("\n\n");
@@ -497,10 +476,7 @@ impl McpPdfPipeline {
         let mut all_text = String::new();
 
         for page_idx in 0..page_count {
-            match self
-                .extract_page_structured_via_vlm(gateway, pdf_data, page_idx)
-                .await
-            {
+            match self.extract_page_structured_via_vlm(gateway, pdf_data, page_idx).await {
                 Ok((page_text, regions)) => {
                     all_text.push_str(&page_text);
                     all_text.push('\n');
@@ -563,12 +539,9 @@ impl McpPdfPipeline {
             page_number: page_idx + 1,
         };
 
-        let layout = gateway
-            .perceive_layout(&rgba, None, &metadata)
-            .await
-            .map_err(|e| {
-                crate::error::PdfModuleError::Extraction(format!("VLM perceive: {}", e))
-            })?;
+        let layout = gateway.perceive_layout(&rgba, None, &metadata).await.map_err(|e| {
+            crate::error::PdfModuleError::Extraction(format!("VLM perceive: {}", e))
+        })?;
 
         let mut page_text = String::new();
         let mut regions = Vec::new();

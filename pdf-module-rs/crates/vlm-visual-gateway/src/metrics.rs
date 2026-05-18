@@ -24,11 +24,8 @@ impl MetricsCollector {
         .expect("failed to create vlm_requests_total");
 
         let request_duration = Histogram::with_opts(
-            HistogramOpts::new(
-                "vlm_request_duration_seconds",
-                "VLM request duration in seconds",
-            )
-            .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0]),
+            HistogramOpts::new("vlm_request_duration_seconds", "VLM request duration in seconds")
+                .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0]),
         )
         .expect("failed to create vlm_request_duration_seconds");
 
@@ -42,12 +39,7 @@ impl MetricsCollector {
         registry.register(Box::new(request_duration.clone())).ok();
         registry.register(Box::new(degradations_total.clone())).ok();
 
-        Self {
-            registry,
-            requests_total,
-            request_duration,
-            degradations_total,
-        }
+        Self { registry, requests_total, request_duration, degradations_total }
     }
 
     /// Create with a shared default registry.
@@ -57,29 +49,20 @@ impl MetricsCollector {
 
     /// Start a request timer.  Call `.observe_success(provider)` when done.
     pub fn start_request_timer(&self) -> RequestTimer<'_> {
-        RequestTimer {
-            start: Instant::now(),
-            collector: self,
-        }
+        RequestTimer { start: Instant::now(), collector: self }
     }
 
     fn record_success_inner(&self, elapsed: std::time::Duration, provider: &str) {
-        self.requests_total
-            .with_label_values(&[provider, "success"])
-            .inc();
+        self.requests_total.with_label_values(&[provider, "success"]).inc();
         self.request_duration.observe(elapsed.as_secs_f64());
     }
 
     fn record_timeout_inner(&self, provider: &str) {
-        self.requests_total
-            .with_label_values(&[provider, "timeout"])
-            .inc();
+        self.requests_total.with_label_values(&[provider, "timeout"]).inc();
     }
 
     fn record_error_inner(&self, provider: &str) {
-        self.requests_total
-            .with_label_values(&[provider, "error"])
-            .inc();
+        self.requests_total.with_label_values(&[provider, "error"]).inc();
     }
 
     /// Record a degradation event with reason label.

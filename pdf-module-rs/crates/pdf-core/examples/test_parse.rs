@@ -27,10 +27,5 @@ fn main() {
             }
         }
     }
-    eprintln!(
-        "\nTotal: {} entries, {} parsed OK, {} failed",
-        count,
-        count - failed,
-        failed
-    );
+    eprintln!("\nTotal: {} entries, {} parsed OK, {} failed", count, count - failed, failed);
 }

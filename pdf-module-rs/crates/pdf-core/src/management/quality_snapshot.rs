@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::error::{PdfModuleError, PdfResult};
+use crate::knowledge::publish_gate::{apply_publish_gate, GateResult};
 use crate::knowledge::quality::{analyze_wiki, QualityReport};
 
 /// Summary issue for agents and UI.
@@ -28,6 +29,9 @@ pub struct QualitySnapshot {
     pub contradiction_pairs: usize,
     pub drift_pairs: usize,
     pub broken_links_count: usize,
+    pub published_count: usize,
+    pub blocked_count: usize,
+    pub draft_count: usize,
     pub top_issues: Vec<QualityIssueBrief>,
 }
 
@@ -38,11 +42,7 @@ pub struct QualitySnapshotStore {
 
 impl QualitySnapshotStore {
     pub fn new(knowledge_base: &Path) -> Self {
-        Self {
-            path: knowledge_base
-                .join(".rsut_index")
-                .join("quality_snapshot.json"),
-        }
+        Self { path: knowledge_base.join(".rsut_index").join("quality_snapshot.json") }
     }
 
     pub fn read(&self) -> PdfResult<QualitySnapshot> {
@@ -91,12 +91,17 @@ pub fn refresh_quality_snapshot(knowledge_base: &Path) -> PdfResult<QualitySnaps
     }
 
     let report = analyze_wiki(&wiki_dir)?;
-    let snapshot = snapshot_from_report(&report, &wiki_dir);
+    let gate = apply_publish_gate(knowledge_base).unwrap_or_default();
+    let snapshot = snapshot_from_report(&report, &wiki_dir, &gate);
     QualitySnapshotStore::new(knowledge_base).write(&snapshot)?;
     Ok(snapshot)
 }
 
-pub fn snapshot_from_report(report: &QualityReport, wiki_dir: &Path) -> QualitySnapshot {
+pub fn snapshot_from_report(
+    report: &QualityReport,
+    wiki_dir: &Path,
+    gate: &GateResult,
+) -> QualitySnapshot {
     let mut top_issues: Vec<QualityIssueBrief> = report
         .issues
         .iter()
@@ -117,6 +122,9 @@ pub fn snapshot_from_report(report: &QualityReport, wiki_dir: &Path) -> QualityS
         contradiction_pairs: count_contradiction_pairs(wiki_dir),
         drift_pairs: report.drift_pairs.len(),
         broken_links_count: report.broken_links.len(),
+        published_count: gate.published_count,
+        blocked_count: gate.blocked_count,
+        draft_count: gate.draft_count,
         top_issues,
     }
 }
@@ -130,12 +138,7 @@ pub fn count_contradiction_pairs(wiki_dir: &Path) -> usize {
 }
 
 #[allow(clippy::only_used_in_recursion)]
-fn scan_contradictions(
-    base: &Path,
-    dir: &Path,
-    seen: &mut HashSet<String>,
-    count: &mut usize,
-) {
+fn scan_contradictions(base: &Path, dir: &Path, seen: &mut HashSet<String>, count: &mut usize) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -148,11 +151,7 @@ fn scan_contradictions(
                 continue;
             };
             if let Some(entry) = crate::knowledge::entry::KnowledgeEntry::from_markdown(&content) {
-                let rel = path
-                    .strip_prefix(base)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .to_string();
+                let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                 for contra in &entry.contradictions {
                     let mut pair_key = [rel.clone(), contra.clone()];
                     pair_key.sort();

@@ -86,11 +86,7 @@ impl FileInfo {
         let file_size = metadata.len();
         let file_size_mb = (file_size as f64 / 1024.0 / 1024.0 * 100.0).round() / 100.0;
 
-        Ok(Self {
-            file_path: path.to_string_lossy().to_string(),
-            file_size,
-            file_size_mb,
-        })
+        Ok(Self { file_path: path.to_string_lossy().to_string(), file_size, file_size_mb })
     }
 }
 

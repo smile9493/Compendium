@@ -111,12 +111,7 @@ impl GraphPartitionStore {
 
         info!("GraphPartitionStore opened at {:?}", db_path);
 
-        Ok(Self {
-            db,
-            warm: HashMap::new(),
-            max_warm: 5,
-            idle_ttl: Duration::from_secs(300),
-        })
+        Ok(Self { db, warm: HashMap::new(), max_warm: 5, idle_ttl: Duration::from_secs(300) })
     }
 
     /// Set the maximum number of warm domains and idle TTL.
@@ -236,9 +231,7 @@ impl GraphPartitionStore {
 
     /// Get the last access time for a warm domain.
     pub fn last_access(&self, domain: &str) -> Option<Instant> {
-        self.warm
-            .get(domain)
-            .and_then(|dg| dg.inner.read().ok().map(|g| g.last_access))
+        self.warm.get(domain).and_then(|dg| dg.inner.read().ok().map(|g| g.last_access))
     }
 
     /// Flush all pending writes.
@@ -283,24 +276,14 @@ impl GraphPartitionStore {
         let edges: Vec<(usize, usize, EdgeKind)> = graph
             .edge_references()
             .map(|e| {
-                (
-                    node_idx_to_usize[&e.source()],
-                    node_idx_to_usize[&e.target()],
-                    e.weight().clone(),
-                )
+                (node_idx_to_usize[&e.source()], node_idx_to_usize[&e.target()], e.weight().clone())
             })
             .collect();
 
-        let path_to_index: Vec<(String, usize)> = path_to_node
-            .iter()
-            .map(|(path, idx)| (path.clone(), node_idx_to_usize[idx]))
-            .collect();
+        let path_to_index: Vec<(String, usize)> =
+            path_to_node.iter().map(|(path, idx)| (path.clone(), node_idx_to_usize[idx])).collect();
 
-        SubgraphSnapshot {
-            nodes,
-            edges,
-            path_to_index,
-        }
+        SubgraphSnapshot { nodes, edges, path_to_index }
     }
 
     fn deserialize_subgraph(
@@ -309,11 +292,8 @@ impl GraphPartitionStore {
         let mut graph = DiGraph::new();
         let mut path_to_node = HashMap::new();
 
-        let node_indices: Vec<NodeIndex> = snapshot
-            .nodes
-            .into_iter()
-            .map(|meta| graph.add_node(meta))
-            .collect();
+        let node_indices: Vec<NodeIndex> =
+            snapshot.nodes.into_iter().map(|meta| graph.add_node(meta)).collect();
 
         for (from, to, kind) in snapshot.edges {
             if from < node_indices.len() && to < node_indices.len() {
@@ -412,16 +392,13 @@ mod tests {
     #[test]
     fn test_warm_limit_eviction() {
         let dir = TempDir::new().unwrap();
-        let mut store = GraphPartitionStore::open(dir.path())
-            .unwrap()
-            .with_limits(2, Duration::from_secs(300));
+        let mut store =
+            GraphPartitionStore::open(dir.path()).unwrap().with_limits(2, Duration::from_secs(300));
 
         // Save 4 domains
         for i in 0..4 {
             let g = DiGraph::new();
-            store
-                .save_domain(&format!("d{}", i), &g, &HashMap::new())
-                .unwrap();
+            store.save_domain(&format!("d{}", i), &g, &HashMap::new()).unwrap();
         }
 
         assert!(store.warm_count() <= 2);

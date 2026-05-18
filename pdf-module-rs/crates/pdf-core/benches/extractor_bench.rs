@@ -87,10 +87,7 @@ fn bench_path_safety_ok(c: &mut Criterion) {
 }
 
 fn bench_path_safety_traversal(c: &mut Criterion) {
-    let config = PathValidationConfig {
-        allow_traversal: false,
-        ..Default::default()
-    };
+    let config = PathValidationConfig { allow_traversal: false, ..Default::default() };
 
     c.bench_function("path_safety/traversal_path", |b| {
         b.iter(|| {

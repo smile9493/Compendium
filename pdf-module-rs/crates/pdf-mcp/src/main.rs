@@ -38,10 +38,10 @@ mod api_doc;
 mod embed;
 mod http;
 mod metrics;
+mod plugins;
 mod protocol;
 mod sampling;
 mod server;
-mod plugins;
 mod tools;
 mod upload;
 
@@ -58,19 +58,14 @@ async fn main() -> anyhow::Result<()> {
     let workspace_registry = Arc::new(WorkspaceRegistry::load_default()?);
     let pipeline = plugins::build_pipeline_with_plugins(&config, Arc::clone(&metrics), None)?;
 
-    let http_port = std::env::var("HTTP_PORT")
-        .ok()
-        .and_then(|s| s.parse::<u16>().ok());
+    let http_port = std::env::var("HTTP_PORT").ok().and_then(|s| s.parse::<u16>().ok());
 
-    let kb_path = workspace_registry
-        .resolve_kb(None, None)
-        .ok()
-        .or_else(|| {
-            std::env::var("KNOWLEDGE_BASE_PATH")
-                .or_else(|_| std::env::var("KNOWLEDGE_BASE"))
-                .ok()
-                .map(std::path::PathBuf::from)
-        });
+    let kb_path = workspace_registry.resolve_kb(None, None).ok().or_else(|| {
+        std::env::var("KNOWLEDGE_BASE_PATH")
+            .or_else(|_| std::env::var("KNOWLEDGE_BASE"))
+            .ok()
+            .map(std::path::PathBuf::from)
+    });
 
     // Create shared upload store (used by both HTTP and MCP tools)
     let upload_store = Arc::new(upload::UploadStore::new()?);

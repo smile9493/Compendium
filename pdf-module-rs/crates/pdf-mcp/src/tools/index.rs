@@ -2,12 +2,12 @@ use std::fs;
 
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::parse_kb_path;
-use pdf_core::management::WorkspaceRegistry;
 use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
     graph, rebuild_all, reindex_entry, search_with_mode, wiki_dir, KnowledgeEntry, SearchMode,
 };
+use pdf_core::management::WorkspaceRegistry;
 use tracing::instrument;
 
 pub fn index_tool_definitions() -> Vec<ToolDefinition> {
@@ -200,14 +200,9 @@ pub async fn handle_search_knowledge(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let query = args["query"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+    let query = args["query"].as_str().ok_or_else(|| anyhow::anyhow!("Missing query"))?;
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
-    let mode = args["mode"]
-        .as_str()
-        .map(SearchMode::parse)
-        .unwrap_or(SearchMode::Hybrid);
+    let mode = args["mode"].as_str().map(SearchMode::parse).unwrap_or(SearchMode::Hybrid);
 
     let hits = search_with_mode(&kb_path, query, limit, mode)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
@@ -242,9 +237,8 @@ pub async fn handle_get_entry_context(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let hops = args["hops"].as_u64().unwrap_or(2) as u32;
 
     let graph = graph(&kb_path)?;
@@ -287,9 +281,8 @@ pub async fn handle_suggest_links(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let top_k = args["top_k"].as_u64().unwrap_or(10) as usize;
 
     let graph = graph(&kb_path)?;
@@ -309,9 +302,8 @@ pub async fn handle_export_concept_map(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let depth = args["depth"].as_u64().unwrap_or(2) as u32;
 
     let graph = graph(&kb_path)?;
@@ -337,12 +329,14 @@ pub async fn handle_check_quality(
     let report = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir)?;
     let kb_str = kb_path.to_string_lossy();
     let next_actions = build_next_actions(&report, &kb_str);
+    let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, None, 50)?;
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
         "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
         "domains": report.domains.iter().collect::<Vec<_>>(),
         "issues_count": report.issues.len(),
+        "issues": issues,
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),
         "drift_pairs_count": report.drift_pairs.len(),
@@ -360,9 +354,8 @@ pub async fn handle_get_agent_context(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let hops = args["hops"].as_u64().unwrap_or(2) as u32;
     let max_body_chars = args["max_body_chars"].as_u64().unwrap_or(4000) as usize;
     let related_limit = args["related_limit"].as_u64().unwrap_or(3) as usize;
@@ -381,20 +374,22 @@ pub async fn handle_get_agent_context(
     let neighbors = graph.get_neighbors(rel, hops);
 
     let related_query = format!("{} {}", entry.title, entry.tags.join(" "));
-    let related_hits = search_with_mode(&kb_path, &related_query, related_limit, SearchMode::Hybrid)?
-        .into_iter()
-        .filter(|h| h.path != rel)
-        .map(|h| serde_json::json!({
-            "path": h.path,
-            "title": h.title,
-            "score": h.score,
-            "snippet": h.snippet
-        }))
-        .collect::<Vec<_>>();
+    let related_hits =
+        search_with_mode(&kb_path, &related_query, related_limit, SearchMode::Hybrid)?
+            .into_iter()
+            .filter(|h| h.path != rel)
+            .map(|h| {
+                serde_json::json!({
+                    "path": h.path,
+                    "title": h.title,
+                    "score": h.score,
+                    "snippet": h.snippet
+                })
+            })
+            .collect::<Vec<_>>();
 
-    let char_count = body_truncated.chars().count()
-        + neighbors.len() * 200
-        + related_hits.len() * 150;
+    let char_count =
+        body_truncated.chars().count() + neighbors.len() * 200 + related_hits.len() * 150;
     let token_estimate = char_count / 4;
 
     let result = serde_json::json!({
@@ -431,12 +426,9 @@ fn parse_patch_request(args: &serde_json::Value) -> anyhow::Result<WikiPatchRequ
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?
         .to_string();
     let ops = args.get("operations").ok_or_else(|| anyhow::anyhow!("Missing operations"))?;
-    let operations: Vec<pdf_core::knowledge::patch::PatchOp> =
-        serde_json::from_value(ops.clone()).map_err(|e| anyhow::anyhow!("Invalid operations: {}", e))?;
-    Ok(WikiPatchRequest {
-        entry_path,
-        operations,
-    })
+    let operations: Vec<pdf_core::knowledge::patch::PatchOp> = serde_json::from_value(ops.clone())
+        .map_err(|e| anyhow::anyhow!("Invalid operations: {}", e))?;
+    Ok(WikiPatchRequest { entry_path, operations })
 }
 
 #[instrument(skip(args))]
@@ -470,7 +462,7 @@ mod tests {
     fn test_index_tool_definitions() {
         let defs = index_tool_definitions();
         assert_eq!(defs.len(), 10);
-        
+
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"search_knowledge"));
         assert!(names.contains(&"rebuild_index"));
@@ -487,7 +479,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_knowledge_missing_query() {
         let args = serde_json::json!({});
-        
+
         let result = handle_search_knowledge(&args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing query"));
@@ -496,7 +488,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_entry_context_missing_entry_path() {
         let args = serde_json::json!({});
-        
+
         let result = handle_get_entry_context(&args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
@@ -505,7 +497,7 @@ mod tests {
     #[tokio::test]
     async fn test_suggest_links_missing_entry_path() {
         let args = serde_json::json!({});
-        
+
         let result = handle_suggest_links(&args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
@@ -514,7 +506,7 @@ mod tests {
     #[tokio::test]
     async fn test_export_concept_map_missing_entry_path() {
         let args = serde_json::json!({});
-        
+
         let result = handle_export_concept_map(&args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));

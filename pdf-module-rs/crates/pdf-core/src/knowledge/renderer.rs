@@ -154,18 +154,13 @@ pub struct WikiRenderer {
 
 impl WikiRenderer {
     pub fn new(wiki_path: &Path) -> Self {
-        Self {
-            wiki_path: wiki_path.to_path_buf(),
-        }
+        Self { wiki_path: wiki_path.to_path_buf() }
     }
 
     pub fn render_entry(&self, relative_path: &str) -> PdfResult<RenderedEntry> {
         let full_path = self.wiki_path.join(relative_path);
         if !full_path.exists() {
-            return Err(PdfModuleError::Storage(format!(
-                "Entry not found: {}",
-                relative_path
-            )));
+            return Err(PdfModuleError::Storage(format!("Entry not found: {}", relative_path)));
         }
 
         let content = std::fs::read_to_string(&full_path).map_err(|e| {
@@ -298,12 +293,10 @@ impl WikiRenderer {
                         continue;
                     }
 
-                    let related_match = related
-                        .iter()
-                        .any(|r| normalize_path(r) == normalized_target);
-                    let contradict_match = contradictions
-                        .iter()
-                        .any(|c| normalize_path(c) == normalized_target);
+                    let related_match =
+                        related.iter().any(|r| normalize_path(r) == normalized_target);
+                    let contradict_match =
+                        contradictions.iter().any(|c| normalize_path(c) == normalized_target);
 
                     if related_match || contradict_match {
                         backlinks.push(relative);
@@ -337,10 +330,7 @@ fn process_wikilinks(html: &str) -> String {
     });
     re.replace_all(html, |caps: &regex::Captures| {
         let target = &caps[1];
-        format!(
-            r#"<a class="wikilink" href="/api/wiki/entries/{}.md">{}</a>"#,
-            target, target
-        )
+        format!(r#"<a class="wikilink" href="/api/wiki/entries/{}.md">{}</a>"#, target, target)
     })
     .into_owned()
 }
@@ -363,10 +353,8 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "wiki".to_string());
 
-    let relative = current
-        .strip_prefix(base)
-        .map(|r| r.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let relative =
+        current.strip_prefix(base).map(|r| r.to_string_lossy().to_string()).unwrap_or_default();
 
     if current.is_file() {
         let is_entry =
@@ -382,14 +370,7 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
             (None, None)
         };
 
-        return Ok(TreeNode {
-            name,
-            path: relative,
-            children: vec![],
-            is_entry,
-            title,
-            domain,
-        });
+        return Ok(TreeNode { name, path: relative, children: vec![], is_entry, title, domain });
     }
 
     let mut children = Vec::new();
@@ -445,11 +426,7 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
             for (domain, mut entries) in entries_by_domain {
                 entries.sort_by(|a, b| a.name.cmp(&b.name));
                 children.push(TreeNode {
-                    name: if domain.is_empty() {
-                        "未分类".to_string()
-                    } else {
-                        domain.clone()
-                    },
+                    name: if domain.is_empty() { "未分类".to_string() } else { domain.clone() },
                     path: if domain.is_empty() {
                         String::new()
                     } else {
@@ -470,14 +447,7 @@ fn build_tree(base: &Path, current: &Path) -> PdfResult<TreeNode> {
         b_is_dir.cmp(&a_is_dir).then_with(|| a.name.cmp(&b.name))
     });
 
-    Ok(TreeNode {
-        name,
-        path: relative,
-        children,
-        is_entry: false,
-        title: None,
-        domain: None,
-    })
+    Ok(TreeNode { name, path: relative, children, is_entry: false, title: None, domain: None })
 }
 
 fn walk_md_files(dir: &Path) -> PdfResult<Vec<PathBuf>> {
@@ -510,10 +480,7 @@ fn normalize_path(p: &str) -> String {
 }
 
 fn extract_title_from_path(path: &str) -> String {
-    let file_name = Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Untitled");
+    let file_name = Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled");
 
     if file_name.starts_with('[') {
         if let Some(end) = file_name.find(']') {

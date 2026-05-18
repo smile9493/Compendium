@@ -185,11 +185,7 @@ impl PdfEngine for PdfiumEngine {
     async fn extract_text(&self, file_path: &Path) -> PdfResult<TextExtractionResult> {
         let data = std::fs::read(file_path)?;
         let text = Self::safe_extract_text(&data)?;
-        Ok(TextExtractionResult {
-            extracted_text: text,
-            extraction_metadata: None,
-            metadata: None,
-        })
+        Ok(TextExtractionResult { extracted_text: text, extraction_metadata: None, metadata: None })
     }
 
     async fn extract_structured(

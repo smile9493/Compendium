@@ -106,15 +106,10 @@ impl ExtractionBackend for PdfiumBackendFallback {
 }
 
 #[cfg(feature = "vlm")]
-async fn extract_page(
-    gateway: &VlmGateway,
-    pdf_data: &[u8],
-    page_idx: u32,
-) -> PdfResult<String> {
+async fn extract_page(gateway: &VlmGateway, pdf_data: &[u8], page_idx: u32) -> PdfResult<String> {
     let (rgba, width, height) =
-        vlm_visual_gateway::render_page_pixels(pdf_data, page_idx, 150.0).map_err(|e| {
-            PdfModuleError::Extraction(format!("Render page {page_idx}: {e}"))
-        })?;
+        vlm_visual_gateway::render_page_pixels(pdf_data, page_idx, 150.0)
+            .map_err(|e| PdfModuleError::Extraction(format!("Render page {page_idx}: {e}")))?;
 
     let metadata = vlm_visual_gateway::types::PayloadMetadata {
         page_width: width as f32,

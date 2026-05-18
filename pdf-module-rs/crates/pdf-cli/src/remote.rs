@@ -27,11 +27,7 @@ pub struct RemoteConfig {
 
 impl Default for RemoteConfig {
     fn default() -> Self {
-        Self {
-            server: "http://127.0.0.1:9090".to_string(),
-            token: None,
-            timeout_secs: 300,
-        }
+        Self { server: "http://127.0.0.1:9090".to_string(), token: None, timeout_secs: 300 }
     }
 }
 
@@ -78,11 +74,8 @@ impl RemoteClient {
     pub async fn upload_pdf(&self, pdf_path: &Path) -> Result<Value> {
         let url = format!("{}/api/upload", self.cfg.server);
 
-        let file_name = pdf_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("document.pdf")
-            .to_string();
+        let file_name =
+            pdf_path.file_name().and_then(|n| n.to_str()).unwrap_or("document.pdf").to_string();
 
         let metadata = tokio::fs::metadata(pdf_path)
             .await
@@ -100,7 +93,9 @@ impl RemoteClient {
         let pb = ProgressBar::new(file_size);
         pb.set_style(
             ProgressStyle::default_bar()
-                .template("{msg}\n[{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .template(
+                    "{msg}\n[{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+                )
                 .context("Invalid progress bar template")
                 .map_err(|e| anyhow::anyhow!("Progress bar template error: {}", e))?
                 .progress_chars("##-"),
@@ -108,10 +103,7 @@ impl RemoteClient {
         pb.set_message(format!("Uploading {}", file_name));
 
         // Wrap file reader with progress
-        let progress_reader = ProgressReader {
-            inner: file,
-            progress: pb.clone(),
-        };
+        let progress_reader = ProgressReader { inner: file, progress: pb.clone() };
 
         // Stream the file as multipart
         let stream = tokio_util::io::ReaderStream::new(progress_reader);
@@ -124,13 +116,8 @@ impl RemoteClient {
 
         let form = reqwest::multipart::Form::new().part("file", part);
 
-        let resp = self
-            .inner
-            .post(&url)
-            .multipart(form)
-            .send()
-            .await
-            .context("Upload request failed")?;
+        let resp =
+            self.inner.post(&url).multipart(form).send().await.context("Upload request failed")?;
 
         pb.finish_and_clear();
 
@@ -140,10 +127,7 @@ impl RemoteClient {
             anyhow::bail!("Upload failed ({}): {}", status, body);
         }
 
-        let result: Value = resp
-            .json()
-            .await
-            .context("Failed to parse upload response")?;
+        let result: Value = resp.json().await.context("Failed to parse upload response")?;
 
         Ok(result)
     }
@@ -151,11 +135,7 @@ impl RemoteClient {
     // ── MCP JSON-RPC ──
 
     /// Call an MCP tool via `POST /mcp` with JSON-RPC payload.
-    pub async fn call_tool(
-        &self,
-        tool_name: &str,
-        arguments: Value,
-    ) -> Result<Value> {
+    pub async fn call_tool(&self, tool_name: &str, arguments: Value) -> Result<Value> {
         let url = format!("{}/mcp", self.cfg.server);
 
         let body = serde_json::json!({
@@ -182,10 +162,7 @@ impl RemoteClient {
             anyhow::bail!("MCP server error ({}): {}", status, body);
         }
 
-        let json_rpc: Value = resp
-            .json()
-            .await
-            .context("Failed to parse MCP response")?;
+        let json_rpc: Value = resp.json().await.context("Failed to parse MCP response")?;
 
         // Check for JSON-RPC error
         if let Some(err) = json_rpc.get("error") {
@@ -198,13 +175,10 @@ impl RemoteClient {
         let result = json_rpc
             .pointer("/result/content/0/text")
             .and_then(|t| t.as_str())
-            .map(|s| serde_json::from_str::<Value>(s).unwrap_or_else(|_| Value::String(s.to_string())))
-            .unwrap_or_else(|| {
-                json_rpc
-                    .get("result")
-                    .cloned()
-                    .unwrap_or(Value::Null)
-            });
+            .map(|s| {
+                serde_json::from_str::<Value>(s).unwrap_or_else(|_| Value::String(s.to_string()))
+            })
+            .unwrap_or_else(|| json_rpc.get("result").cloned().unwrap_or(Value::Null));
 
         Ok(result)
     }
@@ -213,19 +187,10 @@ impl RemoteClient {
 
     /// GET /api/wiki/search?q=...&limit=...
     pub async fn search_wiki(&self, query: &str, limit: usize) -> Result<Value> {
-        let url = format!(
-            "{}/api/wiki/search?q={}&limit={}",
-            self.cfg.server,
-            urlencoding(query),
-            limit
-        );
+        let url =
+            format!("{}/api/wiki/search?q={}&limit={}", self.cfg.server, urlencoding(query), limit);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Search request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Search request failed")?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -240,12 +205,7 @@ impl RemoteClient {
     pub async fn wiki_stats(&self) -> Result<Value> {
         let url = format!("{}/api/wiki/stats", self.cfg.server);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Stats request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Stats request failed")?;
 
         resp.json().await.context("Failed to parse stats response")
     }
@@ -254,29 +214,16 @@ impl RemoteClient {
     pub async fn wiki_entry(&self, path: &str) -> Result<Value> {
         let url = format!("{}/api/wiki/entries/{}", self.cfg.server, path);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Entry request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Entry request failed")?;
 
         resp.json().await.context("Failed to parse entry response")
     }
 
     /// GET /api/wiki/graph/{path}?depth={depth}
     pub async fn wiki_concept_map(&self, path: &str, depth: u32) -> Result<Value> {
-        let url = format!(
-            "{}/api/wiki/graph/{}?depth={}",
-            self.cfg.server, path, depth
-        );
+        let url = format!("{}/api/wiki/graph/{}?depth={}", self.cfg.server, path, depth);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Concept map request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Concept map request failed")?;
 
         resp.json().await.context("Failed to parse concept map response")
     }
@@ -285,12 +232,7 @@ impl RemoteClient {
     pub async fn health(&self) -> Result<Value> {
         let url = format!("{}/api/health", self.cfg.server);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Health check request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Health check request failed")?;
 
         resp.json().await.context("Failed to parse health response")
     }
@@ -299,12 +241,7 @@ impl RemoteClient {
     pub async fn get_config(&self) -> Result<Value> {
         let url = format!("{}/api/config", self.cfg.server);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Config request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Config request failed")?;
 
         resp.json().await.context("Failed to parse config response")
     }
@@ -313,12 +250,7 @@ impl RemoteClient {
     pub async fn compile_status(&self) -> Result<Value> {
         let url = format!("{}/api/compile/status", self.cfg.server);
 
-        let resp = self
-            .inner
-            .get(&url)
-            .send()
-            .await
-            .context("Compile status request failed")?;
+        let resp = self.inner.get(&url).send().await.context("Compile status request failed")?;
 
         resp.json().await.context("Failed to parse compile status response")
     }

@@ -49,18 +49,12 @@ impl VlmModel {
 
     /// Whether this model supports the thinking parameter
     pub fn supports_thinking(&self) -> bool {
-        matches!(
-            self,
-            VlmModel::Glm46v | VlmModel::Glm46vFlashX | VlmModel::Glm46vFlash
-        )
+        matches!(self, VlmModel::Glm46v | VlmModel::Glm46vFlashX | VlmModel::Glm46vFlash)
     }
 
     /// Whether this model supports native function calling
     pub fn supports_function_call(&self) -> bool {
-        matches!(
-            self,
-            VlmModel::Glm46v | VlmModel::Glm46vFlashX | VlmModel::Glm46vFlash
-        )
+        matches!(self, VlmModel::Glm46v | VlmModel::Glm46vFlashX | VlmModel::Glm46vFlash)
     }
 
     /// Whether this model uses the dedicated layout_parsing endpoint
@@ -152,10 +146,8 @@ impl VlmConfig {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(5);
 
-        let max_retries = std::env::var("VLM_MAX_RETRIES")
-            .ok()
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(3);
+        let max_retries =
+            std::env::var("VLM_MAX_RETRIES").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(3);
 
         let retry_delay_base_secs = std::env::var("VLM_RETRY_DELAY_BASE_SECS")
             .ok()
@@ -334,9 +326,7 @@ impl VlmPayload {
         let mut content = Vec::new();
 
         content.push(ChatMessageContentPart::ImageUrl {
-            image_url: ImageUrlObject {
-                url: format!("data:image/png;base64,{}", self.image),
-            },
+            image_url: ImageUrlObject { url: format!("data:image/png;base64,{}", self.image) },
         });
 
         let mut text = String::new();
@@ -400,14 +390,9 @@ impl VlmPayload {
 
         VlmChatRequest {
             model: self.model.clone(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content,
-            }],
+            messages: vec![ChatMessage { role: "user".to_string(), content }],
             thinking: if enable_thinking {
-                Some(ThinkingConfig {
-                    thinking_type: "enabled".to_string(),
-                })
+                Some(ThinkingConfig { thinking_type: "enabled".to_string() })
             } else {
                 None
             },
@@ -469,10 +454,7 @@ pub struct DetectorConfig {
 
 impl Default for DetectorConfig {
     fn default() -> Self {
-        Self {
-            zero_text_threshold: 0,
-            layout_confidence_threshold: 0.3,
-        }
+        Self { zero_text_threshold: 0, layout_confidence_threshold: 0.3 }
     }
 }
 

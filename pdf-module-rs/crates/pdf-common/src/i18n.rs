@@ -38,7 +38,9 @@ impl Translator {
     ///     main.ftl
     /// ```
     pub fn load(locales_dir: impl AsRef<Path>, default_lang: &str) -> Result<Self, String> {
-        let default_lang: LanguageIdentifier = default_lang.parse().map_err(|e: unic_langid::LanguageIdentifierError| e.to_string())?;
+        let default_lang: LanguageIdentifier = default_lang
+            .parse()
+            .map_err(|e: unic_langid::LanguageIdentifierError| e.to_string())?;
         let mut bundles = HashMap::new();
         let mut supported_langs = Vec::new();
 
@@ -50,7 +52,9 @@ impl Translator {
             }
 
             let lang_str = entry.file_name().to_string_lossy().to_string();
-            let lang_id: LanguageIdentifier = lang_str.parse().map_err(|e: unic_langid::LanguageIdentifierError| e.to_string())?;
+            let lang_id: LanguageIdentifier = lang_str
+                .parse()
+                .map_err(|e: unic_langid::LanguageIdentifierError| e.to_string())?;
 
             let mut bundle = FluentBundle::new_concurrent(vec![lang_id.clone()]);
 
@@ -63,7 +67,8 @@ impl Translator {
                 }
 
                 let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                let resource = FluentResource::try_new(content).map_err(|(_, e)| format!("{:?}", e))?;
+                let resource =
+                    FluentResource::try_new(content).map_err(|(_, e)| format!("{:?}", e))?;
                 bundle.add_resource(resource).map_err(|e| format!("{:?}", e))?;
             }
 
@@ -75,19 +80,11 @@ impl Translator {
             return Err("No locale directories found".into());
         }
 
-        Ok(Self {
-            bundles,
-            default_lang,
-            supported_langs,
-        })
+        Ok(Self { bundles, default_lang, supported_langs })
     }
 
     /// Get translated message with optional arguments.
-    pub fn get(
-        &self,
-        message_id: &str,
-        args: Option<&[(&str, &str)]>,
-    ) -> Result<String, String> {
+    pub fn get(&self, message_id: &str, args: Option<&[(&str, &str)]>) -> Result<String, String> {
         self.get_with_lang(message_id, args, &self.default_lang)
     }
 
@@ -108,7 +105,8 @@ impl Translator {
             .get_message(message_id)
             .ok_or_else(|| format!("Message '{}' not found", message_id))?;
 
-        let pattern = msg.value().ok_or_else(|| format!("Message '{}' has no value", message_id))?;
+        let pattern =
+            msg.value().ok_or_else(|| format!("Message '{}' has no value", message_id))?;
 
         let mut errors = Vec::new();
         let mut fluent_args = fluent::FluentArgs::new();

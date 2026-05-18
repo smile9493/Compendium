@@ -70,9 +70,7 @@ impl Modify for SecurityAddon {
 
 /// Build a Router with Swagger UI at `/swagger-ui`.
 pub fn openapi_router() -> axum::Router {
-    SwaggerUi::new("/swagger-ui")
-        .url("/api-docs/openapi.json", ApiDoc::openapi())
-        .into()
+    SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()).into()
 }
 
 /// Get the raw OpenAPI JSON spec.

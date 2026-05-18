@@ -100,10 +100,8 @@ impl QualityProbe {
         let sample_size = 2048.min(data.len());
         let sample = &data[0..sample_size];
 
-        let text_chars = sample
-            .iter()
-            .filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace())
-            .count();
+        let text_chars =
+            sample.iter().filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace()).count();
         let text_density = text_chars as f64 / sample_size as f64;
 
         let sample_str = String::from_utf8_lossy(sample);
@@ -222,9 +220,7 @@ mod tests {
     #[test]
     fn test_quality_probe_pdf_header() {
         let mut temp_file = NamedTempFile::new().unwrap();
-        temp_file
-            .write_all(b"%PDF-1.4\n%test content with /Font and /Image")
-            .unwrap();
+        temp_file.write_all(b"%PDF-1.4\n%test content with /Font and /Image").unwrap();
 
         let data = std::fs::read(temp_file.path()).unwrap();
         let report = QualityProbe::analyze(&data).unwrap();

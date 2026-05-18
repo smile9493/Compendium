@@ -42,12 +42,7 @@ impl SamplingClient {
     pub fn with_sender(timeout_secs: u64, sender: mpsc::Sender<OutgoingRequest>) -> Self {
         let pending = Arc::new(RwLock::new(HashMap::new()));
 
-        Self {
-            request_tx: sender,
-            pending,
-            next_id: AtomicU64::new(1),
-            timeout_secs,
-        }
+        Self { request_tx: sender, pending, next_id: AtomicU64::new(1), timeout_secs }
     }
 
     pub fn pending_requests(&self) -> PendingRequests {
@@ -117,16 +112,10 @@ pub fn create_sampling_jsonrpc_request(id: u64, request: SamplingRequest) -> ser
 pub fn parse_sampling_response(
     value: &serde_json::Value,
 ) -> Result<(u64, Result<SamplingResponse, SamplingError>), String> {
-    let id = value
-        .get("id")
-        .and_then(|v| v.as_u64())
-        .ok_or("Missing or invalid id in response")?;
+    let id = value.get("id").and_then(|v| v.as_u64()).ok_or("Missing or invalid id in response")?;
 
     if let Some(error) = value.get("error") {
-        let message = error
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Unknown error");
+        let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error");
         return Ok((id, Err(SamplingError::Internal(message.to_string()))));
     }
 
@@ -146,10 +135,7 @@ pub struct SamplingClientConfig {
 
 impl Default for SamplingClientConfig {
     fn default() -> Self {
-        Self {
-            timeout_secs: 60,
-            max_concurrent: 5,
-        }
+        Self { timeout_secs: 60, max_concurrent: 5 }
     }
 }
 
@@ -163,9 +149,7 @@ mod tests {
         let request = SamplingRequest {
             messages: vec![SamplingMessage {
                 role: Role::User,
-                content: SamplingContent::Text {
-                    text: "Hello".to_string(),
-                },
+                content: SamplingContent::Text { text: "Hello".to_string() },
             }],
             max_tokens: Some(100),
             ..Default::default()
@@ -225,9 +209,7 @@ mod tests {
         let request = SamplingRequest {
             messages: vec![SamplingMessage {
                 role: Role::User,
-                content: SamplingContent::Text {
-                    text: "Test".to_string(),
-                },
+                content: SamplingContent::Text { text: "Test".to_string() },
             }],
             ..Default::default()
         };
@@ -240,9 +222,7 @@ mod tests {
             let response = SamplingResponse {
                 model: "test-model".to_string(),
                 role: Role::Assistant,
-                content: SamplingContent::Text {
-                    text: "Test response".to_string(),
-                },
+                content: SamplingContent::Text { text: "Test response".to_string() },
                 stop_reason: Some("end".to_string()),
             };
             client.handle_response(outgoing.id, Ok(response)).await;

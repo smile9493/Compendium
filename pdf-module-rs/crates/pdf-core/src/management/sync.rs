@@ -28,15 +28,11 @@ pub struct FileSyncRemote {
 
 impl FileSyncRemote {
     pub fn new(base: impl AsRef<Path>) -> Self {
-        Self {
-            base: base.as_ref().to_path_buf(),
-        }
+        Self { base: base.as_ref().to_path_buf() }
     }
 
     pub fn from_url(url: &str) -> PdfResult<Self> {
-        let path = url
-            .strip_prefix("file://")
-            .unwrap_or(url);
+        let path = url.strip_prefix("file://").unwrap_or(url);
         let base = PathBuf::from(path);
         fs::create_dir_all(&base).map_err(storage_err)?;
         Ok(Self::new(base))
@@ -121,10 +117,7 @@ pub fn build_local_manifest(knowledge_base: &Path) -> PdfResult<SyncManifest> {
         }
     }
     let root_hash = merkle_root(&objects);
-    Ok(SyncManifest {
-        root_hash,
-        objects,
-    })
+    Ok(SyncManifest { root_hash, objects })
 }
 
 pub fn sync_status(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<SyncStatus> {
@@ -159,11 +152,7 @@ pub fn sync_push(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<Sy
     let raw = serde_json::to_vec(&manifest).map_err(|e| storage_err(&e.to_string()))?;
     remote.put_manifest("HEAD", &raw)?;
     persist_local_head(knowledge_base, &manifest)?;
-    Ok(SyncReport {
-        pushed,
-        pulled: 0,
-        rebuilt_index_recommended: false,
-    })
+    Ok(SyncReport { pushed, pulled: 0, rebuilt_index_recommended: false })
 }
 
 pub fn sync_pull(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<SyncReport> {
@@ -184,11 +173,7 @@ pub fn sync_pull(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<Sy
         pulled += 1;
     }
     persist_local_head(knowledge_base, &manifest)?;
-    Ok(SyncReport {
-        pushed: 0,
-        pulled,
-        rebuilt_index_recommended: true,
-    })
+    Ok(SyncReport { pushed: 0, pulled, rebuilt_index_recommended: true })
 }
 
 fn persist_local_head(knowledge_base: &Path, manifest: &SyncManifest) -> PdfResult<()> {
@@ -199,11 +184,7 @@ fn persist_local_head(knowledge_base: &Path, manifest: &SyncManifest) -> PdfResu
     fs::write(dir.join("manifest.json"), raw).map_err(storage_err)
 }
 
-fn walk_and_hash(
-    dir: &Path,
-    kb_root: &Path,
-    out: &mut HashMap<String, String>,
-) -> PdfResult<()> {
+fn walk_and_hash(dir: &Path, kb_root: &Path, out: &mut HashMap<String, String>) -> PdfResult<()> {
     for entry in fs::read_dir(dir).map_err(storage_err)? {
         let entry = entry.map_err(storage_err)?;
         let path = entry.path();

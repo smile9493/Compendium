@@ -39,11 +39,7 @@ pub struct QualityIssue {
 
 impl std::fmt::Display for QualityIssue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "[{}] {}: {}",
-            self.severity, self.entry_path, self.message
-        )
+        write!(f, "[{}] {}: {}", self.severity, self.entry_path, self.message)
     }
 }
 
@@ -86,16 +82,12 @@ pub struct QualityReport {
 impl QualityReport {
     /// Check if the report has any errors.
     pub fn has_errors(&self) -> bool {
-        self.issues
-            .iter()
-            .any(|i| i.severity == IssueSeverity::Error)
+        self.issues.iter().any(|i| i.severity == IssueSeverity::Error)
     }
 
     /// Check if the report has any warnings.
     pub fn has_warnings(&self) -> bool {
-        self.issues
-            .iter()
-            .any(|i| i.severity == IssueSeverity::Warning)
+        self.issues.iter().any(|i| i.severity == IssueSeverity::Warning)
     }
 
     /// Format the report as Markdown.
@@ -109,14 +101,8 @@ impl QualityReport {
             self.avg_quality_score * 100.0
         ));
         md.push_str(&format!("- **Issues found**: {}\n", self.issues.len()));
-        md.push_str(&format!(
-            "- **Orphan entries**: {}\n",
-            self.orphan_entries.len()
-        ));
-        md.push_str(&format!(
-            "- **Broken links**: {}\n\n",
-            self.broken_links.len()
-        ));
+        md.push_str(&format!("- **Orphan entries**: {}\n", self.orphan_entries.len()));
+        md.push_str(&format!("- **Broken links**: {}\n\n", self.broken_links.len()));
 
         if !self.issues.is_empty() {
             md.push_str("## Issues\n\n");
@@ -181,11 +167,7 @@ pub fn analyze_wiki(wiki_dir: &Path) -> PdfResult<QualityReport> {
     let total_entries = entries.len();
 
     for (path, entry) in &entries {
-        let rel = path
-            .strip_prefix(wiki_dir)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
+        let rel = path.strip_prefix(wiki_dir).unwrap_or(path).to_string_lossy().to_string();
 
         // Check minimal quality
         if entry.title.is_empty() {
@@ -258,25 +240,14 @@ pub fn analyze_wiki(wiki_dir: &Path) -> PdfResult<QualityReport> {
             let rel = entry.relative_path().to_string_lossy().to_string();
             !linked_entries.contains(&rel) && entry.level != crate::knowledge::entry::EntryLevel::L0
         })
-        .map(|(path, _)| {
-            path.strip_prefix(wiki_dir)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string()
-        })
+        .map(|(path, _)| path.strip_prefix(wiki_dir).unwrap_or(path).to_string_lossy().to_string())
         .collect();
 
     // Average quality score
-    let scored: Vec<f32> = entries
-        .iter()
-        .map(|(_, e)| e.quality_score)
-        .filter(|&s| s > 0.0)
-        .collect();
-    let avg_quality_score = if scored.is_empty() {
-        0.0
-    } else {
-        scored.iter().sum::<f32>() / scored.len() as f32
-    };
+    let scored: Vec<f32> =
+        entries.iter().map(|(_, e)| e.quality_score).filter(|&s| s > 0.0).collect();
+    let avg_quality_score =
+        if scored.is_empty() { 0.0 } else { scored.iter().sum::<f32>() / scored.len() as f32 };
 
     Ok(QualityReport {
         total_entries,
@@ -307,11 +278,7 @@ fn scan_entries_recursive(
         if path.is_dir() {
             scan_entries_recursive(base, &path, entries, all_paths)?;
         } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-            let rel = path
-                .strip_prefix(base)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .to_string();
+            let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
             all_paths.insert(rel);
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
@@ -376,9 +343,7 @@ fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<D
                 let (_, entry_a) = &entries[idx_a];
                 let (_, entry_b) = &entries[idx_b];
 
-                let time_span = (entry_b.created - entry_a.created)
-                    .num_days()
-                    .unsigned_abs();
+                let time_span = (entry_b.created - entry_a.created).num_days().unsigned_abs();
                 if time_span < 90 {
                     continue;
                 }
@@ -426,9 +391,7 @@ fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<D
 
     // Sort by similarity ascending (worst drift first)
     drift_pairs.sort_by(|a, b| {
-        a.similarity
-            .partial_cmp(&b.similarity)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        a.similarity.partial_cmp(&b.similarity).unwrap_or(std::cmp::Ordering::Equal)
     });
 
     drift_pairs

@@ -123,10 +123,7 @@ pub fn detect_communities(
         return Vec::new();
     }
 
-    communities
-        .into_iter()
-        .filter(|c| c.members.len() >= 2)
-        .collect()
+    communities.into_iter().filter(|c| c.members.len() >= 2).collect()
 }
 
 #[cfg(test)]

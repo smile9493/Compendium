@@ -62,13 +62,7 @@ impl VlmGateway {
         let semaphore = Arc::new(Semaphore::new(config.max_concurrency));
         let (shutdown_tx, _) = broadcast::channel(1);
 
-        Ok(Self {
-            client,
-            config: Arc::new(config),
-            metrics,
-            semaphore,
-            shutdown_tx,
-        })
+        Ok(Self { client, config: Arc::new(config), metrics, semaphore, shutdown_tx })
     }
 
     /// Create from environment variables.
@@ -151,9 +145,8 @@ impl VlmGateway {
         let gateway = self.clone();
 
         tokio::spawn(async move {
-            let result = gateway
-                .perceive_layout(&image_data, hint_text.as_deref(), &metadata)
-                .await;
+            let result =
+                gateway.perceive_layout(&image_data, hint_text.as_deref(), &metadata).await;
             let _ = result_tx.send(result);
         });
     }
@@ -171,9 +164,7 @@ impl VlmGateway {
 
     /// Create a handle for graceful shutdown.
     pub fn handle(&self) -> VlmGatewayHandle {
-        VlmGatewayHandle {
-            shutdown_tx: self.shutdown_tx.clone(),
-        }
+        VlmGatewayHandle { shutdown_tx: self.shutdown_tx.clone() }
     }
 
     /// Access the gateway configuration for multi-model routing.
@@ -353,9 +344,7 @@ impl VlmGateway {
             };
         }
 
-        resp.text()
-            .await
-            .map_err(|e| VlmError::Network(e.to_string()))
+        resp.text().await.map_err(|e| VlmError::Network(e.to_string()))
     }
 
     async fn send_ocr_request(&self, payload: &VlmPayload) -> VlmResult<String> {
@@ -401,9 +390,7 @@ impl VlmGateway {
             };
         }
 
-        resp.text()
-            .await
-            .map_err(|e| VlmError::Network(e.to_string()))
+        resp.text().await.map_err(|e| VlmError::Network(e.to_string()))
     }
 
     fn parse_response(&self, body: &str) -> VlmResult<LayoutResult> {
@@ -426,11 +413,7 @@ impl VlmGateway {
 
         let regions = self.parse_layout_from_text(message_content);
 
-        Ok(LayoutResult {
-            regions,
-            reading_order: Vec::new(),
-            confidence: 1.0,
-        })
+        Ok(LayoutResult { regions, reading_order: Vec::new(), confidence: 1.0 })
     }
 
     fn parse_ocr_response(&self, body: &str) -> VlmResult<LayoutResult> {
@@ -499,11 +482,7 @@ impl VlmGateway {
         let _text = ocr_response.text.unwrap_or(total_text);
         let confidence = if regions.is_empty() { 0.0 } else { 1.0 };
 
-        Ok(LayoutResult {
-            regions,
-            reading_order: Vec::new(),
-            confidence,
-        })
+        Ok(LayoutResult { regions, reading_order: Vec::new(), confidence })
     }
 
     fn parse_layout_from_text(&self, text: &str) -> Vec<Region> {
@@ -538,12 +517,7 @@ impl VlmGateway {
 
             regions.push(Region {
                 region_type,
-                bbox: crate::types::BoundingBox {
-                    x,
-                    y,
-                    width: w - x,
-                    height: h - y,
-                },
+                bbox: crate::types::BoundingBox { x, y, width: w - x, height: h - y },
                 content: cap[0].to_string(),
             });
         }
@@ -592,20 +566,15 @@ pub fn render_page_pixels(
             .map_err(|e| format!("load PDF: {e}"))?;
 
         let pages = document.pages();
-        let idx: u16 = page_index
-            .try_into()
-            .map_err(|_| format!("page_index {page_index} exceeds u16"))?;
-        let page = pages
-            .get(idx)
-            .map_err(|e| format!("get page {page_index}: {e}"))?;
+        let idx: u16 =
+            page_index.try_into().map_err(|_| format!("page_index {page_index} exceeds u16"))?;
+        let page = pages.get(idx).map_err(|e| format!("get page {page_index}: {e}"))?;
 
         // PDF points are 1/72 inch, so scale = dpi / 72.0
         let scale = dpi / 72.0;
         let config = PdfRenderConfig::new().scale_page_by_factor(scale);
 
-        let bitmap = page
-            .render_with_config(&config)
-            .map_err(|e| format!("render page: {e}"))?;
+        let bitmap = page.render_with_config(&config).map_err(|e| format!("render page: {e}"))?;
 
         let width = bitmap.width() as u32;
         let height = bitmap.height() as u32;

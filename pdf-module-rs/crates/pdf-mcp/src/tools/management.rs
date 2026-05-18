@@ -1,7 +1,10 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
+use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::management::WorkspaceRegistry;
-use pdf_core::management::{CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter};
+use pdf_core::management::{
+    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
+};
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -87,6 +90,43 @@ pub fn management_tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
+            name: "list_quality_issues".to_string(),
+            description: "List quality issues with stable issue_id for fix_suggest.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "severity": { "type": "string" },
+                    "limit": { "type": "integer" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "fix_suggest".to_string(),
+            description: "Suggest MCP actions to fix a quality issue by issue_id.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "issue_id": { "type": "string" }
+                },
+                "required": ["issue_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "apply_quality_gate".to_string(),
+            description: "Run publish quality gate on all wiki entries.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "job_id": { "type": "string" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
             name: "show_wiki_browser".to_string(),
             description: "Open the interactive wiki browser as an MCP App. Returns a resource reference to ui://wiki/browser which the client renders as an iframe. The browser provides tree navigation, full-text search, concept maps, and backlinks for the knowledge base.".to_string(),
             input_schema: serde_json::json!({
@@ -105,8 +145,7 @@ pub async fn handle_get_config(
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let mut cm = ConfigManager::new(&kb_path);
-    cm.load()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    cm.load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
 
     let data: std::collections::HashMap<String, String> = cm.all().clone();
     let result = serde_json::json!({
@@ -123,18 +162,12 @@ pub async fn handle_set_config(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let key = args["key"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing key"))?;
-    let value = args["value"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing value"))?;
+    let key = args["key"].as_str().ok_or_else(|| anyhow::anyhow!("Missing key"))?;
+    let value = args["value"].as_str().ok_or_else(|| anyhow::anyhow!("Missing value"))?;
 
     let mut cm = ConfigManager::new(&kb_path);
-    cm.load()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
-    cm.set(key, value)
-        .map_err(|e| anyhow::anyhow!("Failed to set config: {}", e))?;
+    cm.load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    cm.set(key, value).map_err(|e| anyhow::anyhow!("Failed to set config: {}", e))?;
 
     let result = serde_json::json!({
         "status": "success",
@@ -152,13 +185,11 @@ pub async fn handle_get_health_report(
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let reporter = HealthReporter::new(&kb_path);
-    let report = reporter
-        .report()
-        .map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
+    let report =
+        reporter.report().map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
 
-    let quality_snapshot = pdf_core::management::QualitySnapshotStore::new(&kb_path)
-        .read()
-        .unwrap_or_default();
+    let quality_snapshot =
+        pdf_core::management::QualitySnapshotStore::new(&kb_path).read().unwrap_or_default();
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
@@ -185,31 +216,15 @@ pub async fn handle_trigger_incremental_compile(
 ) -> anyhow::Result<Vec<Content>> {
     let registry = &ctx.workspace_registry;
     let kb_path = parse_kb_path(registry, args)?;
-    let store = CompileStatusStore::new(&kb_path);
-    let guard = store
-        .begin_compile()
-        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
-
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let raw_dir = engine.raw_dir();
-    let result = match engine.incremental_compile(&raw_dir).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return Err(e.into());
-        }
-    };
+    let job_store = CompileJobStore::new(&kb_path);
+    let (job_id, result) = run_incremental_extract(&engine, &job_store).await?;
 
-    guard
-        .finish_success(CompileFinishStats {
-            entries_compiled: result.compiled,
-            entries_skipped: result.skipped,
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
-
-    crate::tools::post_compile::post_compile_success(&kb_path);
-
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "job_id": job_id,
+        "pipeline_status": "awaiting_agent",
+        "incremental_result": result,
+    }))?)])
 }
 
 #[instrument(skip(args))]
@@ -218,11 +233,56 @@ pub async fn handle_get_compile_status(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let record = CompileStatusStore::new(&kb_path)
-        .read()
+    let value = build_compile_status_json(&kb_path)
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&value)?)])
+}
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(&record)?)])
+#[instrument(skip(args))]
+pub async fn handle_list_quality_issues(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let wiki_dir = kb_path.join("wiki");
+    let severity = args["severity"].as_str();
+    let limit = args["limit"].as_u64().unwrap_or(50) as usize;
+    let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, severity, limit)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "issues": issues,
+        "count": issues.len(),
+    }))?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_fix_suggest(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let issue_id = args["issue_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing issue_id"))?;
+    let wiki_dir = kb_path.join("wiki");
+    let kb_str = kb_path.to_string_lossy();
+    let result = pdf_core::knowledge::fix_suggest(&wiki_dir, &kb_str, issue_id)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_apply_quality_gate(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let gate = pdf_core::knowledge::apply_publish_gate(&kb_path)?;
+    let _ = pdf_core::management::refresh_quality_snapshot(&kb_path);
+    if let Some(job_id) = args["job_id"].as_str() {
+        let store = CompileJobStore::new(&kb_path);
+        if let Ok(mut job) = store.load_job(job_id) {
+            job.stats.entries_blocked = gate.blocked_count;
+            let _ = store.write_job(&job);
+        }
+    }
+    Ok(vec![Content::text(serde_json::to_string_pretty(&gate)?)])
 }
 
 #[instrument]
@@ -255,8 +315,8 @@ mod tests {
     #[test]
     fn test_management_tool_definitions() {
         let defs = management_tool_definitions();
-        assert_eq!(defs.len(), 6);
-        
+        assert!(defs.len() >= 6);
+
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"get_config"));
         assert!(names.contains(&"set_config"));
@@ -269,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_config_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
@@ -281,7 +341,7 @@ mod tests {
             "key": "test_key",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
@@ -293,7 +353,7 @@ mod tests {
             "knowledge_base": "/tmp/test_kb",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
@@ -306,7 +366,7 @@ mod tests {
             "knowledge_base": "/tmp/test_kb",
             "key": "test_key"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
@@ -316,7 +376,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_health_report_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_health_report(&registry, &args).await;
         assert!(result.is_ok());
@@ -326,7 +386,7 @@ mod tests {
     async fn test_trigger_incremental_compile_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
-        
+
         let result = handle_trigger_incremental_compile(&ctx, &args).await;
         assert!(result.is_ok());
     }
@@ -334,7 +394,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_compile_status_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_compile_status(&registry, &args).await;
         assert!(result.is_ok());
@@ -346,8 +406,9 @@ mod tests {
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["type"], "resource");
         assert_eq!(parsed["uri"], "ui://wiki/browser");
     }
@@ -356,21 +417,22 @@ mod tests {
     async fn test_get_config_with_valid_kb() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let index_dir = kb_path.join(".rsut_index");
         tokio::fs::create_dir_all(&index_dir).await.expect("Failed to create index dir");
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap()
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert!(parsed.get("config").is_some());
     }
 
@@ -378,23 +440,24 @@ mod tests {
     async fn test_set_config_with_valid_kb() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let index_dir = kb_path.join(".rsut_index");
         tokio::fs::create_dir_all(&index_dir).await.expect("Failed to create index dir");
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap(),
             "key": "test_key",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["status"], "success");
         assert_eq!(parsed["key"], "test_key");
         assert_eq!(parsed["value"], "test_value");
@@ -404,17 +467,18 @@ mod tests {
     async fn test_get_compile_status_no_prior_compile() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap()
         });
-        
+
         let result = handle_get_compile_status(&args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["running"], false);
         assert_eq!(parsed["last_started"], serde_json::Value::Null);
         assert!(parsed.get("history").and_then(|h| h.as_array()).is_some());

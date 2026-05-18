@@ -124,9 +124,7 @@ pub fn platform_tool_definitions() -> Vec<ToolDefinition> {
     ]
 }
 
-pub async fn handle_list_workspaces(
-    registry: &WorkspaceRegistry,
-) -> anyhow::Result<Vec<Content>> {
+pub async fn handle_list_workspaces(registry: &WorkspaceRegistry) -> anyhow::Result<Vec<Content>> {
     let workspaces = registry.list()?;
     let active = registry.active_id()?;
     let body = serde_json::json!({ "workspaces": workspaces, "active_kb_id": active });
@@ -137,9 +135,7 @@ pub async fn handle_set_active_workspace(
     registry: &WorkspaceRegistry,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_id = args["kb_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("kb_id required"))?;
+    let kb_id = args["kb_id"].as_str().ok_or_else(|| anyhow::anyhow!("kb_id required"))?;
     registry.set_active(kb_id)?;
     Ok(vec![Content::text(format!("Active workspace set to {kb_id}"))])
 }
@@ -149,44 +145,28 @@ pub async fn handle_register_workspace(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let entry = WorkspaceEntry {
-        id: args["kb_id"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("kb_id required"))?
-            .to_string(),
-        name: args["name"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("name required"))?
-            .to_string(),
-        path: args["path"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("path required"))?
-            .into(),
+        id: args["kb_id"].as_str().ok_or_else(|| anyhow::anyhow!("kb_id required"))?.to_string(),
+        name: args["name"].as_str().ok_or_else(|| anyhow::anyhow!("name required"))?.to_string(),
+        path: args["path"].as_str().ok_or_else(|| anyhow::anyhow!("path required"))?.into(),
         active: args["active"].as_bool().unwrap_or(false),
     };
     registry.upsert(entry)?;
     Ok(vec![Content::text("Workspace registered".to_string())])
 }
 
-pub async fn handle_list_extraction_plugins(
-    ctx: &ToolContext,
-) -> anyhow::Result<Vec<Content>> {
+pub async fn handle_list_extraction_plugins(ctx: &ToolContext) -> anyhow::Result<Vec<Content>> {
     let ids = ctx.pipeline.extraction_router().backend_ids();
-    Ok(vec![Content::text(serde_json::to_string_pretty(
-        &serde_json::json!({ "backends": ids }),
-    )?)])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({ "backends": ids }))?)])
 }
 
 pub async fn handle_probe_extraction(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("file_path required"))?;
-    let (backend_id, method) = ctx
-        .pipeline
-        .extraction_router()
-        .select_backend_id(std::path::Path::new(file_path))?;
+    let file_path =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("file_path required"))?;
+    let (backend_id, method) =
+        ctx.pipeline.extraction_router().select_backend_id(std::path::Path::new(file_path))?;
     let body = serde_json::json!({
         "backend_id": backend_id,
         "extraction_method": format!("{:?}", method),
@@ -195,9 +175,7 @@ pub async fn handle_probe_extraction(
 }
 
 fn remote_from_args(args: &serde_json::Value) -> anyhow::Result<FileSyncRemote> {
-    let url = args["remote_url"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("remote_url required"))?;
+    let url = args["remote_url"].as_str().ok_or_else(|| anyhow::anyhow!("remote_url required"))?;
     FileSyncRemote::from_url(url).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
@@ -253,14 +231,9 @@ pub async fn handle_apply_patch_proposal(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb = parse_kb_path(registry, args)?;
-    let proposal_id = args["proposal_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("proposal_id required"))?;
-    let result = apply_patch_proposal(
-        &kb,
-        proposal_id,
-        args["actor"].as_str().map(str::to_string),
-    )
-    .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let proposal_id =
+        args["proposal_id"].as_str().ok_or_else(|| anyhow::anyhow!("proposal_id required"))?;
+    let result = apply_patch_proposal(&kb, proposal_id, args["actor"].as_str().map(str::to_string))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }

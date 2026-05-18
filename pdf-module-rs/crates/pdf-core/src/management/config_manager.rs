@@ -30,10 +30,7 @@ impl ConfigManager {
     /// The config file lives at `<kb_path>/.rsut_index/config.json`.
     pub fn new(kb_path: &Path) -> Self {
         let config_path = kb_path.join(".rsut_index").join(CONFIG_FILENAME);
-        Self {
-            config_path,
-            data: HashMap::new(),
-        }
+        Self { config_path, data: HashMap::new() }
     }
 
     /// Load configuration from disk. Returns an empty config if the file does not exist.

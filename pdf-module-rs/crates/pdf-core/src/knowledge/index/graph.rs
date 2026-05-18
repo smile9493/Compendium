@@ -74,10 +74,7 @@ pub struct GraphIndex {
 impl GraphIndex {
     /// Create an empty graph index.
     pub fn new() -> Self {
-        Self {
-            graph: DiGraph::new(),
-            path_to_node: HashMap::new(),
-        }
+        Self { graph: DiGraph::new(), path_to_node: HashMap::new() }
     }
 
     /// Save the graph to disk using bincode serialization.
@@ -140,11 +137,8 @@ impl GraphIndex {
     }
 
     fn to_snapshot(&self) -> GraphSnapshot {
-        let nodes: Vec<NodeMeta> = self
-            .graph
-            .node_indices()
-            .map(|idx| self.graph[idx].clone())
-            .collect();
+        let nodes: Vec<NodeMeta> =
+            self.graph.node_indices().map(|idx| self.graph[idx].clone()).collect();
 
         let mut node_idx_to_usize = HashMap::new();
         for (i, idx) in self.graph.node_indices().enumerate() {
@@ -155,11 +149,7 @@ impl GraphIndex {
             .graph
             .edge_references()
             .map(|e| {
-                (
-                    node_idx_to_usize[&e.source()],
-                    node_idx_to_usize[&e.target()],
-                    e.weight().clone(),
-                )
+                (node_idx_to_usize[&e.source()], node_idx_to_usize[&e.target()], e.weight().clone())
             })
             .collect();
 
@@ -169,22 +159,15 @@ impl GraphIndex {
             .map(|(path, idx)| (path.clone(), node_idx_to_usize[idx]))
             .collect();
 
-        GraphSnapshot {
-            nodes,
-            edges,
-            path_to_index,
-        }
+        GraphSnapshot { nodes, edges, path_to_index }
     }
 
     fn from_snapshot(snapshot: GraphSnapshot) -> Self {
         let mut graph = DiGraph::new();
         let mut path_to_node = HashMap::new();
 
-        let node_indices: Vec<NodeIndex> = snapshot
-            .nodes
-            .into_iter()
-            .map(|meta| graph.add_node(meta))
-            .collect();
+        let node_indices: Vec<NodeIndex> =
+            snapshot.nodes.into_iter().map(|meta| graph.add_node(meta)).collect();
 
         for (from, to, kind) in snapshot.edges {
             if from < node_indices.len() && to < node_indices.len() {
@@ -198,10 +181,7 @@ impl GraphIndex {
             }
         }
 
-        Self {
-            graph,
-            path_to_node,
-        }
+        Self { graph, path_to_node }
     }
 
     /// Rebuild the graph by scanning all wiki entries.
@@ -214,11 +194,7 @@ impl GraphIndex {
 
         // Add all nodes first
         for (path, entry) in &entries {
-            let rel = path
-                .strip_prefix(wiki_dir)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
+            let rel = path.strip_prefix(wiki_dir).unwrap_or(path).to_string_lossy().to_string();
 
             let meta = NodeMeta {
                 path: rel.clone(),
@@ -233,11 +209,7 @@ impl GraphIndex {
 
         // Add edges from related and contradictions
         for (path, entry) in &entries {
-            let rel = path
-                .strip_prefix(wiki_dir)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
+            let rel = path.strip_prefix(wiki_dir).unwrap_or(path).to_string_lossy().to_string();
 
             let from_idx = match self.path_to_node.get(&rel) {
                 Some(idx) => *idx,
@@ -264,8 +236,7 @@ impl GraphIndex {
                     .find(|(k, _)| k.to_lowercase() == contra_lower)
                     .map(|(_, &v)| v)
                 {
-                    self.graph
-                        .add_edge(from_idx, to_idx, EdgeKind::Contradiction);
+                    self.graph.add_edge(from_idx, to_idx, EdgeKind::Contradiction);
                 }
             }
         }
@@ -388,10 +359,8 @@ impl GraphIndex {
                 if jaccard < 0.1 {
                     return None;
                 }
-                let shared: Vec<String> = tags_a
-                    .intersection(&tags_b)
-                    .map(|s| s.to_string())
-                    .collect();
+                let shared: Vec<String> =
+                    tags_a.intersection(&tags_b).map(|s| s.to_string()).collect();
                 Some(LinkSuggestion {
                     from: self.graph[start].path.clone(),
                     to: self.graph[idx].path.clone(),
@@ -401,11 +370,8 @@ impl GraphIndex {
             })
             .collect();
 
-        suggestions.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        suggestions
+            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         suggestions.truncate(top_k);
         suggestions
     }
@@ -433,10 +399,8 @@ impl GraphIndex {
                 if jaccard < 0.1 {
                     return None;
                 }
-                let shared: Vec<String> = tags_a
-                    .intersection(&tags_b)
-                    .map(|s| s.to_string())
-                    .collect();
+                let shared: Vec<String> =
+                    tags_a.intersection(&tags_b).map(|s| s.to_string()).collect();
                 Some(LinkSuggestion {
                     from: String::new(),
                     to: self.graph[idx].path.clone(),
@@ -446,11 +410,8 @@ impl GraphIndex {
             })
             .collect();
 
-        suggestions.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        suggestions
+            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         suggestions.truncate(top_k);
         suggestions
     }
@@ -460,10 +421,7 @@ impl GraphIndex {
         let start = match self.path_to_node.get(center_path) {
             Some(idx) => *idx,
             None => {
-                return format!(
-                    "graph LR\n    error[\"Entry not found: {}\"]\n",
-                    center_path
-                );
+                return format!("graph LR\n    error[\"Entry not found: {}\"]\n", center_path);
             }
         };
 
@@ -492,10 +450,7 @@ impl GraphIndex {
                 }
             }
             // Also check incoming edges
-            for edge in self
-                .graph
-                .edges_directed(node, petgraph::Direction::Incoming)
-            {
+            for edge in self.graph.edges_directed(node, petgraph::Direction::Incoming) {
                 let source = edge.source();
                 let is_new = nodes.insert(source);
                 let kind = match edge.weight() {

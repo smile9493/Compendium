@@ -32,12 +32,7 @@ impl LazyLoadingCoordinator {
         let graph = GraphPartitionStore::open(knowledge_base)?;
         let fulltext = FulltextShardManager::new(knowledge_base);
 
-        Ok(Self {
-            metadata,
-            graph,
-            fulltext,
-            last_access: std::collections::HashMap::new(),
-        })
+        Ok(Self { metadata, graph, fulltext, last_access: std::collections::HashMap::new() })
     }
 
     /// Ensure a domain is warm in all three stores.

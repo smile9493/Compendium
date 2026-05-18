@@ -2,9 +2,7 @@
 //!
 //! compile, micro-compile, recompile, incremental
 
-use crate::commands::{
-    build_remote_client, resolve_kb_path, resolve_remote_kb, CmdResult, Mode,
-};
+use crate::commands::{CmdResult, Mode, build_remote_client, resolve_kb_path, resolve_remote_kb};
 use crate::config::CliConfig;
 use crate::local;
 use crate::output::OutputFormat;
@@ -32,21 +30,24 @@ pub struct CompileArgs {
     pub format: OutputFormat,
 }
 
-pub async fn run_compile(
-    config: &CliConfig,
-    mode: Mode,
-    args: &CompileArgs,
-) -> Result<CmdResult> {
+pub async fn run_compile(config: &CliConfig, mode: Mode, args: &CompileArgs) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::compile_to_wiki(&kb, &args.input, args.domain.as_deref()).await?;
             Ok(CmdResult::new("Compile Result (Local)", result))
         }
         Mode::Remote => {
             let client = build_remote_client(config)?;
             let kb = resolve_remote_kb(config, args.knowledge_base.as_deref());
-            crate::commands::remote_compile_uploaded(&client, &args.input, args.domain.as_deref(), &kb).await
+            crate::commands::remote_compile_uploaded(
+                &client,
+                &args.input,
+                args.domain.as_deref(),
+                &kb,
+            )
+            .await
         }
     }
 }
@@ -77,7 +78,8 @@ pub async fn run_micro_compile(
 ) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::micro_compile(&kb, &args.input, args.range.as_deref()).await?;
             Ok(CmdResult::new("Micro-Compile Result (Local)", result))
         }
@@ -117,7 +119,8 @@ pub async fn run_recompile(
 ) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::recompile_entry(&kb, std::path::Path::new(&args.entry_path))?;
             Ok(CmdResult::new("Recompile Result (Local)", result))
         }
@@ -153,7 +156,8 @@ pub async fn run_incremental(
 ) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::incremental_compile(&kb).await?;
             Ok(CmdResult::new("Incremental Compile (Local)", result))
         }
@@ -163,9 +167,7 @@ pub async fn run_incremental(
             let mcp_args = serde_json::json!({
                 "knowledge_base": kb,
             });
-            let result = client
-                .call_tool("trigger_incremental_compile", mcp_args)
-                .await?;
+            let result = client.call_tool("trigger_incremental_compile", mcp_args).await?;
             Ok(CmdResult::new("Incremental Compile (Remote)", result))
         }
     }

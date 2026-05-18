@@ -49,7 +49,9 @@ impl RemoteExtractionBackend {
         Ok(Self { config, client })
     }
 
-    pub fn from_configs(configs: Vec<RemoteExtractionConfig>) -> PdfResult<Vec<Arc<dyn ExtractionBackend>>> {
+    pub fn from_configs(
+        configs: Vec<RemoteExtractionConfig>,
+    ) -> PdfResult<Vec<Arc<dyn ExtractionBackend>>> {
         let mut backends: Vec<Arc<dyn ExtractionBackend>> = Vec::new();
         let mut sorted = configs;
         sorted.sort_by(|a, b| b.priority.cmp(&a.priority));
@@ -72,10 +74,7 @@ impl ExtractionBackend for RemoteExtractionBackend {
 
     async fn extract_text(&self, ctx: &ExtractionContext) -> PdfResult<TextExtractionResult> {
         let pdf_base64 = B64.encode(ctx.loader.as_bytes());
-        let body = RemoteExtractRequest {
-            pdf_base64,
-            mode: "text".to_string(),
-        };
+        let body = RemoteExtractRequest { pdf_base64, mode: "text".to_string() };
         let resp = self
             .client
             .post(&self.config.endpoint)
@@ -85,15 +84,13 @@ impl ExtractionBackend for RemoteExtractionBackend {
             .map_err(|e| PdfModuleError::Extraction(format!("remote POST: {e}")))?;
 
         if !resp.status().is_success() {
-            return Err(PdfModuleError::Extraction(format!(
-                "remote returned {}",
-                resp.status()
-            )));
+            return Err(PdfModuleError::Extraction(format!("remote returned {}", resp.status())));
         }
 
-        let parsed: RemoteExtractResponse = resp.json().await.map_err(|e| {
-            PdfModuleError::Extraction(format!("remote JSON: {e}"))
-        })?;
+        let parsed: RemoteExtractResponse = resp
+            .json()
+            .await
+            .map_err(|e| PdfModuleError::Extraction(format!("remote JSON: {e}")))?;
 
         Ok(TextExtractionResult {
             extracted_text: parsed.extracted_text,

@@ -39,11 +39,7 @@ fn snapshot_file_info_large() {
 
 #[test]
 fn snapshot_file_info_small() {
-    let info = FileInfo {
-        file_path: "/tmp/a.pdf".to_string(),
-        file_size: 1,
-        file_size_mb: 0.0,
-    };
+    let info = FileInfo { file_path: "/tmp/a.pdf".to_string(), file_size: 1, file_size_mb: 0.0 };
 
     insta::assert_yaml_snapshot!("file_info_small", &info);
 }
