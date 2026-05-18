@@ -38,18 +38,18 @@ pub struct HttpMetrics {
 
 impl HttpMetrics {
     pub fn new() -> Self {
-        let registry = Registry::new_custom(Some("rsut_pdf_mcp".into()), None)
+        let registry = Registry::new_custom(Some("compendium".into()), None)
             .expect("failed to create metrics registry");
 
         let requests_total = IntCounterVec::new(
-            Opts::new("http_requests_total", "Total HTTP requests").namespace("rsut_pdf_mcp"),
+            Opts::new("http_requests_total", "Total HTTP requests").namespace("compendium"),
             &["method", "path", "status"],
         )
         .expect("failed to create http_requests_total");
 
         let request_duration = HistogramVec::new(
             HistogramOpts::new("http_request_duration_seconds", "HTTP request duration")
-                .namespace("rsut_pdf_mcp")
+                .namespace("compendium")
                 .buckets(DEFAULT_BUCKETS.to_vec()),
             &["method", "path"],
         )
@@ -172,7 +172,7 @@ mod tests {
         m.requests_total.with_label_values(&["GET", "/health", "200"]).inc();
         let output = m.render();
         assert!(output.contains("http_requests_total"));
-        assert!(output.contains("rsut_pdf_mcp"));
+        assert!(output.contains("compendium"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
-//! # rsut-pdf CLI
+//! # Compendium CLI
 //!
-//! Unified client for the rsut-pdf-mcp knowledge engine.
+//! Unified client for the Compendium knowledge engine.
 //!
 //! ## Dual Mode Architecture
 //!
@@ -41,9 +41,9 @@ use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
-    name = "rsut-pdf",
-    version = "1.0.0",
-    about = "Unified CLI for rsut-pdf-mcp knowledge engine — compile, search, manage"
+    name = "compendium",
+    version,
+    about = "Unified CLI for Compendium knowledge engine — compile, search, manage"
 )]
 struct Cli {
     /// Use local mode: direct pdf-core integration, zero network
@@ -204,7 +204,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Load config from ~/.rsut-pdf/config.toml
+    // Load config from ~/.rsut-pdf/config.toml (runtime path, preserved)
     let mut cfg = config::CliConfig::load()?;
 
     // CLI flags override config

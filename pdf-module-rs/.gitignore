@@ -2,8 +2,6 @@
 target/
 **/*.rs.bk
 *.pdb
-# Cargo.lock is checked in for binary crates, uncomment for libraries
-# Cargo.lock
 
 # ==================== Environment & Secrets ====================
 .env
@@ -15,29 +13,6 @@ target/
 secrets/
 .secrets/
 
-# ==================== IDE ====================
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-.settings/
-*.sublime-workspace
-*.sublime-project
-.zed/
-
-# ==================== OS ====================
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-
 # ==================== Logs ====================
 *.log
 logs/
@@ -46,12 +21,6 @@ logs/
 data/
 cache/
 *.cache
-
-# ==================== Database ====================
-*.db
-*.sqlite
-*.sqlite3
-surrealdb-data/
 
 # ==================== Build Artifacts ====================
 *.exe
@@ -69,9 +38,6 @@ temp/
 *.bak
 *.backup
 
-# ==================== Docker ====================
-.docker/
-
 # ==================== Python (pdf-python crate) ====================
 __pycache__/
 *.py[cod]
@@ -80,13 +46,6 @@ __pycache__/
 dist/
 .venv/
 venv/
-
-# ==================== Node.js ====================
-node_modules/
-
-# ==================== CodeArts ====================
-.arts/
-.codeartsdoer/
 
 # ==================== Test Coverage ====================
 tarpaulin-report.html

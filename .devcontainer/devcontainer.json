@@ -4,7 +4,7 @@
 
     "features": {
         "ghcr.io/devcontainers/features/rust:1": {
-            "version": "1.91.0",
+            "version": "1.95.0",
             "profile": "complete"
         },
         "ghcr.io/devcontainers/features/node:1": {
@@ -16,7 +16,7 @@
     },
 
     "containerEnv": {
-        "CARGO_BUILD_TARGET_DIR": "/workspaces/rsut_pdf_mcp/target-devcontainer",
+        "CARGO_BUILD_TARGET_DIR": "/workspaces/Compendium/target-devcontainer",
         "RUST_BACKTRACE": "1",
         "RUST_LOG": "debug",
         "PDFIUM_LIB_PATH": "/usr/local/lib/libpdfium.so"

@@ -8,7 +8,7 @@ PDF MCP Module is an MCP (Model Context Protocol) server that compiles PDF docum
 
 **Core pipeline**: PDF → extraction (Pdfium/VLM/Hybrid) → structured Markdown → Tantivy + petgraph + TF-IDF indexing → AI queryable knowledge.
 
-**Architecture**: [Breakwater Pattern](file:///opt/pdf-module/DESIGN.md) — Facade (pdf-mcp, vlm-visual-gateway) / Core (pdf-core) / Infra (pdf-wasm, pdf-macros) layered isolation.
+**Architecture**: [Breakwater Pattern](ARCHITECTURE.md) — Facade (pdf-mcp, vlm-visual-gateway) / Core (pdf-core) / Infra (pdf-wasm, pdf-macros) layered isolation.
 
 ---
 

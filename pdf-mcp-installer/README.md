@@ -236,8 +236,8 @@ VLM_API_KEY=your_api_key_here
 
 ```bash
 # 克隆项目
-git clone https://github.com/smile9493/rsut_pdf_mcp.git
-cd rsut_pdf_mcp/pdf-mcp-installer
+git clone https://github.com/smile9493/Compendium.git
+cd Compendium/pdf-mcp-installer
 
 # 编译
 cargo build --release
@@ -253,7 +253,7 @@ sudo chmod +x /usr/local/bin/pdf-mcp
 
 ```bash
 # Linux x86_64
-wget https://github.com/smile9493/rsut_pdf_mcp/releases/latest/download/pdf-mcp-linux-x86_64
+wget https://github.com/smile9493/Compendium/releases/latest/download/pdf-mcp-linux-x86_64
 chmod +x pdf-mcp-linux-x86_64
 sudo mv pdf-mcp-linux-x86_64 /usr/local/bin/pdf-mcp
 ```

@@ -1,4 +1,4 @@
-# rsut-pdf-mcp Architecture
+# Compendium Architecture
 
 AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pattern + fulltext search + knowledge graph + vector embeddings. Pure Rust, single binary.
 
@@ -12,7 +12,7 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 6. **Dual-Protocol**: stdio (MCP) + HTTP (Wiki), oneshot signal for reliable co-bootstrap.
 7. **Breakwater Architecture**: Facade/Core layered separation — pdf-mcp absorbs protocol chaos, pdf-core maintains deterministic extraction.
 
-> **Note**: 根目录 [`DESIGN.md`](/opt/pdf-module/DESIGN.md) 为 UI 设计系统文档（色彩、排版、组件规范），与本软件架构文档互补但不重叠。软件架构变更不影响 UI 设计系统，反之亦然。
+> **Note**: 根目录 [`DESIGN.md`](../DESIGN.md) 为 UI 设计系统文档（色彩、排版、组件规范），与本软件架构文档互补但不重叠。软件架构变更不影响 UI 设计系统，反之亦然。
 
 ## Architecture
 

@@ -23,7 +23,7 @@
 ### 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smile9493/rsut_pdf_mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/smile9493/Compendium/main/install.sh | bash
 ```
 
 ### Docker
@@ -35,8 +35,8 @@ docker pull smile9493/pdf-mcp:latest
 ### 从源码构建
 
 ```bash
-git clone https://github.com/smile9493/rsut_pdf_mcp.git
-cd rsut_pdf_mcp/pdf-module-rs
+git clone https://github.com/smile9493/Compendium.git
+cd Compendium/pdf-module-rs
 cargo build --release --bin pdf-mcp
 ```
 

@@ -1,6 +1,6 @@
 //! # Remote Mode Client
 //!
-//! HTTP client for interacting with a remote `rsut-pdf-mcp` server.
+//! HTTP client for interacting with a remote Compendium server.
 //! Supports multipart file upload, JSON-RPC tool calls, and wiki API queries.
 //!
 //! Some client methods are public API surface for future commands.
