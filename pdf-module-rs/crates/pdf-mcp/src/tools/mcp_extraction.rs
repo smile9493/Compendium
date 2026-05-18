@@ -36,19 +36,35 @@ pub fn envelope_from_parts(
     }
 }
 
-pub fn extraction_health_from_ctx(ctx: &ToolContext) -> pdf_mcp_contracts::ExtractionHealth {
-    let backends: Vec<String> = ctx
-        .pipeline
+pub fn extraction_health_from_pipeline(
+    pipeline: &pdf_core::McpPdfPipeline,
+) -> pdf_mcp_contracts::ExtractionHealth {
+    let backends: Vec<String> = pipeline
         .extraction_router()
         .backend_ids()
         .into_iter()
         .map(String::from)
         .collect();
-    let vlm_configured = std::env::var("VLM_GATEWAY_URL").is_ok()
-        || std::env::var("RSUT_VLM_ENDPOINT").is_ok();
     pdf_mcp_contracts::ExtractionHealth {
         backends,
-        vlm_configured,
+        vlm_configured: vlm_configured_from_env(),
+        default_method: "pdfium".to_string(),
+    }
+}
+
+pub fn extraction_health_from_ctx(ctx: &ToolContext) -> pdf_mcp_contracts::ExtractionHealth {
+    extraction_health_from_pipeline(&ctx.pipeline)
+}
+
+fn vlm_configured_from_env() -> bool {
+    std::env::var("VLM_GATEWAY_URL").is_ok() || std::env::var("RSUT_VLM_ENDPOINT").is_ok()
+}
+
+/// Fallback when HTTP server has no pipeline initialized.
+pub fn extraction_health_default() -> pdf_mcp_contracts::ExtractionHealth {
+    pdf_mcp_contracts::ExtractionHealth {
+        backends: vec!["pdfium".to_string()],
+        vlm_configured: vlm_configured_from_env(),
         default_method: "pdfium".to_string(),
     }
 }

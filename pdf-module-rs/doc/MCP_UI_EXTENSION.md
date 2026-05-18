@@ -37,10 +37,26 @@ User invoked “Ask AI” on the current wiki entry.
 
 The SPA MUST call `postMessage(payload, targetOrigin)` where `targetOrigin` is derived from `document.referrer` when embedded, else `window.location.origin`. The host SHOULD ignore messages when `event.origin` does not match the expected parent origin.
 
+### `mcp-compile-status` (host → SPA)
+
+Push compile pipeline updates (same JSON shape as `GET /api/compile/status` and SSE `compile-status` events).
+
+```json
+{
+  "v": 1,
+  "type": "mcp-compile-status",
+  "source": "mcp-host",
+  "status": {
+    "running": true,
+    "pipeline_status": "awaiting_agent",
+    "job": { "stages": [] }
+  }
+}
+```
+
 ## Future types (reserved)
 
 - `mcp-navigate-entry` — deep-link to another entry from host
-- `mcp-compile-status` — push compile job updates into the UI
 
 ## Compile pipeline sampling (server-side)
 

@@ -4,6 +4,7 @@ export const MCP_UI_PROTOCOL_VERSION = 1
 
 export const MCP_UI_MESSAGE_TYPES = {
   ASK_AI: 'mcp-ask-ai',
+  COMPILE_STATUS: 'mcp-compile-status',
 }
 
 export const MCP_UI_SOURCE_WIKI_BROWSER = 'wiki-browser'

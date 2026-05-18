@@ -143,6 +143,27 @@ export const api = {
     return request(withKb('/index/rebuild'), { method: 'POST', retries: 1 })
   },
 
+  getIndexStatus() {
+    return request(withKb('/index/status'))
+  },
+
+  compileEventsUrl() {
+    const base = withKb('/compile/events')
+    return `${API_BASE}${base}`
+  },
+
+  createShareLink(kbId, path, ttlHours = 168) {
+    return request('/v1/shares', {
+      method: 'POST',
+      body: JSON.stringify({ kb_id: kbId, path, ttl_hours: ttlHours }),
+    })
+  },
+
+  getShareEntry(token, path) {
+    const entryPath = path.replace(/^\//, '')
+    return request(`/share/${encodeURIComponent(token)}/wiki/entries/${entryPath}`)
+  },
+
   uploadPdf(file) {
     const formData = new FormData()
     formData.append('file', file)

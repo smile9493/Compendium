@@ -13,6 +13,9 @@ export const useCompileStore = defineStore('compile', () => {
   const lastFinishedAt = ref(null)
 
   let pollTimer = null
+  let backgroundTimer = null
+  let eventSource = null
+  let sseFailed = false
 
   const pipelineStatus = computed(
     () => compileStatus.value?.pipeline_status || compileStatus.value?.job?.pipeline_status
@@ -43,16 +46,68 @@ export const useCompileStore = defineStore('compile', () => {
     return '空闲'
   })
 
+  function applySnapshot(data) {
+    if (!data || typeof data !== 'object') return
+    compileStatus.value = data
+    qualitySnapshot.value = data.quality_snapshot || null
+  }
+
   function openDrawer(tab = 'trigger') {
     open.value = true
     activeTab.value = tab
-    startPolling()
+    startRealtime()
     refreshStatus()
   }
 
   function closeDrawer() {
     open.value = false
+    stopRealtime()
+  }
+
+  function startRealtime() {
+    if (!sseFailed && typeof EventSource !== 'undefined') {
+      stopPolling()
+      startSse()
+      return
+    }
+    startPolling()
+  }
+
+  function stopRealtime() {
+    stopSse()
     stopPolling()
+  }
+
+  function startSse() {
+    stopSse()
+    try {
+      const url = api.compileEventsUrl()
+      eventSource = new EventSource(url)
+      eventSource.addEventListener('compile-status', (ev) => {
+        try {
+          const data = JSON.parse(ev.data)
+          applySnapshot(data)
+          handleCompileFinished(data)
+        } catch (e) {
+          console.error('SSE parse failed', e)
+        }
+      })
+      eventSource.onerror = () => {
+        stopSse()
+        sseFailed = true
+        if (open.value) startPolling()
+      }
+    } catch {
+      sseFailed = true
+      startPolling()
+    }
+  }
+
+  function stopSse() {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
   }
 
   function startPolling() {
@@ -67,24 +122,42 @@ export const useCompileStore = defineStore('compile', () => {
     }
   }
 
+  function startBackgroundWatch() {
+    stopBackgroundWatch()
+    refreshStatus()
+    backgroundTimer = setInterval(() => {
+      if (!open.value) refreshStatus()
+    }, 5000)
+  }
+
+  function stopBackgroundWatch() {
+    if (backgroundTimer) {
+      clearInterval(backgroundTimer)
+      backgroundTimer = null
+    }
+  }
+
+  async function handleCompileFinished(data) {
+    const prevFinished = lastFinishedAt.value
+    const finished = data.last_finished || null
+    const done =
+      data.pipeline_status === 'completed' ||
+      data.pipeline_status === 'partial' ||
+      (!data.active_job_id &&
+        !data.running &&
+        (data.last_outcome === 'success' || data.last_outcome === 'partial'))
+    if (finished && finished !== prevFinished && done && !data.running) {
+      const wikiStore = useWikiStore()
+      await wikiStore.loadTree()
+    }
+    lastFinishedAt.value = finished
+  }
+
   async function refreshStatus() {
     try {
       const data = await api.getCompileStatus()
-      const prevFinished = lastFinishedAt.value
-      compileStatus.value = data
-      qualitySnapshot.value = data.quality_snapshot || null
-      const finished = data.last_finished || null
-      const done =
-        data.pipeline_status === 'completed' ||
-        data.pipeline_status === 'partial' ||
-        (!data.active_job_id &&
-          !data.running &&
-          (data.last_outcome === 'success' || data.last_outcome === 'partial'))
-      if (finished && finished !== prevFinished && done && !data.running) {
-        const wikiStore = useWikiStore()
-        await wikiStore.loadTree()
-      }
-      lastFinishedAt.value = finished
+      applySnapshot(data)
+      await handleCompileFinished(data)
     } catch (e) {
       console.error('Compile status poll failed:', e)
     }
@@ -133,12 +206,17 @@ export const useCompileStore = defineStore('compile', () => {
     isRunning,
     pipelineStatus,
     statusText,
+    applySnapshot,
     openDrawer,
     closeDrawer,
     refreshStatus,
+    startBackgroundWatch,
+    stopBackgroundWatch,
     uploadAndCompile,
     triggerIncremental,
     startPolling,
     stopPolling,
+    startRealtime,
+    stopRealtime,
   }
 })

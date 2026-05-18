@@ -1,0 +1,39 @@
+{
+  "app": {
+    "title": "rsut-pdf-mcp",
+    "searchPlaceholder": "Search knowledge base…"
+  },
+  "compile": {
+    "console": "Compile console",
+    "statusIdle": "Idle",
+    "statusRunning": "Compiling",
+    "statusAwaiting": "Awaiting agent",
+    "statusDone": "Completed",
+    "statusPartial": "Partial",
+    "statusFailed": "Failed",
+    "tabTrigger": "Compile",
+    "tabHistory": "History",
+    "tabStatus": "Status",
+    "tabQuality": "Quality"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Runtime configuration",
+    "healthTab": "Knowledge health",
+    "compileTab": "Compile queue",
+    "extractionStack": "Extraction stack",
+    "rebuildIndex": "Rebuild index",
+    "language": "Language",
+    "langZh": "简体中文",
+    "langEn": "English"
+  },
+  "ops": {
+    "indexEmpty": "Search index is empty. Rebuild fulltext and graph indexes.",
+    "rebuild": "Rebuild index"
+  },
+  "share": {
+    "copyLink": "Copy share link",
+    "copied": "Copied",
+    "readOnly": "Read-only share"
+  }
+}

@@ -15,3 +15,7 @@ label-size = Size
 status-processing = Processing...
 status-complete = Complete
 status-error = Error
+health-rebuild-success = Index rebuild succeeded
+health-rebuild-failed = Index rebuild failed: { $reason }
+compile-status-running = Compilation in progress
+compile-status-awaiting = Waiting for agent to write wiki

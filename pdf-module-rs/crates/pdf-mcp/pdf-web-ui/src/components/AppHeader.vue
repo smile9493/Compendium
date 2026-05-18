@@ -31,7 +31,7 @@
         v-model="searchStore.query"
         @input="onSearchInput"
         @keydown="onSearchKeydown"
-        placeholder="搜索知识库…"
+        :placeholder="t('app.searchPlaceholder')"
         autocomplete="off"
       />
       <button v-if="searchStore.query" class="search-clear-btn" @click="clearSearch">
@@ -52,8 +52,14 @@
       <button class="header-btn icon-btn" @click="$emit('openGraph')" v-tooltip="'知识图谱'">
         <GitBranch :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="$emit('openCompile')" v-tooltip="'编译控制台'">
+      <button
+        class="header-btn icon-btn compile-header-btn"
+        :class="{ 'compile-active': compileStore.isRunning }"
+        @click="onOpenCompile"
+        v-tooltip="compileHeaderTooltip"
+      >
         <Hammer :size="15" />
+        <span v-if="compileStore.isRunning" class="compile-status-dot" :class="compileDotClass" />
       </button>
       <span class="header-divider"></span>
       <button
@@ -80,10 +86,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useSearchStore } from '@/stores/search'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useCompileStore } from '@/stores/compile'
+import { useI18n } from 'vue-i18n'
 import { setActiveKbId } from '@/api'
 import { openEntry } from '@/composables/useWikiNavigation'
 import {
@@ -101,7 +109,29 @@ defineEmits(['toggleSidebar', 'toggleRightbar', 'openDomains', 'openStats', 'ope
 const wikiStore = useWikiStore()
 const searchStore = useSearchStore()
 const workspaceStore = useWorkspaceStore()
+const compileStore = useCompileStore()
+const { t } = useI18n()
 const searchInputRef = ref(null)
+
+const compileHeaderTooltip = computed(() => {
+  if (!compileStore.isRunning) return t('compile.console')
+  const statusKey =
+    compileStore.pipelineStatus === 'awaiting_agent'
+      ? 'compile.statusAwaiting'
+      : compileStore.pipelineStatus === 'running'
+        ? 'compile.statusRunning'
+        : 'compile.statusIdle'
+  return `${t('compile.console')}: ${t(statusKey)}`
+})
+
+const compileDotClass = computed(() =>
+  compileStore.pipelineStatus === 'awaiting_agent' ? 'dot-warn' : 'dot-run'
+)
+
+function onOpenCompile() {
+  const tab = compileStore.isRunning ? 'status' : 'trigger'
+  compileStore.openDrawer(tab)
+}
 
 async function onKbChange(e) {
   const kbId = e.target.value

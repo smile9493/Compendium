@@ -19,13 +19,26 @@ export const useSearchStore = defineStore('search', () => {
 
   const hasResults = computed(() => results.value.length > 0)
 
+  function cancelPending() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+    if (currentController) {
+      currentController.abort()
+      currentController = null
+    }
+  }
+
   function close() {
+    cancelPending()
     open.value = false
     results.value = []
     selectedIdx.value = -1
     error.value = null
     domainFacets.value = []
     searchMeta.value = null
+    loading.value = false
   }
 
   function clearAndClose() {
@@ -42,12 +55,9 @@ export const useSearchStore = defineStore('search', () => {
   }
 
   function triggerSearch(q) {
-    if (currentController) {
-      currentController.abort()
-    }
+    cancelPending()
 
     query.value = q
-    clearTimeout(debounceTimer)
 
     if (!q || q.trim().length < 2) {
       results.value = []

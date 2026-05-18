@@ -13,6 +13,12 @@ const routes = [
     component: () => import('@/views/EntryDetail.vue'),
     props: true,
   },
+  {
+    path: '/share/:token/:path(.*)',
+    name: 'share-entry',
+    component: () => import('@/views/ShareEntryView.vue'),
+    props: true,
+  },
 ]
 
 const router = createRouter({
@@ -28,6 +34,10 @@ router.beforeEach(async (to, from, next) => {
 
   const wikiStore = useWikiStore()
 
+  if (to.name === 'share-entry') {
+    next()
+    return
+  }
   if (to.name === 'entry' && to.params.path) {
     await wikiStore.loadEntry(to.params.path)
   } else if (to.name === 'wiki') {

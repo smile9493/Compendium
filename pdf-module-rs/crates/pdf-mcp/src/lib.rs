@@ -8,6 +8,7 @@
 pub mod api_doc;
 pub mod embed;
 pub mod http;
+pub mod http_schemas;
 pub mod metrics;
 pub mod protocol;
 pub mod sampling;

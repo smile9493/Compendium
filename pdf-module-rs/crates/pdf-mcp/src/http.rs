@@ -32,12 +32,16 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use async_stream::stream;
 use axum::extract::{Multipart, Path, Query, State};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json, Redirect};
 use axum::routing::{delete, get, post};
 use axum::Router;
-use serde::Deserialize;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::{info, instrument};
 
@@ -56,6 +60,7 @@ use pdf_core::McpPdfPipeline;
 
 use crate::embed::Assets;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
+use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_from_pipeline};
 use crate::tools::post_compile::post_compile_success;
 use crate::upload::UploadStore;
 
@@ -132,6 +137,10 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/quality/summary", get(api_quality_summary))
         .route("/api/quality/issues", get(api_quality_issues))
         .route("/api/index/rebuild", post(api_index_rebuild))
+        .route("/api/index/status", get(api_index_status))
+        .route("/api/compile/events", get(api_compile_events))
+        .route("/api/v1/shares", post(api_shares_create))
+        .route("/api/share/{token}/wiki/entries/*path", get(api_share_wiki_entry))
         .route("/api/v1/workspaces", get(api_workspaces_list).post(api_workspaces_upsert))
         .route("/api/v1/workspaces/active", post(api_workspaces_set_active))
         // ── SPA (legacy redirects) ──
@@ -453,6 +462,11 @@ async fn api_health(
     match reporter.report() {
         Ok(report) => {
             let quality_snapshot = QualitySnapshotStore::new(&kb).read().unwrap_or_default();
+            let extraction = state
+                .pipeline
+                .as_ref()
+                .map(|p| extraction_health_from_pipeline(p))
+                .unwrap_or_else(extraction_health_default);
             Json(serde_json::json!({
                 "total_entries": report.total_entries,
                 "orphan_count": report.orphan_count,
@@ -467,6 +481,7 @@ async fn api_health(
                 "generated_at": report.generated_at.to_rfc3339(),
                 "report_text": report.to_string(),
                 "quality_snapshot": quality_snapshot,
+                "extraction": extraction,
             }))
             .into_response()
         }
@@ -832,14 +847,15 @@ async fn api_index_rebuild(
     match rebuild_all(&kb) {
         Ok(stats) => {
             state.index_cache.invalidate(&kb);
-            Json(serde_json::json!({
+            let payload = serde_json::json!({
                 "status": "success",
                 "fulltext_entries_indexed": stats.fulltext_entries_indexed,
                 "graph_nodes": stats.graph_nodes,
                 "graph_edges": stats.graph_edges,
                 "vector_entries_indexed": stats.vector_entries_indexed,
-            }))
-            .into_response()
+            });
+            let _ = write_index_meta(&kb, &payload);
+            Json(payload).into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -1086,5 +1102,231 @@ async fn api_workspaces_set_active(
     match state.workspace_registry.set_active(&body.kb_id) {
         Ok(()) => Json(serde_json::json!({ "ok": true, "active_kb_id": body.kb_id })),
         Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
+// ── Index metadata ──
+
+fn index_meta_path(kb: &std::path::Path) -> PathBuf {
+    kb.join(".rsut_index").join("index_meta.json")
+}
+
+fn write_index_meta(kb: &std::path::Path, stats: &serde_json::Value) -> std::io::Result<()> {
+    let path = index_meta_path(kb);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let meta = serde_json::json!({
+        "rebuilt_at": Utc::now().to_rfc3339(),
+        "stats": stats,
+    });
+    std::fs::write(path, serde_json::to_string_pretty(&meta).unwrap_or_default())
+}
+
+fn read_index_meta(kb: &std::path::Path) -> Option<serde_json::Value> {
+    let raw = std::fs::read_to_string(index_meta_path(kb)).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+#[instrument(skip(state))]
+async fn api_index_status(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
+        None => {
+            return Json(serde_json::json!({"error": "No knowledge base configured"}))
+                .into_response()
+        }
+    };
+    match read_index_meta(&kb) {
+        Some(meta) => Json(meta).into_response(),
+        None => Json(serde_json::json!({ "rebuilt_at": null, "stats": null })).into_response(),
+    }
+}
+
+// ── Compile SSE ──
+
+#[instrument(skip(state))]
+async fn api_compile_events(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
+    };
+
+    let kb_path = kb.clone();
+    let event_stream = stream! {
+        let mut last_payload: Option<String> = None;
+        let mut ticks: u64 = 0;
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            ticks += 1;
+            if ticks > 3600 {
+                break;
+            }
+            let Ok(value) = build_compile_status_json(&kb_path) else {
+                continue;
+            };
+            let Ok(serialized) = serde_json::to_string(&value) else {
+                continue;
+            };
+            if last_payload.as_deref() != Some(serialized.as_str()) {
+                last_payload = Some(serialized.clone());
+                yield Ok::<Event, std::convert::Infallible>(
+                    Event::default().event("compile-status").data(serialized),
+                );
+            }
+        }
+    };
+
+    Sse::new(event_stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
+}
+
+// ── Share links ──
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ShareRecord {
+    kb_id: String,
+    path: String,
+    expires_at: String,
+    read_only: bool,
+}
+
+fn shares_dir(kb: &std::path::Path) -> PathBuf {
+    kb.join(".rsut_index").join("shares")
+}
+
+fn share_path(kb: &std::path::Path, token: &str) -> PathBuf {
+    shares_dir(kb).join(format!("{token}.json"))
+}
+
+fn load_share(kb: &std::path::Path, token: &str) -> Option<ShareRecord> {
+    let raw = std::fs::read_to_string(share_path(kb, token)).ok()?;
+    let record: ShareRecord = serde_json::from_str(&raw).ok()?;
+    if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&record.expires_at) {
+        if exp < Utc::now() {
+            let _ = std::fs::remove_file(share_path(kb, token));
+            return None;
+        }
+    }
+    Some(record)
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareCreateBody {
+    kb_id: String,
+    path: String,
+    #[serde(default = "default_share_ttl_hours")]
+    ttl_hours: u64,
+}
+
+fn default_share_ttl_hours() -> u64 {
+    168
+}
+
+async fn api_shares_create(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<ShareCreateBody>,
+) -> impl IntoResponse {
+    let kb = match state.workspace_registry.path_for_id(&body.kb_id) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    };
+
+    let token = uuid::Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + chrono::Duration::hours(body.ttl_hours as i64)).to_rfc3339();
+    let record = ShareRecord {
+        kb_id: body.kb_id.clone(),
+        path: normalize_wiki_entry_path(&body.path),
+        expires_at,
+        read_only: true,
+    };
+
+    let dir = shares_dir(&kb);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to create shares directory"})),
+        )
+            .into_response();
+    }
+
+    if serde_json::to_string_pretty(&record)
+        .ok()
+        .and_then(|s| std::fs::write(share_path(&kb, &token), s).ok())
+        .is_none()
+    {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to write share record"})),
+        )
+            .into_response();
+    }
+
+    Json(serde_json::json!({
+        "token": token,
+        "url_path": format!("/share/{token}"),
+    }))
+    .into_response()
+}
+
+fn resolve_share_record(
+    registry: &WorkspaceRegistry,
+    token: &str,
+) -> Option<(PathBuf, ShareRecord)> {
+    if let Ok(workspaces) = registry.list() {
+        for ws in workspaces {
+            if let Some(record) = load_share(&ws.path, token) {
+                return Some((ws.path, record));
+            }
+        }
+    }
+    None
+}
+
+async fn api_share_wiki_entry(
+    State(state): State<Arc<HttpState>>,
+    Path((token, path)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let Some((kb, record)) = resolve_share_record(&state.workspace_registry, &token) else {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Share link invalid or expired"})),
+        )
+            .into_response();
+    };
+
+    let entry_path = normalize_wiki_entry_path(&path);
+    if entry_path != record.path {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Path not allowed for this share token"})),
+        )
+            .into_response();
+    }
+
+    let wiki_dir = kb.join("wiki");
+    let renderer = WikiRenderer::new(&wiki_dir);
+    match renderer.render_entry(&entry_path) {
+        Ok(entry) => Json(serde_json::json!({"entry": entry, "read_only": true})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
     }
 }

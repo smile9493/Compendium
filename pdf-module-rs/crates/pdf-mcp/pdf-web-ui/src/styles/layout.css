@@ -133,6 +133,75 @@
   background: var(--primary-dark);
 }
 
+.compile-header-btn {
+  position: relative;
+}
+.compile-status-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.compile-status-dot.dot-warn {
+  background: var(--warn, #e6a700);
+}
+.compile-status-dot.dot-run {
+  background: var(--accent);
+  animation: compile-pulse 1.2s ease-in-out infinite;
+}
+@keyframes compile-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.extraction-detail {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  font-size: 13px;
+}
+.extraction-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.extraction-label {
+  min-width: 72px;
+  color: var(--text-muted);
+}
+.index-rebuild-stats {
+  margin-top: 12px;
+}
+.index-stats-line {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.ops-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: color-mix(in oklch, var(--warn, #e6a700) 12%, var(--surface));
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.ops-banner-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
 .header-btn.icon-btn {
   padding: 6px;
   min-width: 32px;

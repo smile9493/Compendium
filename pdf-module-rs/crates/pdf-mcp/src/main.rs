@@ -37,6 +37,7 @@ use vlm_visual_gateway::MetricsCollector;
 mod api_doc;
 mod embed;
 mod http;
+mod http_schemas;
 mod metrics;
 mod plugins;
 mod protocol;

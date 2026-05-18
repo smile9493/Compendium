@@ -91,18 +91,7 @@
               <span class="dots-loading"></span>
               {{ compileStore.pipelineStatus === 'awaiting_agent' ? '等待 Agent 写入 wiki…' : '编译进行中，每 2 秒自动刷新…' }}
             </div>
-            <div v-if="pipelineStages.length" class="compile-stages">
-              <div
-                v-for="stage in pipelineStages"
-                :key="stage.stage"
-                class="compile-stage-row"
-                :class="'stage-' + stage.status"
-              >
-                <span class="stage-name">{{ stageLabel(stage.stage) }}</span>
-                <span class="stage-status">{{ stage.status }}</span>
-                <span v-if="stage.duration_ms" class="stage-dur">{{ stage.duration_ms }}ms</span>
-              </div>
-            </div>
+            <CompileStageList :stages="pipelineStages" />
           </div>
         </div>
 
@@ -161,6 +150,7 @@ import { ref, computed } from 'vue'
 import { useCompileStore } from '@/stores/compile'
 import { openEntry } from '@/composables/useWikiNavigation'
 import { Hammer, X, Upload, History, Activity, ShieldAlert, Play, Loader2 } from 'lucide-vue-next'
+import CompileStageList from '@/components/CompileStageList.vue'
 
 const compileStore = useCompileStore()
 const compileMode = ref('single')
@@ -192,17 +182,6 @@ const statusClass = computed(() => {
   if (compileStore.pipelineStatus === 'partial') return 'status-warn'
   return 'status-error'
 })
-
-function stageLabel(stage) {
-  const labels = {
-    extract: '提取',
-    prompt_gen: 'Prompt',
-    agent_wiki: 'Agent 写 wiki',
-    index_rebuild: '索引重建',
-    quality_gate: '质量门禁',
-  }
-  return labels[stage] || stage
-}
 
 function onFile(e) {
   const f = e.target.files?.[0]
