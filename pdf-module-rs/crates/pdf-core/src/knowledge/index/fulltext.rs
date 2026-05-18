@@ -156,9 +156,7 @@ impl FulltextIndex {
             PdfModuleError::Storage(format!("Failed to create tantivy writer: {}", e))
         })?;
 
-        writer
-            .delete_term(Term::from_field_text(path_field, rel_path))
-            .map_err(|e| PdfModuleError::Storage(format!("Failed to delete term: {}", e)))?;
+        let _deleted = writer.delete_term(Term::from_field_text(path_field, rel_path));
 
         let content = fs::read_to_string(&full_path).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to read {}: {}", rel_path, e))

@@ -69,13 +69,26 @@ fn resolve_kb_from_request(
     state: &HttpState,
     kb_id: Option<&str>,
 ) -> Option<PathBuf> {
-    if let Some(id) = kb_id {
-        return state.workspace_registry.path_for_id(id).ok();
+    let resolved = if let Some(id) = kb_id {
+        state.workspace_registry.path_for_id(id).ok()
+    } else if let Some(ref p) = state.kb_path {
+        Some(p.clone())
+    } else {
+        state.workspace_registry.resolve_kb(None, None).ok()
+    };
+    resolved
+}
+
+fn normalize_wiki_entry_path(path: &str) -> String {
+    let path = path.trim().trim_start_matches('/');
+    if path.is_empty() {
+        return String::new();
     }
-    if let Some(ref p) = state.kb_path {
-        return Some(p.clone());
+    if path.ends_with(".md") {
+        path.to_string()
+    } else {
+        format!("{path}.md")
     }
-    state.workspace_registry.resolve_kb(None, None).ok()
 }
 
 #[instrument(skip(state))]
@@ -231,16 +244,18 @@ async fn api_wiki_tree(
 async fn api_wiki_entry(
     State(state): State<Arc<HttpState>>,
     Path(path): Path<String>,
+    Query(q): Query<KbQuery>,
 ) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"error": "No knowledge base configured"})),
     };
 
     let wiki_dir = kb.join("wiki");
     let renderer = WikiRenderer::new(&wiki_dir);
+    let entry_path = normalize_wiki_entry_path(&path);
 
-    match renderer.render_entry(&path) {
+    match renderer.render_entry(&entry_path) {
         Ok(entry) => Json(serde_json::json!({"entry": entry})),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
@@ -345,9 +360,10 @@ async fn api_wiki_search(
 async fn api_wiki_graph(
     State(state): State<Arc<HttpState>>,
     Path(path): Path<String>,
+    Query(q): Query<KbQuery>,
 ) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"error": "No knowledge base configured"})),
     };
 
@@ -367,9 +383,12 @@ async fn api_wiki_graph(
 }
 
 #[instrument(skip(state))]
-async fn api_wiki_stats(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_wiki_stats(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> Json<serde_json::Value> {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => {
             return Json(serde_json::json!({
                 "total_entries": 0, "domains": [],
@@ -397,9 +416,12 @@ async fn api_wiki_stats(State(state): State<Arc<HttpState>>) -> Json<serde_json:
 }
 
 #[instrument(skip(state))]
-async fn api_wiki_domains(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_wiki_domains(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> Json<serde_json::Value> {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"domains": []})),
     };
 
@@ -430,9 +452,12 @@ async fn api_wiki_domains(State(state): State<Arc<HttpState>>) -> Json<serde_jso
 // ── Management API handlers ──
 
 #[instrument(skip(state))]
-async fn api_health(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_health(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"error": "No knowledge base configured"})).into_response(),
     };
 
@@ -468,9 +493,12 @@ async fn api_health(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
 }
 
 #[instrument(skip(state))]
-async fn api_config_get(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_config_get(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
@@ -494,10 +522,11 @@ struct SetConfigBody {
 #[instrument(skip(state))]
 async fn api_config_set(
     State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
     Json(body): Json<SetConfigBody>,
 ) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
@@ -523,9 +552,10 @@ async fn api_config_set(
 async fn api_config_remove(
     State(state): State<Arc<HttpState>>,
     Path(key): Path<String>,
+    Query(q): Query<KbQuery>,
 ) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
@@ -613,9 +643,10 @@ struct CompileUploadBody {
 #[instrument(skip(state, body))]
 async fn api_compile_upload(
     State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
     Json(body): Json<CompileUploadBody>,
 ) -> impl IntoResponse {
-    let kb = match kb_or_error(&state) {
+    let kb = match kb_or_error(&state, q.kb_id.as_deref()) {
         Ok(k) => k,
         Err(r) => return r,
     };
@@ -708,8 +739,11 @@ async fn api_compile_upload(
 }
 
 #[instrument(skip(state))]
-async fn api_compile_incremental(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match kb_or_error(&state) {
+async fn api_compile_incremental(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match kb_or_error(&state, q.kb_id.as_deref()) {
         Ok(k) => k,
         Err(r) => return r,
     };
@@ -776,8 +810,11 @@ async fn api_compile_incremental(State(state): State<Arc<HttpState>>) -> impl In
     Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
 }
 
-fn kb_or_error(state: &HttpState) -> Result<PathBuf, axum::response::Response> {
-    state.kb_path.clone().ok_or_else(|| {
+fn kb_or_error(
+    state: &HttpState,
+    kb_id: Option<&str>,
+) -> Result<PathBuf, axum::response::Response> {
+    resolve_kb_from_request(state, kb_id).ok_or_else(|| {
         (
             axum::http::StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "No knowledge base configured"})),
@@ -787,9 +824,12 @@ fn kb_or_error(state: &HttpState) -> Result<PathBuf, axum::response::Response> {
 }
 
 #[instrument(skip(state))]
-async fn api_compile_status(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_compile_status(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
@@ -824,9 +864,12 @@ async fn api_compile_status(State(state): State<Arc<HttpState>>) -> impl IntoRes
 }
 
 #[instrument(skip(state))]
-async fn api_index_rebuild(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_index_rebuild(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
@@ -861,12 +904,17 @@ struct QualityIssuesQuery {
     limit: usize,
     #[serde(default)]
     severity: Option<String>,
+    #[serde(default)]
+    kb_id: Option<String>,
 }
 
 #[instrument(skip(state))]
-async fn api_quality_summary(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_quality_summary(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({})).into_response(),
     };
     match QualitySnapshotStore::new(&kb).read() {
@@ -884,8 +932,8 @@ async fn api_quality_issues(
     State(state): State<Arc<HttpState>>,
     Query(query): Query<QualityIssuesQuery>,
 ) -> impl IntoResponse {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, query.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"issues": []})).into_response(),
     };
     let wiki_dir = kb.join("wiki");
@@ -1036,13 +1084,14 @@ fn highlight_snippet(snippet: &str, query: &str) -> String {
 // ── Workspace API ──
 
 async fn api_workspaces_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
-    match state.workspace_registry.list() {
+    let payload = match state.workspace_registry.list() {
         Ok(workspaces) => {
             let active = state.workspace_registry.active_id().ok().flatten();
-            Json(serde_json::json!({ "workspaces": workspaces, "active_kb_id": active }))
+            serde_json::json!({ "workspaces": workspaces, "active_kb_id": active })
         }
-        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
-    }
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    };
+    Json(payload)
 }
 
 #[derive(Debug, Deserialize)]

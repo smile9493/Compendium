@@ -461,7 +461,7 @@ pub async fn handle_compile_uploaded_pdf(
 }
 
 pub async fn handle_save_wiki_entry(
-    _ctx: &ToolContext,
+    ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let entry_path = args["entry_path"]
