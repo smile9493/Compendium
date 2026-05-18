@@ -34,6 +34,7 @@ static ALLOC: talc::TalckWasm = talc::TalckWasm::new_global();
 
 pub mod arena;
 pub mod error;
+pub mod preview;
 pub mod slice;
 
 pub use arena::WasmPdfEngine;

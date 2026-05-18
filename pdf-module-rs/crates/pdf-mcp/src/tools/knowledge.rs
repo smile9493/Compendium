@@ -164,7 +164,7 @@ pub async fn handle_compile_to_wiki(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
     let pdf_path = std::path::Path::new(pdf_path_str);
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let domain = args["domain"].as_str();
 
     pdf_core::FileValidator::validate_path_safety(pdf_path, &ctx.path_config)
@@ -201,7 +201,7 @@ pub async fn handle_incremental_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let store = CompileStatusStore::new(&kb_path);
     let guard = store
         .begin_compile()
@@ -322,7 +322,7 @@ pub async fn handle_aggregate_entries(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
 
@@ -345,7 +345,7 @@ pub async fn handle_hypothesis_test(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
 
@@ -398,7 +398,7 @@ pub async fn handle_recompile_entry(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let entry_path = args["entry_path"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -428,7 +428,7 @@ pub async fn handle_compile_uploaded_pdf(
         .get(file_id)
         .ok_or_else(|| anyhow::anyhow!("File not found or expired: {}", file_id))?;
 
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let domain = args["domain"].as_str();
 
     let store = CompileStatusStore::new(&kb_path);
@@ -484,7 +484,7 @@ pub async fn handle_save_wiki_entry(
         return Err(anyhow::anyhow!("entry_path must end with .md, got: {}", entry_path));
     }
 
-    let kb_path = parse_kb_path(args)?;
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let wiki_dir = kb_path.join("wiki");
     let target_path = wiki_dir.join(entry_path);
 
@@ -535,7 +535,13 @@ mod tests {
     fn create_test_context() -> ToolContext {
         let config = ServerConfig::from_env().unwrap_or_default();
         let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        ToolContext::new(pipeline)
+        let registry = Arc::new(
+            pdf_core::management::WorkspaceRegistry::load(
+                std::env::temp_dir().join("rsut_test_workspaces.toml"),
+            )
+            .expect("registry"),
+        );
+        ToolContext::new(pipeline, registry)
     }
 
     #[test]

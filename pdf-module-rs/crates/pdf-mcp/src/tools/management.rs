@@ -1,5 +1,6 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
+use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter};
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
@@ -98,8 +99,11 @@ pub fn management_tool_definitions() -> Vec<ToolDefinition> {
 }
 
 #[instrument(skip(args))]
-pub async fn handle_get_config(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_get_config(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let mut cm = ConfigManager::new(&kb_path);
     cm.load()
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
@@ -114,8 +118,11 @@ pub async fn handle_get_config(args: &serde_json::Value) -> anyhow::Result<Vec<C
 }
 
 #[instrument(skip(args))]
-pub async fn handle_set_config(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_set_config(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let key = args["key"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing key"))?;
@@ -139,8 +146,11 @@ pub async fn handle_set_config(args: &serde_json::Value) -> anyhow::Result<Vec<C
 }
 
 #[instrument(skip(args))]
-pub async fn handle_get_health_report(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_get_health_report(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let reporter = HealthReporter::new(&kb_path);
     let report = reporter
         .report()
@@ -173,7 +183,8 @@ pub async fn handle_trigger_incremental_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+    let registry = &ctx.workspace_registry;
+    let kb_path = parse_kb_path(registry, args)?;
     let store = CompileStatusStore::new(&kb_path);
     let guard = store
         .begin_compile()
@@ -202,8 +213,11 @@ pub async fn handle_trigger_incremental_compile(
 }
 
 #[instrument(skip(args))]
-pub async fn handle_get_compile_status(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_get_compile_status(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let record = CompileStatusStore::new(&kb_path)
         .read()
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
@@ -231,7 +245,11 @@ mod tests {
     fn create_test_context() -> ToolContext {
         let config = ServerConfig::from_env().unwrap_or_default();
         let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        ToolContext::new(pipeline)
+        let registry = Arc::new(
+            WorkspaceRegistry::load(std::env::temp_dir().join("rsut_test_workspaces.toml"))
+                .expect("registry"),
+        );
+        ToolContext::new(pipeline, registry)
     }
 
     #[test]
@@ -252,7 +270,8 @@ mod tests {
     async fn test_get_config_default_kb() {
         let args = serde_json::json!({});
         
-        let result = handle_get_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
     }
 
@@ -263,7 +282,8 @@ mod tests {
             "value": "test_value"
         });
         
-        let result = handle_set_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
     }
 
@@ -274,7 +294,8 @@ mod tests {
             "value": "test_value"
         });
         
-        let result = handle_set_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing key"));
     }
@@ -286,7 +307,8 @@ mod tests {
             "key": "test_key"
         });
         
-        let result = handle_set_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing value"));
     }
@@ -295,7 +317,8 @@ mod tests {
     async fn test_get_health_report_default_kb() {
         let args = serde_json::json!({});
         
-        let result = handle_get_health_report(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_get_health_report(&registry, &args).await;
         assert!(result.is_ok());
     }
 
@@ -312,7 +335,8 @@ mod tests {
     async fn test_get_compile_status_default_kb() {
         let args = serde_json::json!({});
         
-        let result = handle_get_compile_status(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_get_compile_status(&registry, &args).await;
         assert!(result.is_ok());
     }
 
@@ -340,7 +364,8 @@ mod tests {
             "knowledge_base": kb_path.to_str().unwrap()
         });
         
-        let result = handle_get_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
@@ -363,7 +388,8 @@ mod tests {
             "value": "test_value"
         });
         
-        let result = handle_set_config(&args).await;
+        let registry = create_test_context().workspace_registry;
+        let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);

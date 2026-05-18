@@ -2353,6 +2353,7 @@ version = "0.3.0"
 dependencies = [
  "assert2",
  "async-trait",
+ "base64",
  "bincode",
  "bumpalo",
  "cargo-husky",
@@ -2378,6 +2379,7 @@ dependencies = [
  "pulldown-cmark",
  "rayon",
  "regex",
+ "reqwest",
  "rs_merkle",
  "rstest",
  "serde",
@@ -2392,6 +2394,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "vlm-visual-gateway",
 ]
 
@@ -2412,6 +2415,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
+ "parking_lot 0.12.5",
  "pdf-core",
  "prometheus",
  "pulldown-cmark",
@@ -2423,6 +2427,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "toml",
  "tower",
  "tower-http 0.5.2",
  "tracing",

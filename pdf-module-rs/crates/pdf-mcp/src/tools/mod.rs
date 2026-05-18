@@ -2,6 +2,7 @@ mod extract;
 mod index;
 mod knowledge;
 mod management;
+mod platform;
 mod post_compile;
 mod resources;
 
@@ -9,10 +10,12 @@ pub use extract::*;
 pub use index::*;
 pub use knowledge::*;
 pub use management::*;
+pub use platform::*;
 pub use resources::*;
 
 use crate::protocol::{Content, ToolDefinition};
 use crate::upload::UploadStore;
+use pdf_core::management::WorkspaceRegistry;
 use pdf_core::{McpPdfPipeline, PathValidationConfig};
 use std::sync::Arc;
 
@@ -28,35 +31,40 @@ pub struct ToolContext {
     pub pipeline: Arc<McpPdfPipeline>,
     pub path_config: PathValidationConfig,
     pub upload_store: Option<Arc<UploadStore>>,
+    pub workspace_registry: Arc<WorkspaceRegistry>,
 }
 
 impl ToolContext {
-    pub fn new(pipeline: Arc<McpPdfPipeline>) -> Self {
+    pub fn new(pipeline: Arc<McpPdfPipeline>, workspace_registry: Arc<WorkspaceRegistry>) -> Self {
         Self {
             pipeline,
             path_config: default_path_config(),
             upload_store: None,
+            workspace_registry,
         }
     }
 
     pub fn new_with_upload_store(
         pipeline: Arc<McpPdfPipeline>,
         upload_store: Option<Arc<UploadStore>>,
+        workspace_registry: Arc<WorkspaceRegistry>,
     ) -> Self {
         Self {
             pipeline,
             path_config: default_path_config(),
             upload_store,
+            workspace_registry,
         }
     }
 }
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(30);
+    let mut tools = Vec::with_capacity(40);
     tools.extend(extract_tool_definitions());
     tools.extend(knowledge_tool_definitions());
     tools.extend(index_tool_definitions());
     tools.extend(management_tool_definitions());
+    tools.extend(platform_tool_definitions());
     tools
 }
 
@@ -76,40 +84,55 @@ pub async fn dispatch_tool(
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
         "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
         "incremental_compile" => handle_incremental_compile(ctx, args).await,
-        "search_knowledge" => handle_search_knowledge(args).await,
-        "rebuild_index" => handle_rebuild_index(args).await,
-        "get_entry_context" => handle_get_entry_context(args).await,
-        "get_agent_context" => handle_get_agent_context(args).await,
-        "preview_wiki_patch" => handle_preview_wiki_patch(args).await,
-        "patch_wiki_entry" => handle_patch_wiki_entry(args).await,
-        "find_orphans" => handle_find_orphans(args).await,
-        "suggest_links" => handle_suggest_links(args).await,
-        "export_concept_map" => handle_export_concept_map(args).await,
-        "check_quality" => handle_check_quality(args).await,
+        "search_knowledge" => {
+            handle_search_knowledge(&ctx.workspace_registry, args).await
+        }
+        "rebuild_index" => handle_rebuild_index(&ctx.workspace_registry, args).await,
+        "get_entry_context" => handle_get_entry_context(&ctx.workspace_registry, args).await,
+        "get_agent_context" => handle_get_agent_context(&ctx.workspace_registry, args).await,
+        "preview_wiki_patch" => handle_preview_wiki_patch(&ctx.workspace_registry, args).await,
+        "patch_wiki_entry" => handle_patch_wiki_entry(&ctx.workspace_registry, args).await,
+        "find_orphans" => handle_find_orphans(&ctx.workspace_registry, args).await,
+        "suggest_links" => handle_suggest_links(&ctx.workspace_registry, args).await,
+        "export_concept_map" => handle_export_concept_map(&ctx.workspace_registry, args).await,
+        "check_quality" => handle_check_quality(&ctx.workspace_registry, args).await,
         "micro_compile" => handle_micro_compile(ctx, args).await,
         "aggregate_entries" => handle_aggregate_entries(ctx, args).await,
         "hypothesis_test" => handle_hypothesis_test(ctx, args).await,
         "recompile_entry" => handle_recompile_entry(ctx, args).await,
         "save_wiki_entry" => handle_save_wiki_entry(ctx, args).await,
-        "get_config" => handle_get_config(args).await,
-        "set_config" => handle_set_config(args).await,
-        "get_health_report" => handle_get_health_report(args).await,
+        "get_config" => handle_get_config(&ctx.workspace_registry, args).await,
+        "set_config" => handle_set_config(&ctx.workspace_registry, args).await,
+        "get_health_report" => handle_get_health_report(&ctx.workspace_registry, args).await,
         "trigger_incremental_compile" => handle_trigger_incremental_compile(ctx, args).await,
-        "get_compile_status" => handle_get_compile_status(args).await,
+        "get_compile_status" => handle_get_compile_status(&ctx.workspace_registry, args).await,
         "show_wiki_browser" => handle_show_wiki_browser().await,
+        "list_workspaces" => handle_list_workspaces(&ctx.workspace_registry).await,
+        "set_active_workspace" => {
+            handle_set_active_workspace(&ctx.workspace_registry, args).await
+        }
+        "register_workspace" => handle_register_workspace(&ctx.workspace_registry, args).await,
+        "list_extraction_plugins" => handle_list_extraction_plugins(ctx).await,
+        "probe_extraction" => handle_probe_extraction(ctx, args).await,
+        "sync_status" => handle_sync_status(&ctx.workspace_registry, args).await,
+        "sync_push" => handle_sync_push(&ctx.workspace_registry, args).await,
+        "sync_pull" => handle_sync_pull(&ctx.workspace_registry, args).await,
+        "submit_patch_proposal" => handle_submit_patch_proposal(&ctx.workspace_registry, args).await,
+        "apply_patch_proposal" => handle_apply_patch_proposal(&ctx.workspace_registry, args).await,
         _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
     }
 }
 
-const DEFAULT_KNOWLEDGE_BASE: &str = "/app/kb";
-
-fn parse_kb_path(args: &serde_json::Value) -> anyhow::Result<std::path::PathBuf> {
-    let kb = args["knowledge_base"]
-        .as_str()
-        .map(String::from)
-        .or_else(|| std::env::var("KNOWLEDGE_BASE_PATH").ok())
-        .unwrap_or_else(|| DEFAULT_KNOWLEDGE_BASE.to_string());
-    Ok(std::path::PathBuf::from(kb))
+/// Resolve knowledge base path: `kb_id` (preferred) or `knowledge_base` or active workspace.
+pub fn parse_kb_path(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<std::path::PathBuf> {
+    let kb_id = args["kb_id"].as_str();
+    let knowledge_base = args["knowledge_base"].as_str();
+    registry
+        .resolve_kb(kb_id, knowledge_base)
+        .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 #[cfg(test)]
@@ -121,20 +144,24 @@ mod tests {
     fn create_test_context() -> ToolContext {
         let config = ServerConfig::from_env().unwrap_or_default();
         let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        ToolContext::new(pipeline)
+        let registry = Arc::new(
+            WorkspaceRegistry::load(std::env::temp_dir().join("rsut_test_workspaces.toml"))
+                .expect("registry"),
+        );
+        ToolContext::new(pipeline, registry)
     }
 
     #[test]
     fn test_all_tool_definitions_count() {
         let tools = all_tool_definitions();
-        assert_eq!(tools.len(), 30, "Expected 30 tools total");
+        assert_eq!(tools.len(), 40, "Expected 40 tools total");
     }
 
     #[test]
     fn test_all_tool_definitions_unique_names() {
         let tools = all_tool_definitions();
         let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names.len(), 30, "All tool names should be unique");
+        assert_eq!(names.len(), 40, "All tool names should be unique");
     }
 
     #[test]
@@ -157,20 +184,22 @@ mod tests {
 
     #[test]
     fn test_parse_kb_path_valid() {
-        let args = serde_json::json!({
-            "knowledge_base": "/tmp/test_kb"
-        });
-        let result = parse_kb_path(&args);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let kb = dir.path().join("kb");
+        std::fs::create_dir_all(&kb).expect("mkdir");
+        let cfg = dir.path().join("workspaces.toml");
+        let registry = WorkspaceRegistry::load(&cfg).expect("load");
+        registry
+            .upsert(pdf_core::management::WorkspaceEntry {
+                id: "t".into(),
+                name: "T".into(),
+                path: kb.clone(),
+                active: true,
+            })
+            .expect("upsert");
+        let args = serde_json::json!({ "kb_id": "t" });
+        let result = parse_kb_path(&registry, &args);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_str().unwrap(), "/tmp/test_kb");
-    }
-
-    #[test]
-    fn test_parse_kb_path_missing() {
-        let args = serde_json::json!({});
-        let result = parse_kb_path(&args);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_str().unwrap(), "/app/kb");
     }
 
     #[tokio::test]

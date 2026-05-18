@@ -51,6 +51,8 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useUiStore } from '@/stores/ui'
 import { useCompileStore } from '@/stores/compile'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { setActiveKbId } from '@/api'
 import { useKeyboard } from '@/composables/useKeyboard'
 import { markdownExcerpt } from '@/utils/path'
 import AppHeader from '@/components/AppHeader.vue'
@@ -67,6 +69,7 @@ const GraphDialog = defineAsyncComponent(() => import('@/components/GraphDialog.
 const wikiStore = useWikiStore()
 const uiStore = useUiStore()
 const compileStore = useCompileStore()
+const workspaceStore = useWorkspaceStore()
 
 const isMcpMode = ref(false)
 const mainRef = ref(null)
@@ -91,8 +94,12 @@ watch(
   },
 )
 
-onMounted(() => {
+onMounted(async () => {
   wikiStore.initTheme()
+  await workspaceStore.fetchWorkspaces()
+  if (workspaceStore.activeKbId) {
+    setActiveKbId(workspaceStore.activeKbId)
+  }
   wikiStore.loadTree()
   isMcpMode.value = window.parent !== window
 })

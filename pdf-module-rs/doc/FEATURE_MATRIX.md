@@ -36,9 +36,21 @@ All entry points use:
 | `preview_wiki_patch` | Diff preview without write |
 | `patch_wiki_entry` | Structured patch + `reindex_entry` |
 
+## Phase 3 (platformization)
+
+| Capability | Status |
+|------------|--------|
+| Multi-KB `WorkspaceRegistry` (`~/.rsut/workspaces.toml`) | **stable** |
+| `kb_id` on MCP / HTTP / Web UI | **stable** |
+| `ExtractionRouter` + remote plugins (`extraction.plugins.toml`) | **stable** |
+| `pdf-wasm` preview (`open`, thumbnails, page text) | **stable** |
+| Local collab (audit, patch proposals, locks) | **stable** |
+| Git-like sync (`file://` remote, Merkle manifest) | **stable** |
+
 ## Web UI
 
 | Component | Status |
 |-----------|--------|
 | `pdf-mcp` + embedded `pdf-web-ui` (Vue 3) | **canonical** |
+| KB workspace switcher in header | **stable** |
 | `pdf-web` binary | **deprecated** — management API sidecar only |

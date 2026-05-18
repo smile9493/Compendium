@@ -2,6 +2,7 @@ use crate::config::ServerConfig;
 use crate::dto::{ExtractOptions, StructuredExtractionResult, TextExtractionResult};
 use crate::engine::PdfiumEngine;
 use crate::error::PdfResult;
+use crate::extraction::{ExtractionRouter, PdfiumBackend, VlmExtractionBackend};
 use crate::mmap_loader::MmapPdfLoader;
 use crate::quality_probe::{ExtractionMethod, QualityProbe, QualityReport};
 use crate::validator::FileValidator;
@@ -48,8 +49,56 @@ use vlm_visual_gateway::{MetricsCollector, VlmConfig, VlmGateway};
 /// internally and are intended for backward compatibility and testing.
 pub struct McpPdfPipeline {
     validator: FileValidator,
+    extraction_router: Arc<ExtractionRouter>,
     #[cfg(feature = "vlm")]
-    vlm_gateway: Option<VlmGateway>,
+    vlm_gateway: Option<Arc<VlmGateway>>,
+}
+
+impl McpPdfPipeline {
+    pub fn extraction_router(&self) -> &ExtractionRouter {
+        &self.extraction_router
+    }
+
+    /// Attach remote extraction plugins to the router (keeps VLM + Pdfium).
+    pub fn reconfigure_extraction_router(
+        &mut self,
+        remote_configs: Vec<crate::extraction::RemoteExtractionConfig>,
+    ) -> PdfResult<()> {
+        #[cfg(feature = "vlm")]
+        {
+            self.extraction_router =
+                Self::build_extraction_router(self.vlm_gateway.clone(), remote_configs)?;
+        }
+        #[cfg(not(feature = "vlm"))]
+        {
+            self.extraction_router = Self::build_extraction_router(remote_configs)?;
+        }
+        Ok(())
+    }
+
+    /// Build pipeline with a custom extraction router (facade plugin loader).
+    pub fn with_extraction_router(
+        config: &ServerConfig,
+        router: Arc<ExtractionRouter>,
+    ) -> PdfResult<Self> {
+        #[cfg(feature = "vlm")]
+        {
+            let metrics = Arc::new(MetricsCollector::with_default_registry());
+            return Self::build_pipeline_with_router(
+                config,
+                metrics,
+                VlmConfig::from_env().ok(),
+                Some(router),
+            );
+        }
+        #[cfg(not(feature = "vlm"))]
+        {
+            Ok(Self {
+                validator: FileValidator::new(config.security.max_file_size_mb as u32),
+                extraction_router: router,
+            })
+        }
+    }
 }
 
 /// Context for a single PDF extraction operation.
@@ -74,6 +123,7 @@ impl McpPdfPipeline {
         {
             Ok(Self {
                 validator: FileValidator::new(config.security.max_file_size_mb as u32),
+                extraction_router: Arc::new(ExtractionRouter::default_chain()),
             })
         }
     }
@@ -90,7 +140,7 @@ impl McpPdfPipeline {
         config: &ServerConfig,
         metrics: Arc<MetricsCollector>,
     ) -> PdfResult<Self> {
-        Self::build_pipeline(config, metrics, VlmConfig::from_env().ok())
+        Self::build_pipeline_with_router(config, metrics, VlmConfig::from_env().ok(), None)
     }
 
     /// Create a pipeline with explicit VLM config and default metrics (legacy path).
@@ -100,7 +150,7 @@ impl McpPdfPipeline {
     #[cfg(feature = "vlm")]
     pub fn with_vlm(config: &ServerConfig, vlm_config: VlmConfig) -> PdfResult<Self> {
         let metrics = Arc::new(MetricsCollector::with_default_registry());
-        Self::build_pipeline(config, metrics, Some(vlm_config))
+        Self::build_pipeline_with_router(config, metrics, Some(vlm_config), None)
     }
 
     /// Create a pipeline with explicit VLM config and externally-owned [`MetricsCollector`].
@@ -113,7 +163,7 @@ impl McpPdfPipeline {
         vlm_config: VlmConfig,
         metrics: Arc<MetricsCollector>,
     ) -> PdfResult<Self> {
-        Self::build_pipeline(config, metrics, Some(vlm_config))
+        Self::build_pipeline_with_router(config, metrics, Some(vlm_config), None)
     }
 
     /// Shared pipeline construction logic.
@@ -123,11 +173,21 @@ impl McpPdfPipeline {
         metrics: Arc<MetricsCollector>,
         vlm_config: Option<VlmConfig>,
     ) -> PdfResult<Self> {
+        Self::build_pipeline_with_router(config, metrics, vlm_config, None)
+    }
+
+    #[cfg(feature = "vlm")]
+    fn build_pipeline_with_router(
+        config: &ServerConfig,
+        metrics: Arc<MetricsCollector>,
+        vlm_config: Option<VlmConfig>,
+        extraction_router: Option<Arc<ExtractionRouter>>,
+    ) -> PdfResult<Self> {
         let vlm_gateway = match vlm_config {
             Some(cfg) => match VlmGateway::new(cfg, metrics) {
                 Ok(gateway) => {
                     info!("VLM gateway initialized successfully");
-                    Some(gateway)
+                    Some(Arc::new(gateway))
                 }
                 Err(e) => {
                     warn!(
@@ -143,10 +203,41 @@ impl McpPdfPipeline {
             }
         };
 
+        let extraction_router = match extraction_router {
+            Some(r) => r,
+            None => Self::build_extraction_router(vlm_gateway.clone(), vec![])?,
+        };
+
         Ok(Self {
             validator: FileValidator::new(config.security.max_file_size_mb as u32),
+            extraction_router,
             vlm_gateway,
         })
+    }
+
+    /// Assemble default router: remote plugins + VLM + Pdfium.
+    #[cfg(feature = "vlm")]
+    pub fn build_extraction_router(
+        vlm_gateway: Option<Arc<VlmGateway>>,
+        remote_configs: Vec<crate::extraction::RemoteExtractionConfig>,
+    ) -> PdfResult<Arc<ExtractionRouter>> {
+        let mut backends: Vec<Arc<dyn crate::extraction::ExtractionBackend>> =
+            RemoteExtractionBackend::from_configs(remote_configs)?;
+        if let Some(gw) = vlm_gateway {
+            backends.push(Arc::new(VlmExtractionBackend::new(gw)));
+        }
+        backends.push(Arc::new(PdfiumBackend));
+        Ok(Arc::new(ExtractionRouter::new(backends)))
+    }
+
+    #[cfg(not(feature = "vlm"))]
+    pub fn build_extraction_router(
+        remote_configs: Vec<crate::extraction::RemoteExtractionConfig>,
+    ) -> PdfResult<Arc<ExtractionRouter>> {
+        let mut backends: Vec<Arc<dyn crate::extraction::ExtractionBackend>> =
+            RemoteExtractionBackend::from_configs(remote_configs)?;
+        backends.push(Arc::new(PdfiumBackend));
+        Ok(Arc::new(ExtractionRouter::new(backends)))
     }
 
     fn probe_and_load(&self, file_path: &Path) -> PdfResult<ExtractionContext> {
@@ -175,15 +266,16 @@ impl McpPdfPipeline {
 
         match ctx.quality_report.extraction_method {
             ExtractionMethod::Pdfium => {
-                let text = PdfiumEngine::extract_text_from_mmap(&ctx.loader)?;
-                Ok(TextExtractionResult {
-                    extracted_text: text,
-                    extraction_metadata: None,
-                    metadata: None,
-                })
+                self.extraction_router
+                    .extract_text(&ctx, Some("pdfium"))
+                    .await
             }
             #[cfg(feature = "vlm")]
-            ExtractionMethod::Vlm => self.extract_text_via_vlm(&ctx).await,
+            ExtractionMethod::Vlm => {
+                self.extraction_router
+                    .extract_text(&ctx, Some("vlm"))
+                    .await
+            }
             #[cfg(feature = "vlm")]
             ExtractionMethod::Hybrid => self.extract_text_hybrid(&ctx).await,
             #[cfg(not(feature = "vlm"))]
@@ -192,15 +284,9 @@ impl McpPdfPipeline {
                     "VLM/Hybrid extraction requested but VLM feature is disabled, \
                      falling back to Pdfium"
                 );
-                let text = PdfiumEngine::extract_text_from_mmap(&ctx.loader)?;
-                Ok(TextExtractionResult {
-                    extracted_text: text,
-                    extraction_metadata: None,
-                    metadata: Some(serde_json::json!({
-                        "method": "pdfium_fallback",
-                        "reason": "vlm_feature_disabled"
-                    })),
-                })
+                self.extraction_router
+                    .extract_text(&ctx, Some("pdfium"))
+                    .await
             }
         }
     }
