@@ -41,7 +41,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::RwLock;
 
@@ -102,7 +102,10 @@ impl FeatureFlags {
                 let config = match value.to_lowercase().as_str() {
                     "true" => FlagConfig::boolean(true),
                     "false" => FlagConfig::boolean(false),
-                    s if s.parse::<u8>().is_ok() => FlagConfig::percentage(s.parse().unwrap()),
+                    s => match s.parse::<u8>() {
+                        Ok(p) => FlagConfig::percentage(p),
+                        Err(_) => FlagConfig::boolean(false),
+                    },
                     _ => FlagConfig::boolean(false),
                 };
                 flags.insert(flag_name, config);
@@ -130,7 +133,7 @@ impl FeatureFlags {
                 (hash % 100) < *value as u64
             }
             Some(FlagConfig::Targeted { users }) => {
-                user_context.map_or(false, |u| users.iter().any(|allowed| allowed == u))
+                user_context.is_some_and(|u| users.iter().any(|allowed| allowed == u))
             }
             None => false,
         }
@@ -222,8 +225,9 @@ mod tests {
 
     #[test]
     fn env_override_parsing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("features.json");
+        let tmp = std::env::temp_dir().join(format!("pdf-flags-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).expect("temp dir");
+        let config_path = tmp.join("features.json");
         std::fs::write(&config_path, r#"{"my-flag": {"type": "boolean", "value": false}}"#)
             .unwrap();
 
