@@ -34,10 +34,7 @@ impl Default for IndexCache {
 
 impl IndexCache {
     pub fn new() -> Self {
-        Self {
-            inner: RwLock::new(HashMap::new()),
-            next_generation: AtomicU64::new(1),
-        }
+        Self { inner: RwLock::new(HashMap::new()), next_generation: AtomicU64::new(1) }
     }
 
     fn cache_key(knowledge_base: &Path) -> PathBuf {
@@ -53,11 +50,7 @@ impl IndexCache {
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
         let wd = wiki_dir(knowledge_base);
         let fulltext = FulltextIndex::open_or_create(knowledge_base)?;
-        let graph_idx = if wd.exists() {
-            graph(knowledge_base)?
-        } else {
-            GraphIndex::new()
-        };
+        let graph_idx = if wd.exists() { graph(knowledge_base)? } else { GraphIndex::new() };
 
         let entry = Arc::new(KbIndexes { fulltext, graph: graph_idx, generation });
         self.inner.write().insert(key, Arc::clone(&entry));
@@ -78,14 +71,7 @@ impl IndexCache {
         opts: SearchOptions,
     ) -> PdfResult<SearchResponse> {
         let indexes = self.get_or_load(knowledge_base)?;
-        search_with_options_ft(
-            knowledge_base,
-            query,
-            limit,
-            mode,
-            opts,
-            Some(&indexes.fulltext),
-        )
+        search_with_options_ft(knowledge_base, query, limit, mode, opts, Some(&indexes.fulltext))
     }
 
     pub fn graph(&self, knowledge_base: &Path) -> PdfResult<Arc<KbIndexes>> {

@@ -108,8 +108,14 @@ pub fn wiki_dir(knowledge_base: &Path) -> PathBuf {
 
 /// Hybrid search (default): Tantivy CJK + TF-IDF vectors fused via RRF.
 pub fn search(knowledge_base: &Path, query: &str, limit: usize) -> PdfResult<Vec<SearchHit>> {
-    Ok(search_with_options(knowledge_base, query, limit, SearchMode::Hybrid, SearchOptions::default())?
-        .hits)
+    Ok(search_with_options(
+        knowledge_base,
+        query,
+        limit,
+        SearchMode::Hybrid,
+        SearchOptions::default(),
+    )?
+    .hits)
 }
 
 /// Search with an explicit mode (hits only; default options).
@@ -158,7 +164,14 @@ pub fn search_with_options_ft(
         }
         SearchMode::Semantic => (search_semantic(knowledge_base, query, limit)?, false, false),
         SearchMode::Hybrid => {
-            let kr = search_keyword(knowledge_base, &wd, query, limit.saturating_mul(2).max(limit), &opts, ft_override)?;
+            let kr = search_keyword(
+                knowledge_base,
+                &wd,
+                query,
+                limit.saturating_mul(2).max(limit),
+                &opts,
+                ft_override,
+            )?;
             let index_empty = kr.index_empty;
             let used_fallback = kr.used_fallback;
             let semantic = match ensure_vector_index(knowledge_base) {
@@ -176,10 +189,7 @@ pub fn search_with_options_ft(
     };
 
     let hits = filter_searchable(knowledge_base, &wd, hits, limit);
-    Ok(SearchResponse {
-        hits,
-        meta: SearchMeta { index_empty, used_fallback, mode: mode_str },
-    })
+    Ok(SearchResponse { hits, meta: SearchMeta { index_empty, used_fallback, mode: mode_str } })
 }
 
 fn filter_searchable(

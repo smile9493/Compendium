@@ -177,15 +177,15 @@ mod tests {
         let client = Arc::new(SamplingClient::with_sender(5, tx));
         let pipeline = Arc::new(McpPdfPipeline::new(&ServerConfig::default()).expect("pipeline"));
         let registry = Arc::new(
-            pdf_core::management::WorkspaceRegistry::load(&dir.path().join("ws.toml")).expect("reg"),
+            pdf_core::management::WorkspaceRegistry::load(&dir.path().join("ws.toml"))
+                .expect("reg"),
         );
         let ctx = ToolContext::new(pipeline, registry, Arc::new(IndexCache::new()))
             .with_sampling(Arc::clone(&client));
 
         let job_id = job.job_id.clone();
-        let handle = tokio::spawn(async move {
-            maybe_run_compile_sampling(&ctx, &kb, &job_id).await
-        });
+        let handle =
+            tokio::spawn(async move { maybe_run_compile_sampling(&ctx, &kb, &job_id).await });
 
         if let Some(outgoing) = rx.recv().await {
             let response = SamplingResponse {

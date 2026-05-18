@@ -302,8 +302,13 @@ async fn api_wiki_search(
     let mut opts = SearchOptions::for_api();
     opts.domain = query.domain.clone();
 
-    let SearchResponse { hits, meta } = match state.index_cache.search(&kb, &query.q, query.limit, mode, opts)
-    {
+    let SearchResponse { hits, meta } = match state.index_cache.search(
+        &kb,
+        &query.q,
+        query.limit,
+        mode,
+        opts,
+    ) {
         Ok(r) => r,
         Err(e) => {
             return Json(serde_json::json!({

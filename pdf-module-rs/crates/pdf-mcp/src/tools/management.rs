@@ -1,18 +1,17 @@
 use crate::tools::json::json_content;
 use crate::tools::{attach_compile_sampling, parse_kb_path, ToolContext};
-use pdf_mcp_contracts::*;
 use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{
     build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
 };
 use pdf_core::KnowledgeEngine;
+use pdf_mcp_contracts::*;
 use std::sync::Arc;
 use tracing::instrument;
 
 use crate::protocol::Content;
 use crate::tools::mcp_extraction::extraction_health_from_ctx;
-
 
 #[instrument(skip(args))]
 pub async fn handle_get_config(

@@ -1,16 +1,16 @@
 use crate::tools::json::json_content;
 use crate::tools::{attach_compile_sampling, parse_kb_path, ToolContext};
+use pdf_core::dto::ExtractOptions;
+use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
+use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract, CompilePlanStore};
+use pdf_core::management::CompileJobStore;
+use pdf_core::KnowledgeEngine;
 use pdf_mcp_contracts::{
     AggregateEntriesOutput, CompileToWikiOutput, CompileUploadedPdfOutput,
     CompleteCompileJobOutput, GenerateCompilePlanOutput, GetCompilePlanOutput,
     HypothesisTestOutput, IncrementalCompileOutput, MarkPlanTaskDoneOutput, MicroCompileOutput,
     RecompileEntryOutput, SaveWikiEntryOutput,
 };
-use pdf_core::dto::ExtractOptions;
-use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
-use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract, CompilePlanStore};
-use pdf_core::management::CompileJobStore;
-use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -115,9 +115,7 @@ pub async fn handle_micro_compile(
         text
     );
 
-    json_content(&MicroCompileOutput {
-        result: serde_json::json!({ "markdown": output }),
-    })
+    json_content(&MicroCompileOutput { result: serde_json::json!({ "markdown": output }) })
 }
 
 fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
@@ -247,9 +245,7 @@ pub async fn handle_recompile_entry(
 
     let result = engine.recompile_entry(std::path::Path::new(entry_path))?;
 
-    json_content(&RecompileEntryOutput {
-        result: serde_json::to_value(&result)?,
-    })
+    json_content(&RecompileEntryOutput { result: serde_json::to_value(&result)? })
 }
 
 #[instrument(skip(ctx, args))]
@@ -374,9 +370,7 @@ pub async fn handle_complete_compile_job(
     let force = args["force"].as_bool().unwrap_or(false);
     let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
     ctx.index_cache.invalidate(&kb_path);
-    json_content(&CompleteCompileJobOutput {
-        result: serde_json::to_value(&result)?,
-    })
+    json_content(&CompleteCompileJobOutput { result: serde_json::to_value(&result)? })
 }
 
 #[instrument(skip(ctx, args))]
@@ -406,9 +400,7 @@ pub async fn handle_get_compile_plan(
     let plan = CompilePlanStore::new(&kb_path)
         .read()?
         .ok_or_else(|| anyhow::anyhow!("No compile plan; call generate_compile_plan first"))?;
-    json_content(&GetCompilePlanOutput {
-        result: serde_json::to_value(&plan)?,
-    })
+    json_content(&GetCompilePlanOutput { result: serde_json::to_value(&plan)? })
 }
 
 #[instrument(skip(ctx, args))]

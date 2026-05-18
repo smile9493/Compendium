@@ -125,14 +125,7 @@ impl FulltextIndex {
         let gate_config = GateConfig::load(knowledge_base).unwrap_or_default();
 
         let mut count = 0usize;
-        self.scan_and_index(
-            wiki_dir,
-            wiki_dir,
-            &schema,
-            &mut writer,
-            &mut count,
-            &gate_config,
-        )?;
+        self.scan_and_index(wiki_dir, wiki_dir, &schema, &mut writer, &mut count, &gate_config)?;
 
         writer.commit().map_err(|e| {
             PdfModuleError::Storage(format!("Failed to commit tantivy index: {}", e))

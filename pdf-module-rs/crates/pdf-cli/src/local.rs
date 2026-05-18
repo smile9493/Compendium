@@ -103,16 +103,11 @@ pub async fn incremental_compile(kb_path: &Path) -> Result<Value> {
 
 /// Full-text search across wiki entries.
 pub fn search(kb_path: &Path, query: &str, limit: usize) -> Result<Value> {
-    use pdf_core::knowledge::{search_with_options, SearchMode, SearchOptions};
+    use pdf_core::knowledge::{SearchMode, SearchOptions, search_with_options};
 
-    let resp = search_with_options(
-        kb_path,
-        query,
-        limit,
-        SearchMode::Hybrid,
-        SearchOptions::for_cli(),
-    )
-    .context("Search failed")?;
+    let resp =
+        search_with_options(kb_path, query, limit, SearchMode::Hybrid, SearchOptions::for_cli())
+            .context("Search failed")?;
     Ok(serde_json::to_value(&resp)?)
 }
 

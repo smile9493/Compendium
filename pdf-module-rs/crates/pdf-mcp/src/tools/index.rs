@@ -2,13 +2,6 @@ use std::fs;
 
 use crate::tools::json::json_content;
 use crate::tools::parse_kb_path;
-use pdf_mcp_contracts::{
-    AgentCenterOut, CheckQualityOutput, ExportConceptMapOutput, FindOrphansOutput,
-    GetAgentContextOutput, GetCompilationContextInput, GetCompilationContextOutput,
-    GetEntryContextOutput, PatchWikiEntryOutput, PromptExcerptOut, RebuildIndexOutput,
-    RelatedSnippetOut, SearchHitOut, SearchKnowledgeOutput, SearchMetaOut, SuggestLinksOutput,
-};
-use pdf_core::management::{build_compile_status_json, CompileJobStore, QualitySnapshotStore};
 use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
@@ -16,10 +9,16 @@ use pdf_core::knowledge::{
     SearchOptions,
 };
 use pdf_core::management::WorkspaceRegistry;
+use pdf_core::management::{build_compile_status_json, CompileJobStore, QualitySnapshotStore};
+use pdf_mcp_contracts::{
+    AgentCenterOut, CheckQualityOutput, ExportConceptMapOutput, FindOrphansOutput,
+    GetAgentContextOutput, GetCompilationContextInput, GetCompilationContextOutput,
+    GetEntryContextOutput, PatchWikiEntryOutput, PromptExcerptOut, RebuildIndexOutput,
+    RelatedSnippetOut, SearchHitOut, SearchKnowledgeOutput, SearchMetaOut, SuggestLinksOutput,
+};
 use tracing::instrument;
 
 use crate::protocol::Content;
-
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_search_knowledge(
@@ -217,16 +216,16 @@ pub async fn handle_get_agent_context(
     let related_hits = related_resp
         .hits
         .into_iter()
-            .filter(|h| h.path != rel)
-            .map(|h| {
-                serde_json::json!({
-                    "path": h.path,
-                    "title": h.title,
-                    "score": h.score,
-                    "snippet": h.snippet
-                })
+        .filter(|h| h.path != rel)
+        .map(|h| {
+            serde_json::json!({
+                "path": h.path,
+                "title": h.title,
+                "score": h.score,
+                "snippet": h.snippet
             })
-            .collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     let char_count =
         body_truncated.chars().count() + neighbors.len() * 200 + related_hits.len() * 150;
@@ -320,10 +319,7 @@ pub async fn handle_get_compilation_context(
             for path in &j.artifacts.prompt_paths {
                 if let Ok(text) = fs::read_to_string(path) {
                     let excerpt = truncate_chars(&text, max);
-                    prompt_excerpts.push(PromptExcerptOut {
-                        path: path.clone(),
-                        excerpt,
-                    });
+                    prompt_excerpts.push(PromptExcerptOut { path: path.clone(), excerpt });
                 }
             }
         }
@@ -340,21 +336,15 @@ pub async fn handle_get_compilation_context(
     };
 
     let job_json = job.as_ref().map(serde_json::to_value).transpose()?;
-    let stages = job_json
-        .as_ref()
-        .and_then(|j| j.get("stages"))
-        .cloned()
-        .unwrap_or(serde_json::json!([]));
+    let stages =
+        job_json.as_ref().and_then(|j| j.get("stages")).cloned().unwrap_or(serde_json::json!([]));
     let artifacts = job_json
         .as_ref()
         .and_then(|j| j.get("artifacts"))
         .cloned()
         .unwrap_or(serde_json::json!({}));
-    let stats = job_json
-        .as_ref()
-        .and_then(|j| j.get("stats"))
-        .cloned()
-        .unwrap_or(serde_json::json!({}));
+    let stats =
+        job_json.as_ref().and_then(|j| j.get("stats")).cloned().unwrap_or(serde_json::json!({}));
 
     json_content(&GetCompilationContextOutput {
         active_job_id: view.active_job_id.clone(),
@@ -377,11 +367,7 @@ mod tests {
     fn test_index_tool_names_in_manifest() {
         let names: std::collections::HashSet<_> =
             pdf_mcp_contracts::all_tool_specs().into_iter().map(|s| s.name).collect();
-        for name in [
-            "search_knowledge",
-            "get_compilation_context",
-            "apply_wiki_patch",
-        ] {
+        for name in ["search_knowledge", "get_compilation_context", "apply_wiki_patch"] {
             assert!(names.contains(name), "missing {name}");
         }
     }

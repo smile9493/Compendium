@@ -18,8 +18,9 @@ use pdf_mcp_contracts::{
     SubmitPatchProposalOutput, SyncPullOutput, SyncPushOutput, SyncStatusOutput,
 };
 
-
-pub async fn handle_list_workspaces(registry: &WorkspaceRegistry) -> anyhow::Result<Vec<crate::protocol::Content>> {
+pub async fn handle_list_workspaces(
+    registry: &WorkspaceRegistry,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let workspaces = registry.list()?;
     let active = registry.active_id()?;
     let body = serde_json::json!({ "workspaces": workspaces, "active_kb_id": active });
@@ -49,7 +50,9 @@ pub async fn handle_register_workspace(
     Ok(vec![Content::text("Workspace registered".to_string())])
 }
 
-pub async fn handle_list_extraction_plugins(ctx: &ToolContext) -> anyhow::Result<Vec<crate::protocol::Content>> {
+pub async fn handle_list_extraction_plugins(
+    ctx: &ToolContext,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let ids = ctx.pipeline.extraction_router().backend_ids();
     Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({ "backends": ids }))?)])
 }
@@ -150,7 +153,7 @@ pub async fn handle_list_patch_proposals(
     let kb = parse_kb_path(registry, args)?;
     let status = args["status"].as_str();
     let proposals = list_patch_proposals(&kb, status).map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(vec![Content::text(
-        serde_json::to_string_pretty(&serde_json::json!({ "proposals": proposals }))?,
-    )])
+    Ok(vec![Content::text(serde_json::to_string_pretty(
+        &serde_json::json!({ "proposals": proposals }),
+    )?)])
 }

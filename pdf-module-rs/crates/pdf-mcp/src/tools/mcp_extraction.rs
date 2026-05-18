@@ -10,8 +10,7 @@ pub fn envelope_from_router(
     file_path: &std::path::Path,
     fallback_used: bool,
 ) -> anyhow::Result<ExtractionEnvelope> {
-    let (backend_id, method) =
-        ctx.pipeline.extraction_router().select_backend_id(file_path)?;
+    let (backend_id, method) = ctx.pipeline.extraction_router().select_backend_id(file_path)?;
     Ok(envelope_from_parts(backend_id, method, fallback_used, None, None))
 }
 
@@ -39,12 +38,8 @@ pub fn envelope_from_parts(
 pub fn extraction_health_from_pipeline(
     pipeline: &pdf_core::McpPdfPipeline,
 ) -> pdf_mcp_contracts::ExtractionHealth {
-    let backends: Vec<String> = pipeline
-        .extraction_router()
-        .backend_ids()
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let backends: Vec<String> =
+        pipeline.extraction_router().backend_ids().into_iter().map(String::from).collect();
     pdf_mcp_contracts::ExtractionHealth {
         backends,
         vlm_configured: vlm_configured_from_env(),

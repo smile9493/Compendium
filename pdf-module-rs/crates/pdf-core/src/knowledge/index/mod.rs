@@ -20,8 +20,8 @@ pub mod metadata_store;
 pub mod tokenizer;
 pub mod vector;
 
-pub use community::{detect_communities, Community};
 pub use cache::{IndexCache, KbIndexes};
+pub use community::{detect_communities, Community};
 pub use facade::{
     graph, rebuild_all, rebuild_vectors, reindex_entry, search, search_with_mode,
     search_with_options, search_with_options_ft, wiki_dir, RebuildStats, SearchMeta, SearchMode,

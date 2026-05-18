@@ -4,10 +4,10 @@ use crate::tools::ToolContext;
 use pdf_core::dto::ExtractOptions;
 use pdf_core::wiki::{AgentPayload, WikiStorage};
 use pdf_mcp_contracts::{
+    ExtractStructuredInput, ExtractStructuredOutput, ExtractTextInput, ExtractTextOutput,
     ExtrudeToAgentPayloadInput, ExtrudeToAgentPayloadOutput, ExtrudeToServerWikiInput,
-    ExtrudeToServerWikiOutput, ExtractStructuredInput, ExtractStructuredOutput, ExtractTextInput,
-    ExtractTextOutput, GetPageCountInput, GetPageCountOutput, KeywordMatch, SearchKeywordsInput,
-    SearchKeywordsOutput,
+    ExtrudeToServerWikiOutput, GetPageCountInput, GetPageCountOutput, KeywordMatch,
+    SearchKeywordsInput, SearchKeywordsOutput,
 };
 use tracing::instrument;
 
