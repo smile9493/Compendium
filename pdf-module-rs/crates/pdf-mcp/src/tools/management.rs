@@ -1,6 +1,6 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
-use pdf_core::management::{ConfigManager, HealthReporter};
+use pdf_core::management::{CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter};
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -169,28 +169,27 @@ pub async fn handle_trigger_incremental_compile(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
+    let store = CompileStatusStore::new(&kb_path);
+    let guard = store
+        .begin_compile()
+        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
+
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let raw_dir = engine.raw_dir();
-    let result = engine.incremental_compile(&raw_dir).await?;
+    let result = match engine.incremental_compile(&raw_dir).await {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = guard.finish_error(e.to_string());
+            return Err(e.into());
+        }
+    };
 
-    let status_path = kb_path.join(".rsut_index").join("compile_status.json");
-    if let Some(parent) = status_path.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
-    }
-    let status = serde_json::json!({
-        "running": false,
-        "last_finished": chrono::Utc::now().to_rfc3339(),
-        "last_outcome": "success",
-        "last_duration_ms": 0,
-        "entries_compiled": result.compiled,
-        "entries_skipped": result.skipped,
-        "message": format!("Incremental compile: {} compiled, {} skipped", result.compiled, result.skipped),
-    });
-    let _ = tokio::fs::write(
-        &status_path,
-        serde_json::to_string_pretty(&status).unwrap_or_default(),
-    )
-    .await;
+    guard
+        .finish_success(CompileFinishStats {
+            entries_compiled: result.compiled,
+            entries_skipped: result.skipped,
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -198,28 +197,11 @@ pub async fn handle_trigger_incremental_compile(
 #[instrument(skip(args))]
 pub async fn handle_get_compile_status(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(args)?;
-    let status_path = kb_path.join(".rsut_index").join("compile_status.json");
-
-    if !status_path.exists() {
-        let result = serde_json::json!({
-            "running": false,
-            "last_started": null,
-            "last_finished": null,
-            "last_duration_ms": null,
-            "last_outcome": null,
-            "message": "No compile has been performed yet.",
-            "history": [],
-        });
-        return Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)]);
-    }
-
-    let content = tokio::fs::read_to_string(&status_path)
-        .await
+    let record = CompileStatusStore::new(&kb_path)
+        .read()
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
-    let status: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("Failed to parse compile status: {}", e))?;
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(&status)?)])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&record)?)])
 }
 
 #[instrument]
@@ -402,5 +384,6 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["running"], false);
         assert_eq!(parsed["last_started"], serde_json::Value::Null);
+        assert!(parsed.get("history").and_then(|h| h.as_array()).is_some());
     }
 }

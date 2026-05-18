@@ -41,10 +41,10 @@ use serde::Deserialize;
 use tokio::sync::oneshot;
 use tracing::{info, instrument};
 
-use pdf_core::knowledge::index::{FulltextIndex, GraphIndex, MetadataStore};
-use pdf_core::knowledge::index::fulltext::SearchHit;
+use pdf_core::knowledge::index::MetadataStore;
 use pdf_core::knowledge::renderer::WikiRenderer;
-use pdf_core::management::{ConfigManager, HealthReporter};
+use pdf_core::knowledge::{graph, rebuild_all, search};
+use pdf_core::management::{CompileStatusStore, ConfigManager, HealthReporter};
 
 use crate::embed::Assets;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
@@ -243,12 +243,18 @@ async fn api_wiki_search(
         return Json(serde_json::json!({"results": [], "total": 0}));
     }
 
-    let search_query = query.q.clone();
-    let search_limit = query.limit;
-    let wd = wiki_dir.clone();
+    let hits = match search(&kb, &query.q, query.limit) {
+        Ok(h) => h,
+        Err(e) => {
+            return Json(serde_json::json!({
+                "results": [],
+                "total": 0,
+                "error": e.to_string(),
+            }));
+        }
+    };
 
-    let hits = fs_fallback_search(&wd, &search_query, search_limit);
-
+    let lower_q = query.q.to_lowercase();
     let mut domain_counts: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
 
@@ -263,13 +269,14 @@ async fn api_wiki_search(
         })
         .map(|h| {
             *domain_counts.entry(h.domain.clone()).or_insert(0) += 1;
+            let match_count = h.snippet.to_lowercase().matches(&lower_q).count().max(1);
             serde_json::json!({
                 "path": h.path,
                 "title": h.title,
                 "domain": h.domain,
                 "score": h.score,
                 "snippet": highlight_snippet(&h.snippet, &query.q),
-                "match_count": h.match_count,
+                "match_count": match_count,
             })
         })
         .collect();
@@ -297,19 +304,18 @@ async fn api_wiki_graph(
         None => return Json(serde_json::json!({"error": "No knowledge base configured"})),
     };
 
-    let wiki_dir = kb.join("wiki");
-    if !wiki_dir.exists() {
+    if !kb.join("wiki").exists() {
         return Json(serde_json::json!({"error": "Wiki directory not found"}));
     }
 
-    let (graph, _) = match GraphIndex::load_from_disk_or_rebuild(&kb, &wiki_dir) {
+    let graph_idx = match graph(&kb) {
         Ok(g) => g,
         Err(e) => {
             return Json(serde_json::json!({"error": format!("Graph load failed: {}", e)}));
         }
     };
 
-    let mermaid = graph.export_concept_map(&path, 2);
+    let mermaid = graph_idx.export_concept_map(&path, 2);
     Json(serde_json::json!({"mermaid": mermaid, "entry": path}))
 }
 
@@ -495,21 +501,12 @@ async fn api_compile_status(State(state): State<Arc<HttpState>>) -> impl IntoRes
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
-    let status_path = kb.join(".rsut_index").join("compile_status.json");
-    if !status_path.exists() {
-        return Json(serde_json::json!({
-            "running": false, "last_started": null, "last_finished": null,
-            "last_duration_ms": null, "last_outcome": null,
-            "message": "No compile performed yet.", "history": [],
-        }))
-        .into_response();
-    }
-    match std::fs::read_to_string(&status_path) {
-        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+    match CompileStatusStore::new(&kb).read() {
+        Ok(record) => match serde_json::to_value(&record) {
             Ok(v) => Json(v).into_response(),
             Err(e) => (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Parse error: {}", e)})),
+                Json(serde_json::json!({"error": format!("Serialize error: {}", e)})),
             )
                 .into_response(),
         },
@@ -528,8 +525,7 @@ async fn api_index_rebuild(State(state): State<Arc<HttpState>>) -> impl IntoResp
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
-    let wiki_dir = kb.join("wiki");
-    if !wiki_dir.exists() {
+    if !kb.join("wiki").exists() {
         return (
             axum::http::StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "Wiki directory not found"})),
@@ -537,46 +533,20 @@ async fn api_index_rebuild(State(state): State<Arc<HttpState>>) -> impl IntoResp
             .into_response();
     }
 
-    let ft_idx = match FulltextIndex::open_or_create(&kb) {
-        Ok(idx) => idx,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-    let ft_count = match ft_idx.rebuild(&wiki_dir) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-
-    let mut g_idx = GraphIndex::new();
-    let g_count = match g_idx.rebuild(&wiki_dir) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-
-    Json(serde_json::json!({
-        "status": "success",
-        "fulltext_entries_indexed": ft_count,
-        "graph_nodes": g_count,
-        "graph_edges": g_idx.edge_count(),
-    }))
-    .into_response()
+    match rebuild_all(&kb) {
+        Ok(stats) => Json(serde_json::json!({
+            "status": "success",
+            "fulltext_entries_indexed": stats.fulltext_entries_indexed,
+            "graph_nodes": stats.graph_nodes,
+            "graph_edges": stats.graph_edges,
+        }))
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
 }
 
 // ── Internal helpers ──
@@ -686,183 +656,4 @@ fn highlight_snippet(snippet: &str, query: &str) -> String {
     }
     result.push_str(&orig_chars[last_end..].iter().map(|&c| esc_char(c)).collect::<String>());
     result
-}
-
-fn try_tantivy_search(
-    kb_path: &PathBuf,
-    wiki_dir: &PathBuf,
-    query: &str,
-) -> Result<Vec<SearchHit>, String> {
-    let index = FulltextIndex::open_or_create(kb_path).map_err(|e| e.to_string())?;
-    let needs_rebuild = index.is_empty().unwrap_or(true);
-    if needs_rebuild {
-        index.rebuild(wiki_dir).map_err(|e| e.to_string())?;
-    }
-    index.search(query, 30).map_err(|e| e.to_string())
-}
-
-struct FsSearchHit {
-    path: String,
-    title: String,
-    domain: String,
-    score: f64,
-    snippet: String,
-    match_count: usize,
-}
-
-fn fs_fallback_search(wiki_dir: &PathBuf, query: &str, limit: usize) -> Vec<FsSearchHit> {
-    let mut results: Vec<FsSearchHit> = Vec::new();
-    let lower_q = query.to_lowercase();
-
-    if !wiki_dir.exists() {
-        return results;
-    }
-
-    if let Ok(domain_entries) = std::fs::read_dir(wiki_dir) {
-        for de in domain_entries.flatten() {
-            let dp = de.path();
-            if !dp.is_dir() {
-                continue;
-            }
-            let domain = dp.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if domain.starts_with('.') {
-                continue;
-            }
-
-            if let Ok(files) = std::fs::read_dir(&dp) {
-                for f in files.flatten() {
-                    let fp = f.path();
-                    if !fp.extension().map_or(false, |e| e == "md") {
-                        continue;
-                    }
-                    let rel_path = format!("{}/{}", domain, fp.file_name().unwrap().to_string_lossy());
-                    let title = fp.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-
-                    if let Ok(content) = std::fs::read_to_string(&fp) {
-                        let lower_content = content.to_lowercase();
-                        let count = lower_content.matches(&lower_q).count();
-                        if count == 0 {
-                            continue;
-                        }
-
-                        let score = count as f64 / (content.len().max(1) as f64).sqrt() * 100.0;
-                        let (snippet, match_count) = extract_snippets_multi(&content, &lower_q, 80, 3);
-                        results.push(FsSearchHit {
-                            path: rel_path,
-                            title,
-                            domain: domain.clone(),
-                            score,
-                            snippet,
-                            match_count,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-    results.truncate(limit);
-    results
-}
-
-fn extract_snippet_fs(content: &str, lower_q: &str, window: usize) -> String {
-    let lower_content = content.to_lowercase();
-    if let Some(byte_pos) = lower_content.find(lower_q) {
-        let pre = if byte_pos > 0 { "..." } else { "" };
-        let post = if byte_pos + lower_q.len() + window < content.len() {
-            "..."
-        } else {
-            ""
-        };
-
-        let byte_start = byte_pos.saturating_sub(window / 2);
-        let begin = floor_char_boundary(content, byte_start);
-
-        let byte_end = (byte_pos + lower_q.len() + window).min(content.len());
-        let end = ceil_char_boundary(content, byte_end);
-
-        format!("{}{}{}", pre, &content[begin..end], post)
-    } else {
-        let s: String = content.chars().take(window).collect();
-        format!("{}...", s)
-    }
-}
-
-fn extract_snippets_multi(content: &str, lower_q: &str, window: usize, max_snippets: usize) -> (String, usize) {
-    let lower_content = content.to_lowercase();
-    let q_len = lower_q.len();
-    let mut positions: Vec<usize> = Vec::new();
-    let mut search_start = 0usize;
-    
-    while let Some(pos) = lower_content[search_start..].find(lower_q) {
-        let abs_pos = search_start + pos;
-        positions.push(abs_pos);
-        search_start = abs_pos + q_len;
-        if positions.len() >= max_snippets * 3 {
-            break;
-        }
-    }
-    
-    let match_count = positions.len();
-    if match_count == 0 {
-        let s: String = content.chars().take(window).collect();
-        return (format!("{}...", s), 0);
-    }
-    
-    let mut snippets: Vec<String> = Vec::new();
-    let mut last_end = 0usize;
-    
-    for &pos in positions.iter() {
-        if snippets.len() >= max_snippets {
-            break;
-        }
-        
-        let byte_start = pos.saturating_sub(window / 2);
-        let begin = floor_char_boundary(content, byte_start);
-        
-        if begin < last_end + 10 {
-            continue;
-        }
-        
-        let byte_end = (pos + q_len + window / 2).min(content.len());
-        let end = ceil_char_boundary(content, byte_end);
-        
-        let snippet = &content[begin..end];
-        let pre = if begin > 0 { "..." } else { "" };
-        let post = if end < content.len() { "..." } else { "" };
-        
-        snippets.push(format!("{}{}{}", pre, snippet, post));
-        last_end = end;
-    }
-    
-    if snippets.is_empty() {
-        let pos = positions[0];
-        let byte_start = pos.saturating_sub(window / 2);
-        let begin = floor_char_boundary(content, byte_start);
-        let byte_end = (pos + q_len + window / 2).min(content.len());
-        let end = ceil_char_boundary(content, byte_end);
-        let snippet = &content[begin..end];
-        let pre = if begin > 0 { "..." } else { "" };
-        let post = if end < content.len() { "..." } else { "" };
-        snippets.push(format!("{}{}{}", pre, snippet, post));
-    }
-    
-    (snippets.join(" ··· "), match_count)
-}
-
-fn floor_char_boundary(s: &str, pos: usize) -> usize {
-    let mut p = pos.min(s.len());
-    while p > 0 && !s.is_char_boundary(p) {
-        p -= 1;
-    }
-    p
-}
-
-fn ceil_char_boundary(s: &str, pos: usize) -> usize {
-    let mut p = pos.min(s.len());
-    while p < s.len() && !s.is_char_boundary(p) {
-        p += 1;
-    }
-    p
 }

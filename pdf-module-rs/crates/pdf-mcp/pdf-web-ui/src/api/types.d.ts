@@ -8,7 +8,7 @@
  * @property {string} status
  * @property {number} version
  * @property {string} body_markdown
- * @property {string} [body_html]
+ * @property {string} [body_html] @deprecated Server no longer generates HTML; use body_markdown + MarkdownRenderer
  * @property {string[]} related
  * @property {string[]} contradictions
  * @property {string[]} backlinks
