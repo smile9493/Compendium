@@ -12,6 +12,7 @@ hel = "hel"                     # Used in error messages "Hello"
 ser = "ser"                     # Used in serde derives
 teh = "teh"                     # Used in test data
 wass = "wass"                   # Used in wasm/wasm-pack references
+rsut = "rsut"                   # Project index/workspace prefix (.rsut_index)
 
 [files]
 extend-exclude = [
