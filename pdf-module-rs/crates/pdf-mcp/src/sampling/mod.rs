@@ -110,9 +110,7 @@ mod tests {
         let req = SamplingRequest {
             messages: vec![SamplingMessage {
                 role: Role::User,
-                content: SamplingContent::Text {
-                    text: "Analyze this page".to_string(),
-                },
+                content: SamplingContent::Text { text: "Analyze this page".to_string() },
             }],
             max_tokens: Some(1000),
             ..Default::default()
@@ -126,10 +124,7 @@ mod tests {
     #[test]
     fn test_model_preferences_serialization() {
         let prefs = ModelPreferences {
-            hints: vec![ModelHint {
-                name: "claude-3".to_string(),
-                version: None,
-            }],
+            hints: vec![ModelHint { name: "claude-3".to_string(), version: None }],
             speed_priority: Some(0.8),
             ..Default::default()
         };

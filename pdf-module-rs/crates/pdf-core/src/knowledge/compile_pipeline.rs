@@ -99,12 +99,7 @@ pub fn complete_compile_job(
     let store = CompileJobStore::new(knowledge_base);
     let job = store.load_job(job_id)?;
 
-    if !force
-        && matches!(
-            job.pipeline_status,
-            PipelineStatus::Completed | PipelineStatus::Failed
-        )
-    {
+    if !force && matches!(job.pipeline_status, PipelineStatus::Completed | PipelineStatus::Failed) {
         return Ok(CompleteCompileJobResult {
             job_id: job_id.to_string(),
             pipeline_status: serde_json::to_value(&job.pipeline_status)
@@ -180,9 +175,7 @@ pub fn complete_compile_job(
     store.complete_job(
         job_id,
         status,
-        Some(format!(
-            "Pipeline complete ({outcome}): index rebuilt, quality gate applied."
-        )),
+        Some(format!("Pipeline complete ({outcome}): index rebuilt, quality gate applied.")),
     )?;
 
     let final_job = store.load_job(job_id)?;

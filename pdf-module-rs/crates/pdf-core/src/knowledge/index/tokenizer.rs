@@ -79,9 +79,7 @@ impl TokenStream for JiebaTokenStream {
 /// for case-insensitive English token matching.
 pub fn register_cjk_tokenizer(index: &tantivy::Index) {
     use tantivy::tokenizer::{LowerCaser, TextAnalyzer};
-    let analyzer = TextAnalyzer::builder(JiebaTokenizer)
-        .filter(LowerCaser)
-        .build();
+    let analyzer = TextAnalyzer::builder(JiebaTokenizer).filter(LowerCaser).build();
     index.tokenizers().register("cjk", analyzer);
 }
 
@@ -93,9 +91,7 @@ mod tests {
     fn test_jieba_segmentation() {
         // Use the full pipeline via TextAnalyzer to include LowerCaser
         use tantivy::tokenizer::{LowerCaser, TextAnalyzer};
-        let mut analyzer = TextAnalyzer::builder(JiebaTokenizer)
-            .filter(LowerCaser)
-            .build();
+        let mut analyzer = TextAnalyzer::builder(JiebaTokenizer).filter(LowerCaser).build();
         let mut stream = analyzer.token_stream("从 Transformer 到大规模语言模型的演进");
         let mut words = Vec::new();
         while stream.advance() {
@@ -129,10 +125,7 @@ mod tests {
         let mut words = Vec::new();
         while stream.advance() {
             let tok = stream.token();
-            assert!(
-                !tok.text.trim().is_empty(),
-                "should not produce empty tokens"
-            );
+            assert!(!tok.text.trim().is_empty(), "should not produce empty tokens");
             words.push(tok.text.clone());
         }
         assert!(!words.is_empty());

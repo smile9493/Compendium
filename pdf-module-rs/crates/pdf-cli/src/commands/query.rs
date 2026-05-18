@@ -2,9 +2,7 @@
 //!
 //! search, context, concept-map, orphans, stats
 
-use crate::commands::{
-    build_remote_client, resolve_kb_path, resolve_remote_kb, CmdResult, Mode,
-};
+use crate::commands::{CmdResult, Mode, build_remote_client, resolve_kb_path, resolve_remote_kb};
 use crate::config::CliConfig;
 use crate::local;
 use crate::output::OutputFormat;
@@ -31,14 +29,11 @@ pub struct SearchArgs {
     pub format: OutputFormat,
 }
 
-pub async fn run_search(
-    config: &CliConfig,
-    mode: Mode,
-    args: &SearchArgs,
-) -> Result<CmdResult> {
+pub async fn run_search(config: &CliConfig, mode: Mode, args: &SearchArgs) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::search(&kb, &args.query, args.limit)?;
             Ok(CmdResult::new(format!("Search: \"{}\"", args.query), result))
         }
@@ -69,14 +64,11 @@ pub struct ContextArgs {
     pub format: OutputFormat,
 }
 
-pub async fn run_context(
-    config: &CliConfig,
-    mode: Mode,
-    args: &ContextArgs,
-) -> Result<CmdResult> {
+pub async fn run_context(config: &CliConfig, mode: Mode, args: &ContextArgs) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::get_entry_context(&kb, &args.entry_path, args.hops)?;
             Ok(CmdResult::new(format!("Context: {}", args.entry_path), result))
         }
@@ -120,7 +112,8 @@ pub async fn run_concept_map(
 ) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::export_concept_map(&kb, &args.entry_path, args.depth)?;
             Ok(CmdResult::new(format!("Concept Map: {}", args.entry_path), result))
         }
@@ -150,14 +143,11 @@ pub struct OrphansArgs {
     pub format: OutputFormat,
 }
 
-pub async fn run_orphans(
-    config: &CliConfig,
-    mode: Mode,
-    args: &OrphansArgs,
-) -> Result<CmdResult> {
+pub async fn run_orphans(config: &CliConfig, mode: Mode, args: &OrphansArgs) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::find_orphans(&kb)?;
             Ok(CmdResult::new("Orphan Entries", result))
         }
@@ -185,14 +175,11 @@ pub struct StatsArgs {
     pub format: OutputFormat,
 }
 
-pub async fn run_stats(
-    config: &CliConfig,
-    mode: Mode,
-    args: &StatsArgs,
-) -> Result<CmdResult> {
+pub async fn run_stats(config: &CliConfig, mode: Mode, args: &StatsArgs) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
-            let kb = resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
+            let kb =
+                resolve_kb_path(config, args.knowledge_base.as_ref().map(PathBuf::from).as_deref());
             let result = local::stats(&kb)?;
             Ok(CmdResult::new("Knowledge Base Stats", result))
         }

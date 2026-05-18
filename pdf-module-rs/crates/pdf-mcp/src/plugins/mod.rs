@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use pdf_core::extraction::RemoteExtractionConfig;
 use pdf_core::error::PdfResult;
+use pdf_core::extraction::RemoteExtractionConfig;
 use pdf_core::{McpPdfPipeline, ServerConfig};
 use serde::Deserialize;
 use tracing::warn;

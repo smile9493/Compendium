@@ -132,8 +132,9 @@ fn help_text_for(err: &crate::PdfError) -> Option<&'static str> {
 
 fn severity_for(err: &crate::PdfError) -> miette::Severity {
     match err.category() {
-        crate::error::ErrorCategory::FileSystem
-        | crate::error::ErrorCategory::Validation => miette::Severity::Warning,
+        crate::error::ErrorCategory::FileSystem | crate::error::ErrorCategory::Validation => {
+            miette::Severity::Warning
+        }
         crate::error::ErrorCategory::Extraction
         | crate::error::ErrorCategory::Plugin
         | crate::error::ErrorCategory::Network

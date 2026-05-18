@@ -41,12 +41,7 @@ pub struct CacheConfig {
 
 impl Default for CacheConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            max_size: 1000,
-            ttl_seconds: 3600,
-            cache_dir: None,
-        }
+        Self { enabled: true, max_size: 1000, ttl_seconds: 3600, cache_dir: None }
     }
 }
 
@@ -54,17 +49,9 @@ impl Default for CacheConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AuditBackendConfig {
-    File {
-        log_dir: String,
-    },
-    Database {
-        connection_string: String,
-        table_name: String,
-    },
-    Remote {
-        endpoint: String,
-        api_key: String,
-    },
+    File { log_dir: String },
+    Database { connection_string: String, table_name: String },
+    Remote { endpoint: String, api_key: String },
     Memory,
 }
 
@@ -80,9 +67,7 @@ impl Default for AuditConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            backend: AuditBackendConfig::File {
-                log_dir: "./logs/audit".to_string(),
-            },
+            backend: AuditBackendConfig::File { log_dir: "./logs/audit".to_string() },
             retention_days: 30,
         }
     }
@@ -117,11 +102,7 @@ pub struct PathValidationConfig {
 
 impl Default for PathValidationConfig {
     fn default() -> Self {
-        Self {
-            require_absolute: true,
-            allow_traversal: false,
-            base_dir: None,
-        }
+        Self { require_absolute: true, allow_traversal: false, base_dir: None }
     }
 }
 
@@ -161,9 +142,7 @@ impl Default for FileStorageConfig {
     fn default() -> Self {
         Self {
             storage_type: StorageType::Local,
-            local: Some(LocalStorageConfig {
-                base_dir: "./data".to_string(),
-            }),
+            local: Some(LocalStorageConfig { base_dir: "./data".to_string() }),
             s3: None,
             gcs: None,
             azure: None,
@@ -360,10 +339,7 @@ impl ServerConfig {
         let content = std::fs::read_to_string(path)
             .map_err(|e| PdfModuleError::Config(format!("Failed to read config file: {}", e)))?;
 
-        let ext = std::path::Path::new(path)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let ext = std::path::Path::new(path).extension().and_then(|s| s.to_str()).unwrap_or("");
 
         let config: Self = match ext.to_lowercase().as_str() {
             "toml" => toml::from_str(&content)
@@ -372,12 +348,7 @@ impl ServerConfig {
                 .map_err(|e| PdfModuleError::Config(format!("Failed to parse JSON: {}", e)))?,
             "yaml" | "yml" => serde_yaml::from_str(&content)
                 .map_err(|e| PdfModuleError::Config(format!("Failed to parse YAML: {}", e)))?,
-            _ => {
-                return Err(PdfModuleError::Config(format!(
-                    "Unsupported config format: {}",
-                    ext
-                )))
-            }
+            _ => return Err(PdfModuleError::Config(format!("Unsupported config format: {}", ext))),
         };
 
         config.validate()?;
@@ -413,10 +384,7 @@ impl ServerConfig {
 
     /// Initialize tracing/logging
     pub fn init_tracing(&self) {
-        if std::env::var("RUST_LOG")
-            .map(|v| v.to_lowercase() == "off")
-            .unwrap_or(false)
-        {
+        if std::env::var("RUST_LOG").map(|v| v.to_lowercase() == "off").unwrap_or(false) {
             return;
         }
 
@@ -502,10 +470,7 @@ mod tests {
     #[test]
     fn test_max_file_size_bytes() {
         let config = ServerConfig {
-            security: SecurityConfig {
-                max_file_size_mb: 100,
-                ..Default::default()
-            },
+            security: SecurityConfig { max_file_size_mb: 100, ..Default::default() },
             ..Default::default()
         };
         assert_eq!(config.max_file_size_bytes(), 100 * 1024 * 1024);

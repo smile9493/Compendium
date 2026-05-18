@@ -14,10 +14,10 @@ use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
-use crate::knowledge::publish_gate::{is_searchable, GateConfig};
 use crate::knowledge::index::fulltext::SearchHit;
 use crate::knowledge::index::vector::{VectorHit, VectorIndex};
 use crate::knowledge::index::{FulltextIndex, GraphIndex};
+use crate::knowledge::publish_gate::{is_searchable, GateConfig};
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
@@ -185,10 +185,8 @@ fn rrf_merge(keyword: Vec<SearchHit>, semantic: Vec<VectorHit>, limit: usize) ->
 
     for (rank, vhit) in semantic.into_iter().enumerate() {
         let rrf = 1.0 / (RRF_K + rank as f32 + 1.0);
-        by_path
-            .entry(vhit.path.clone())
-            .and_modify(|(score, _)| *score += rrf)
-            .or_insert_with(|| {
+        by_path.entry(vhit.path.clone()).and_modify(|(score, _)| *score += rrf).or_insert_with(
+            || {
                 (
                     rrf,
                     SearchHit {
@@ -199,7 +197,8 @@ fn rrf_merge(keyword: Vec<SearchHit>, semantic: Vec<VectorHit>, limit: usize) ->
                         snippet: String::new(),
                     },
                 )
-            });
+            },
+        );
     }
 
     let mut merged: Vec<SearchHit> = by_path
@@ -210,11 +209,7 @@ fn rrf_merge(keyword: Vec<SearchHit>, semantic: Vec<VectorHit>, limit: usize) ->
         })
         .collect();
 
-    merged.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     merged.truncate(limit);
     merged
 }
@@ -228,13 +223,7 @@ fn vector_hits_to_search_hits(
     hits.into_iter()
         .map(|h| {
             let snippet = read_snippet_for_path(&wd, &h.path, query);
-            SearchHit {
-                path: h.path,
-                title: h.title,
-                domain: h.domain,
-                score: h.score,
-                snippet,
-            }
+            SearchHit { path: h.path, title: h.title, domain: h.domain, score: h.score, snippet }
         })
         .collect()
 }
@@ -315,10 +304,8 @@ pub fn rebuild_vectors(knowledge_base: &Path) -> PdfResult<usize> {
     }
 
     let mut index = VectorIndex::open_or_create(knowledge_base, VECTOR_DIM)?;
-    let docs: Vec<String> = entries_data
-        .iter()
-        .map(|(_, title, _, body)| format!("{title} {body}"))
-        .collect();
+    let docs: Vec<String> =
+        entries_data.iter().map(|(_, title, _, body)| format!("{title} {body}")).collect();
     index.train_model(&docs);
 
     for (path, title, domain, body) in &entries_data {
@@ -336,9 +323,7 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
     let rel = entry_path.trim_start_matches("wiki/").trim_start_matches('/');
     let full_path = wd.join(rel);
     if !full_path.exists() {
-        return Err(PdfModuleError::FileNotFound(
-            full_path.to_string_lossy().to_string(),
-        ));
+        return Err(PdfModuleError::FileNotFound(full_path.to_string_lossy().to_string()));
     }
 
     let ft = FulltextIndex::open_or_create(knowledge_base)?;
@@ -348,17 +333,14 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
         ft.upsert_entry(&wd, rel)?;
     }
 
-    let content = fs::read_to_string(&full_path).map_err(|e| {
-        PdfModuleError::Storage(format!("Failed to read entry: {e}"))
-    })?;
-    let entry = KnowledgeEntry::from_markdown(&content).ok_or_else(|| {
-        PdfModuleError::Storage("Failed to parse front matter".to_string())
-    })?;
+    let content = fs::read_to_string(&full_path)
+        .map_err(|e| PdfModuleError::Storage(format!("Failed to read entry: {e}")))?;
+    let entry = KnowledgeEntry::from_markdown(&content)
+        .ok_or_else(|| PdfModuleError::Storage("Failed to parse front matter".to_string()))?;
     let body = content.split("---").nth(2).unwrap_or("").to_string();
 
-    let mut v_idx = load_vector_index(knowledge_base).or_else(|_| {
-        VectorIndex::open_or_create(knowledge_base, VECTOR_DIM)
-    })?;
+    let mut v_idx = load_vector_index(knowledge_base)
+        .or_else(|_| VectorIndex::open_or_create(knowledge_base, VECTOR_DIM))?;
     if v_idx.is_empty() {
         let _ = rebuild_vectors(knowledge_base)?;
         v_idx = load_vector_index(knowledge_base)?;
@@ -375,10 +357,7 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
 }
 
 fn ensure_vector_index(knowledge_base: &Path) -> PdfResult<()> {
-    let path = knowledge_base
-        .join(".rsut_index")
-        .join("vectors")
-        .join("vectors.bin");
+    let path = knowledge_base.join(".rsut_index").join("vectors").join("vectors.bin");
     if path.exists() {
         return Ok(());
     }
@@ -388,9 +367,7 @@ fn ensure_vector_index(knowledge_base: &Path) -> PdfResult<()> {
 
 fn load_vector_index(knowledge_base: &Path) -> PdfResult<VectorIndex> {
     VectorIndex::load(knowledge_base, VECTOR_DIM)?.ok_or_else(|| {
-        PdfModuleError::Storage(
-            "Vector index not found; call rebuild_index first".to_string(),
-        )
+        PdfModuleError::Storage("Vector index not found; call rebuild_index first".to_string())
     })
 }
 
@@ -421,11 +398,8 @@ fn scan_wiki_for_embedding(
                     if !is_searchable(&entry, config.quality_min_score) {
                         continue;
                     }
-                    let rel = path
-                        .strip_prefix(base)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .to_string();
+                    let rel =
+                        path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                     let body = content.split("---").nth(2).unwrap_or("").to_string();
                     out.push((rel, entry.title, entry.domain, body));
                 }
@@ -456,10 +430,7 @@ fn fs_fallback_search(wiki_dir: &Path, query: &str, limit: usize) -> Vec<SearchH
         if !dp.is_dir() {
             continue;
         }
-        let domain = dp
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
+        let domain = dp.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         if domain.starts_with('.') {
             continue;
         }
@@ -472,25 +443,15 @@ fn fs_fallback_search(wiki_dir: &Path, query: &str, limit: usize) -> Vec<SearchH
             if fp.extension().is_none_or(|e| e != "md") {
                 continue;
             }
-            let rel_path = format!(
-                "{}/{}",
-                domain,
-                fp.file_name().unwrap().to_string_lossy()
-            );
-            let title = fp
-                .file_stem()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
+            let rel_path = format!("{}/{}", domain, fp.file_name().unwrap().to_string_lossy());
+            let title = fp.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
 
             let Ok(content) = fs::read_to_string(&fp) else {
                 continue;
             };
             let lower_content = content.to_lowercase();
             let count = if terms.len() > 1 {
-                terms
-                    .iter()
-                    .filter(|t| lower_content.contains(t.as_str()))
-                    .count()
+                terms.iter().filter(|t| lower_content.contains(t.as_str())).count()
             } else {
                 lower_content.matches(&lower_q).count()
             };
@@ -510,11 +471,7 @@ fn fs_fallback_search(wiki_dir: &Path, query: &str, limit: usize) -> Vec<SearchH
         }
     }
 
-    results.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     results.truncate(limit);
     results
 }
@@ -523,11 +480,7 @@ fn extract_snippet_fs(content: &str, lower_q: &str, window: usize) -> String {
     let lower_content = content.to_lowercase();
     if let Some(byte_pos) = lower_content.find(lower_q) {
         let pre = if byte_pos > 0 { "..." } else { "" };
-        let post = if byte_pos + lower_q.len() + window < content.len() {
-            "..."
-        } else {
-            ""
-        };
+        let post = if byte_pos + lower_q.len() + window < content.len() { "..." } else { "" };
 
         let byte_start = byte_pos.saturating_sub(window / 2);
         let begin = floor_char_boundary(content, byte_start);
@@ -609,12 +562,7 @@ mod tests {
     fn test_chinese_hybrid_search() {
         let dir = tempfile::tempdir().unwrap();
         let kb = dir.path();
-        write_entry(
-            kb,
-            "IT",
-            "nginx_proxy",
-            "Nginx 反向代理与负载均衡配置详解",
-        );
+        write_entry(kb, "IT", "nginx_proxy", "Nginx 反向代理与负载均衡配置详解");
         rebuild_all(kb).unwrap();
 
         let hybrid = search_with_mode(kb, "反向代理", 5, SearchMode::Hybrid).unwrap();

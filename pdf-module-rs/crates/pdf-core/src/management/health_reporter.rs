@@ -17,9 +17,7 @@ pub struct HealthReporter {
 impl HealthReporter {
     /// Create a reporter for the given knowledge base root.
     pub fn new(kb_path: &Path) -> Self {
-        Self {
-            kb_path: kb_path.to_path_buf(),
-        }
+        Self { kb_path: kb_path.to_path_buf() }
     }
 
     /// Generate the health report.
@@ -106,10 +104,7 @@ impl HealthReporter {
 
     /// Read the last compile timestamp from the status file.
     fn read_last_compile_time(&self) -> Option<chrono::DateTime<chrono::Utc>> {
-        super::CompileStatusStore::new(&self.kb_path)
-            .read()
-            .ok()
-            .and_then(|r| r.last_finished)
+        super::CompileStatusStore::new(&self.kb_path).read().ok().and_then(|r| r.last_finished)
     }
 }
 

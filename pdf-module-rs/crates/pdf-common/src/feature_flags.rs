@@ -62,9 +62,7 @@ impl FlagConfig {
     }
 
     pub fn percentage(value: u8) -> Self {
-        Self::Percentage {
-            value: value.min(100),
-        }
+        Self::Percentage { value: value.min(100) }
     }
 
     pub fn targeted(users: Vec<String>) -> Self {
@@ -104,25 +102,19 @@ impl FeatureFlags {
                 let config = match value.to_lowercase().as_str() {
                     "true" => FlagConfig::boolean(true),
                     "false" => FlagConfig::boolean(false),
-                    s if s.parse::<u8>().is_ok() => {
-                        FlagConfig::percentage(s.parse().unwrap())
-                    }
+                    s if s.parse::<u8>().is_ok() => FlagConfig::percentage(s.parse().unwrap()),
                     _ => FlagConfig::boolean(false),
                 };
                 flags.insert(flag_name, config);
             }
         }
 
-        Ok(Self {
-            flags: RwLock::new(flags),
-        })
+        Ok(Self { flags: RwLock::new(flags) })
     }
 
     /// Create an empty feature flags instance (all flags default off).
     pub fn empty() -> Self {
-        Self {
-            flags: RwLock::new(HashMap::new()),
-        }
+        Self { flags: RwLock::new(HashMap::new()) }
     }
 
     /// Check if a feature is enabled for the given user context.
@@ -232,11 +224,8 @@ mod tests {
     fn env_override_parsing() {
         let tmp = tempfile::tempdir().unwrap();
         let config_path = tmp.path().join("features.json");
-        std::fs::write(
-            &config_path,
-            r#"{"my-flag": {"type": "boolean", "value": false}}"#,
-        )
-        .unwrap();
+        std::fs::write(&config_path, r#"{"my-flag": {"type": "boolean", "value": false}}"#)
+            .unwrap();
 
         let flags = FeatureFlags::load(&config_path).unwrap();
         assert!(!flags.is_enabled("my-flag", None));

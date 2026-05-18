@@ -115,9 +115,8 @@ pub async fn handle_extract_text(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
@@ -132,18 +131,14 @@ pub async fn handle_extract_structured(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
-    let result = ctx
-        .pipeline
-        .extract_structured(file_path, &ExtractOptions::default())
-        .await?;
+    let result = ctx.pipeline.extract_structured(file_path, &ExtractOptions::default()).await?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
@@ -152,9 +147,8 @@ pub async fn handle_get_page_count(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
@@ -169,9 +163,8 @@ pub async fn handle_search_keywords(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
@@ -191,10 +184,7 @@ pub async fn handle_search_keywords(
     let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(false);
     let context_length = args["context_length"].as_u64().unwrap_or(50) as usize;
 
-    let result = ctx
-        .pipeline
-        .extract_structured(file_path, &ExtractOptions::default())
-        .await?;
+    let result = ctx.pipeline.extract_structured(file_path, &ExtractOptions::default()).await?;
     let text = &result.extracted_text;
 
     let mut page_boundaries: Vec<(usize, u32)> = Vec::with_capacity(result.pages.len());
@@ -266,9 +256,8 @@ pub async fn handle_extrude_to_server_wiki(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
@@ -302,9 +291,7 @@ pub async fn handle_extrude_to_server_wiki(
         "next_step": "Use extrude_to_agent_payload to get the prompt for AI Agent, or manually process raw/ content."
     });
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(
-        &response,
-    )?)])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&response)?)])
 }
 
 #[instrument(skip(ctx, args))]
@@ -312,9 +299,8 @@ pub async fn handle_extrude_to_agent_payload(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_path_str = args["file_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
+    let file_path_str =
+        args["file_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_path"))?;
     let file_path = std::path::Path::new(file_path_str);
 
     pdf_core::FileValidator::validate_path_safety(file_path, &ctx.path_config)
@@ -360,7 +346,7 @@ mod tests {
     async fn test_extract_tool_definitions() {
         let defs = extract_tool_definitions();
         assert_eq!(defs.len(), 6);
-        
+
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"extract_text"));
         assert!(names.contains(&"extract_structured"));
@@ -401,7 +387,7 @@ mod tests {
         let args = serde_json::json!({
             "file_path": pdf_path.to_str().unwrap()
         });
-        
+
         let result = handle_extract_text(&ctx, &args).await;
         match result {
             Ok(content) => {
@@ -411,7 +397,8 @@ mod tests {
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -432,7 +419,7 @@ mod tests {
         let args = serde_json::json!({
             "file_path": pdf_path.to_str().unwrap()
         });
-        
+
         let result = handle_get_page_count(&ctx, &args).await;
         match result {
             Ok(content) => {
@@ -442,7 +429,8 @@ mod tests {
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -463,20 +451,22 @@ mod tests {
         let args = serde_json::json!({
             "file_path": pdf_path.to_str().unwrap()
         });
-        
+
         let result = handle_extract_structured(&ctx, &args).await;
         match result {
             Ok(content) => {
                 assert_eq!(content.len(), 1);
-                
-                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+                let parsed: serde_json::Value =
+                    serde_json::from_str(&content[0].text).expect("Should be valid JSON");
                 assert!(parsed.get("pages").is_some());
                 assert!(parsed.get("extracted_text").is_some());
                 assert!(parsed.get("page_count").is_some());
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -500,19 +490,21 @@ mod tests {
             "case_sensitive": false,
             "context_length": 30
         });
-        
+
         let result = handle_search_keywords(&ctx, &args).await;
         match result {
             Ok(content) => {
                 assert_eq!(content.len(), 1);
-                
-                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+                let parsed: serde_json::Value =
+                    serde_json::from_str(&content[0].text).expect("Should be valid JSON");
                 assert!(parsed.get("total_matches").is_some());
                 assert!(parsed.get("matches").is_some());
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -534,7 +526,7 @@ mod tests {
             "file_path": pdf_path.to_str().unwrap(),
             "keywords": []
         });
-        
+
         let result = handle_search_keywords(&ctx, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Keywords array is empty"));
@@ -552,18 +544,22 @@ mod tests {
         let args = serde_json::json!({
             "file_path": pdf_path.to_str().unwrap()
         });
-        
+
         let result = handle_extrude_to_agent_payload(&ctx, &args).await;
         match result {
             Ok(content) => {
                 assert_eq!(content.len(), 1);
                 let text = &content[0].text;
                 assert!(text.starts_with("# "), "Output should start with '# '");
-                assert!(text.contains("Nginx") || text.len() > 100, "Output should contain content");
+                assert!(
+                    text.contains("Nginx") || text.len() > 100,
+                    "Output should contain content"
+                );
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -588,19 +584,21 @@ mod tests {
             "file_path": pdf_path.to_str().unwrap(),
             "wiki_base_path": wiki_path
         });
-        
+
         let result = handle_extrude_to_server_wiki(&ctx, &args).await;
         match result {
             Ok(content) => {
                 assert_eq!(content.len(), 1);
-                
-                let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+                let parsed: serde_json::Value =
+                    serde_json::from_str(&content[0].text).expect("Should be valid JSON");
                 assert_eq!(parsed["status"], "success");
                 assert!(parsed.get("raw_path").is_some());
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }

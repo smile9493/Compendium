@@ -112,11 +112,7 @@ impl KnowledgeEngine {
     pub fn new(pipeline: Arc<McpPdfPipeline>, knowledge_base: impl AsRef<Path>) -> PdfResult<Self> {
         let kb = knowledge_base.as_ref().to_path_buf();
         let wiki = WikiStorage::new(&kb)?;
-        Ok(Self {
-            pipeline,
-            wiki,
-            knowledge_base: kb,
-        })
+        Ok(Self { pipeline, wiki, knowledge_base: kb })
     }
 
     /// Get the path to the raw directory.
@@ -163,10 +159,7 @@ impl KnowledgeEngine {
 
         // Determine domain
         let domain = domain.unwrap_or("未分类");
-        let source_name = pdf_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
+        let source_name = pdf_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
 
         // Create a pending L0 entry metadata
         let entry = KnowledgeEntry {
@@ -181,10 +174,8 @@ impl KnowledgeEngine {
 
         // Generate the compilation prompt using the AgentPayload pattern
         let prompt = self.build_compile_prompt(&entry, &extraction);
-        let prompt_path = self
-            .knowledge_base
-            .join("raw")
-            .join(format!("{}.compile_prompt.md", source_name));
+        let prompt_path =
+            self.knowledge_base.join("raw").join(format!("{}.compile_prompt.md", source_name));
         tokio::fs::write(&prompt_path, &prompt).await.map_err(|e| {
             PdfModuleError::Storage(format!("Failed to write compile prompt: {}", e))
         })?;
@@ -269,12 +260,7 @@ impl KnowledgeEngine {
             "Incremental compile complete"
         );
 
-        Ok(IncrementalResult {
-            total_scanned: total,
-            compiled,
-            skipped,
-            results,
-        })
+        Ok(IncrementalResult { total_scanned: total, compiled, skipped, results })
     }
 
     /// Run quality analysis on the wiki directory.
@@ -436,9 +422,7 @@ related: ["wiki/other/concept.md"]
         };
 
         if !full_path.exists() {
-            return Err(PdfModuleError::FileNotFound(
-                full_path.to_string_lossy().to_string(),
-            ));
+            return Err(PdfModuleError::FileNotFound(full_path.to_string_lossy().to_string()));
         }
 
         let content = fs::read_to_string(&full_path)
@@ -449,11 +433,8 @@ related: ["wiki/other/concept.md"]
         })?;
 
         // Check if source PDF still exists
-        let source_exists = entry
-            .source
-            .as_ref()
-            .map(|s| self.knowledge_base.join(s).exists())
-            .unwrap_or(false);
+        let source_exists =
+            entry.source.as_ref().map(|s| self.knowledge_base.join(s).exists()).unwrap_or(false);
 
         // If source exists, verify hash hasn't changed
         let mut source_changed = false;
@@ -462,11 +443,8 @@ related: ["wiki/other/concept.md"]
             let source_path = self.knowledge_base.join(source_rel);
             if source_path.exists() {
                 current_source_hash = HashCache::hash_file(&source_path)?;
-                source_changed = entry
-                    .source_hash
-                    .as_ref()
-                    .map(|h| h != &current_source_hash)
-                    .unwrap_or(true);
+                source_changed =
+                    entry.source_hash.as_ref().map(|h| h != &current_source_hash).unwrap_or(true);
             }
         }
 
@@ -491,10 +469,7 @@ related: ["wiki/other/concept.md"]
         })?;
         let backup_name = format!(
             "{}_v{}.md",
-            full_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown"),
+            full_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown"),
             entry.version - 1
         );
         let backup_path = backup_dir.join(&backup_name);
@@ -630,11 +605,8 @@ related: ["wiki/other/concept.md"]
 
         for community in all_communities {
             // Filter to L1 entries only
-            let l1_paths: Vec<String> = community
-                .members
-                .into_iter()
-                .filter(|p| l1_domains.contains_key(p))
-                .collect();
+            let l1_paths: Vec<String> =
+                community.members.into_iter().filter(|p| l1_domains.contains_key(p)).collect();
 
             if l1_paths.len() < 2 {
                 continue;
@@ -700,11 +672,8 @@ related: ["wiki/other/concept.md"]
                     if let Some(entry) =
                         crate::knowledge::entry::KnowledgeEntry::from_markdown(&content)
                     {
-                        let rel = path
-                            .strip_prefix(base)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .to_string();
+                        let rel =
+                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
 
                         for contra in &entry.contradictions {
                             let mut pair_key = [rel.clone(), contra.clone()];
@@ -739,9 +708,7 @@ related: ["wiki/other/concept.md"]
         };
 
         if !full_path.exists() {
-            return Err(PdfModuleError::FileNotFound(
-                full_path.to_string_lossy().to_string(),
-            ));
+            return Err(PdfModuleError::FileNotFound(full_path.to_string_lossy().to_string()));
         }
 
         let content = fs::read_to_string(&full_path)
@@ -752,11 +719,8 @@ related: ["wiki/other/concept.md"]
         })?;
 
         let body = content.split("---").nth(2).unwrap_or("").to_string();
-        let rel_path = full_path
-            .strip_prefix(&wiki_dir)
-            .unwrap_or(&full_path)
-            .to_string_lossy()
-            .to_string();
+        let rel_path =
+            full_path.strip_prefix(&wiki_dir).unwrap_or(&full_path).to_string_lossy().to_string();
 
         let mut index = VectorIndex::open_or_create(&self.knowledge_base, 256)?;
 
@@ -797,10 +761,8 @@ related: ["wiki/other/concept.md"]
         let mut index = VectorIndex::open_or_create(&self.knowledge_base, 256)?;
 
         // Train on full corpus
-        let docs: Vec<String> = entries_data
-            .iter()
-            .map(|(_, title, _, body)| format!("{} {}", title, body))
-            .collect();
+        let docs: Vec<String> =
+            entries_data.iter().map(|(_, title, _, body)| format!("{} {}", title, body)).collect();
         index.train_model(&docs);
 
         // Index every entry
@@ -878,11 +840,8 @@ related: ["wiki/other/concept.md"]
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
                         let body = content.split("---").nth(2).unwrap_or("").to_string();
-                        let rel = path
-                            .strip_prefix(base)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .to_string();
+                        let rel =
+                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                         results.push((rel, entry.title, entry.domain, body));
                     }
                 }
@@ -901,11 +860,7 @@ related: ["wiki/other/concept.md"]
         Self::scan_wiki_files(&wiki_dir, &wiki_dir, &mut paths)?;
         let mut results = Vec::new();
         for path in paths {
-            let rel = path
-                .strip_prefix(&wiki_dir)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .to_string();
+            let rel = path.strip_prefix(&wiki_dir).unwrap_or(&path).to_string_lossy().to_string();
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
                     results.push((rel, entry));

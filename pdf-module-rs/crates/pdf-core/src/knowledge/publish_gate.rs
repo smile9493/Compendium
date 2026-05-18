@@ -82,10 +82,7 @@ pub fn apply_publish_gate(knowledge_base: &Path) -> PdfResult<GateResult> {
         .map(|i| i.entry_path.clone())
         .collect();
 
-    let mut result = GateResult {
-        entries_scanned: report.total_entries,
-        ..Default::default()
-    };
+    let mut result = GateResult { entries_scanned: report.total_entries, ..Default::default() };
 
     scan_and_apply(&wiki_dir, &wiki_dir, &config, &report, &error_paths, &mut result)?;
     Ok(result)
@@ -109,26 +106,24 @@ fn scan_and_apply(
         if path.is_dir() {
             scan_and_apply(base, &path, config, report, error_paths, result)?;
         } else if path.extension().is_some_and(|e| e == "md") {
-            let rel = path
-                .strip_prefix(base)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            let content = fs::read_to_string(&path)
-                .map_err(|e| PdfModuleError::Storage(e.to_string()))?;
+            let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            let content =
+                fs::read_to_string(&path).map_err(|e| PdfModuleError::Storage(e.to_string()))?;
             let Some(mut meta) = KnowledgeEntry::from_markdown(&content) else {
                 continue;
             };
 
             let has_error = config.gate_block_on_error_issues && error_paths.contains(&rel);
-            let low_score = meta.quality_score > 0.0 && meta.quality_score < config.quality_min_score;
+            let low_score =
+                meta.quality_score > 0.0 && meta.quality_score < config.quality_min_score;
             let zero_score_uncompiled =
                 meta.quality_score == 0.0 && meta.status != CompileStatus::Compiled;
 
             let new_status = if has_error || low_score || zero_score_uncompiled {
                 PublishStatus::Blocked
             } else if config.auto_publish_on_gate_pass
-                || (meta.status == CompileStatus::Compiled && meta.quality_score >= config.quality_min_score)
+                || (meta.status == CompileStatus::Compiled
+                    && meta.quality_score >= config.quality_min_score)
             {
                 PublishStatus::Published
             } else {

@@ -101,8 +101,7 @@ impl ToolStats {
 
     pub fn record_success(&self, tool: &str, latency_ms: u64) {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_latency_ms
-            .fetch_add(latency_ms, Ordering::Relaxed);
+        self.total_latency_ms.fetch_add(latency_ms, Ordering::Relaxed);
         self.files_processed.fetch_add(1, Ordering::Relaxed);
 
         if let Some(m) = self.metrics.get(tool) {
@@ -134,11 +133,8 @@ impl ToolStats {
         let errors = self.total_errors.load(Ordering::Relaxed);
         let latency = self.total_latency_ms.load(Ordering::Relaxed);
 
-        let tools_json: serde_json::Map<String, serde_json::Value> = self
-            .metrics
-            .iter()
-            .map(|(k, v)| ((*k).to_string(), v.to_json()))
-            .collect();
+        let tools_json: serde_json::Map<String, serde_json::Value> =
+            self.metrics.iter().map(|(k, v)| ((*k).to_string(), v.to_json())).collect();
 
         serde_json::json!({
             "uptime_secs": self.uptime_secs(),
@@ -190,10 +186,8 @@ pub async fn run_stdio_with_tool_ctx(
 
     let sampling_config = SamplingClientConfig::default();
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingRequest>(100);
-    let sampling_client = Arc::new(SamplingClient::with_sender(
-        sampling_config.timeout_secs,
-        outgoing_tx.clone(),
-    ));
+    let sampling_client =
+        Arc::new(SamplingClient::with_sender(sampling_config.timeout_secs, outgoing_tx.clone()));
     let pending_requests = sampling_client.pending_requests();
 
     let stdout = std::io::stdout();
@@ -370,10 +364,7 @@ async fn handle_tools_call(
         }
     };
 
-    let arguments = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or(serde_json::json!({}));
+    let arguments = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
 
     let start = std::time::Instant::now();
     let result = tools::dispatch_tool(ctx, tool_name, &arguments).await;
@@ -382,17 +373,11 @@ async fn handle_tools_call(
     match result {
         Ok(content) => {
             stats.record_success(tool_name, latency_ms);
-            JsonRpcResponse::success(
-                request.id.clone(),
-                serde_json::json!({ "content": content }),
-            )
+            JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "content": content }))
         }
         Err(e) => {
             stats.record_error(tool_name);
-            JsonRpcResponse::error(
-                request.id.clone(),
-                JsonRpcError::internal_error(&e.to_string()),
-            )
+            JsonRpcResponse::error(request.id.clone(), JsonRpcError::internal_error(&e.to_string()))
         }
     }
 }

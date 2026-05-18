@@ -82,8 +82,7 @@ impl CliConfig {
             .with_context(|| format!("Failed to create config dir: {}", dir.display()))?;
 
         let path = dir.join(CONFIG_FILE);
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
+        let content = toml::to_string_pretty(self).context("Failed to serialize config")?;
 
         // Atomic write: tmp + rename
         let tmp_path = path.with_extension("toml.tmp");

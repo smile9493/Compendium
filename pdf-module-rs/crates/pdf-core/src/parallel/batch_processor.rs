@@ -52,11 +52,7 @@ pub struct BatchConfig {
 
 impl Default for BatchConfig {
     fn default() -> Self {
-        Self {
-            max_files_parallel: num_cpus::get(),
-            max_pages_parallel: 4,
-            chunk_size: 10,
-        }
+        Self { max_files_parallel: num_cpus::get(), max_pages_parallel: 4, chunk_size: 10 }
     }
 }
 
@@ -213,11 +209,7 @@ mod tests {
 
     #[test]
     fn test_batch_config_custom() {
-        let config = BatchConfig {
-            max_files_parallel: 2,
-            max_pages_parallel: 1,
-            chunk_size: 5,
-        };
+        let config = BatchConfig { max_files_parallel: 2, max_pages_parallel: 1, chunk_size: 5 };
         assert_eq!(config.max_files_parallel, 2);
         assert_eq!(config.max_pages_parallel, 1);
         assert_eq!(config.chunk_size, 5);
@@ -232,9 +224,7 @@ mod tests {
         let batch_config = BatchConfig::default();
         let processor = BatchProcessor::new(pipeline, batch_config);
 
-        let result = processor
-            .process_batch_async(vec![], ExtractOptions::default())
-            .await;
+        let result = processor.process_batch_async(vec![], ExtractOptions::default()).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
     }

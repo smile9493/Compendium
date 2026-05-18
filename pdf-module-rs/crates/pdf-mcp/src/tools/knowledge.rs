@@ -2,9 +2,7 @@ use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::dto::ExtractOptions;
 use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
-use pdf_core::knowledge::{
-    run_incremental_extract, run_single_pdf_extract, CompilePlanStore,
-};
+use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract, CompilePlanStore};
 use pdf_core::management::CompileJobStore;
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
@@ -223,9 +221,8 @@ pub async fn handle_compile_to_wiki(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let pdf_path_str = args["pdf_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
+    let pdf_path_str =
+        args["pdf_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
     let pdf_path = std::path::Path::new(pdf_path_str);
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let domain = args["domain"].as_str();
@@ -270,9 +267,8 @@ pub async fn handle_micro_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let pdf_path_str = args["pdf_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
+    let pdf_path_str =
+        args["pdf_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
     let pdf_path = std::path::Path::new(pdf_path_str);
 
     pdf_core::FileValidator::validate_path_safety(pdf_path, &ctx.path_config)
@@ -299,10 +295,7 @@ pub async fn handle_micro_compile(
         result.extracted_text.clone()
     };
 
-    let source_name = pdf_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown");
+    let source_name = pdf_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
 
     let output = format!(
         r#"# 微编译结果: {}
@@ -318,11 +311,7 @@ pub async fn handle_micro_compile(
 "#,
         source_name,
         result.page_count,
-        if let Some(r) = page_range {
-            format!("\n- 提取范围: {}", r)
-        } else {
-            String::new()
-        },
+        if let Some(r) = page_range { format!("\n- 提取范围: {}", r) } else { String::new() },
         text
     );
 
@@ -334,10 +323,9 @@ fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
     for part in range.split(',') {
         let part = part.trim();
         if let Some(dash_pos) = part.find('-') {
-            if let (Ok(start), Ok(end)) = (
-                part[..dash_pos].trim().parse::<u32>(),
-                part[dash_pos + 1..].trim().parse::<u32>(),
-            ) {
+            if let (Ok(start), Ok(end)) =
+                (part[..dash_pos].trim().parse::<u32>(), part[dash_pos + 1..].trim().parse::<u32>())
+            {
                 for p in start..=end.min(max_page) {
                     pages.push(p);
                 }
@@ -366,12 +354,7 @@ pub async fn handle_aggregate_entries(
     let l2_tasks: Vec<_> = plan
         .tasks
         .iter()
-        .filter(|t| {
-            matches!(
-                t.kind,
-                pdf_core::knowledge::PlanTaskKind::AggregateL2
-            )
-        })
+        .filter(|t| matches!(t.kind, pdf_core::knowledge::PlanTaskKind::AggregateL2))
         .collect();
 
     let result = serde_json::json!({
@@ -415,7 +398,10 @@ pub async fn handle_hypothesis_test(
     let quality_issues: Vec<_> = enriched
         .iter()
         .map(|p| {
-            pdf_core::knowledge::quality_issues::issues_from_contradictions(&[(p.entry_a.clone(), p.entry_b.clone())])
+            pdf_core::knowledge::quality_issues::issues_from_contradictions(&[(
+                p.entry_a.clone(),
+                p.entry_b.clone(),
+            )])
         })
         .flatten()
         .collect();
@@ -452,9 +438,8 @@ pub async fn handle_recompile_entry(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
 
@@ -468,9 +453,7 @@ pub async fn handle_compile_uploaded_pdf(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let file_id = args["file_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing file_id"))?;
+    let file_id = args["file_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_id"))?;
 
     let upload_store = ctx
         .upload_store
@@ -503,12 +486,9 @@ pub async fn handle_save_wiki_entry(
     ctx: &ToolContext,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    let entry_path = args["entry_path"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
-    let content = args["content"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let content = args["content"].as_str().ok_or_else(|| anyhow::anyhow!("Missing content"))?;
 
     if content.trim().is_empty() {
         return Err(anyhow::anyhow!("Content must not be empty"));
@@ -527,12 +507,8 @@ pub async fn handle_save_wiki_entry(
     let wiki_dir = kb_path.join("wiki");
     let target_path = wiki_dir.join(entry_path);
 
-    let resolved = target_path
-        .canonicalize()
-        .unwrap_or_else(|_| target_path.clone());
-    let wiki_canonical = wiki_dir
-        .canonicalize()
-        .unwrap_or_else(|_| wiki_dir.clone());
+    let resolved = target_path.canonicalize().unwrap_or_else(|_| target_path.clone());
+    let wiki_canonical = wiki_dir.canonicalize().unwrap_or_else(|_| wiki_dir.clone());
     if !resolved.starts_with(&wiki_canonical) {
         return Err(anyhow::anyhow!(
             "Path traversal detected: resolved path '{}' is outside wiki directory '{}'",
@@ -571,16 +547,14 @@ pub async fn handle_save_wiki_entry(
     let _ = pdf_core::knowledge::reindex_entry(&kb_path, entry_path);
 
     let relative_path = entry_path.to_string();
-    Ok(vec![Content::text(
-        serde_json::to_string_pretty(&serde_json::json!({
-            "status": "success",
-            "path": relative_path,
-            "absolute_path": target_path.to_string_lossy(),
-            "size_bytes": final_content.len(),
-            "job_id": args["job_id"].as_str(),
-            "message": format!("Wiki entry '{}' saved successfully", entry_path)
-        }))?,
-    )])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "status": "success",
+        "path": relative_path,
+        "absolute_path": target_path.to_string_lossy(),
+        "size_bytes": final_content.len(),
+        "job_id": args["job_id"].as_str(),
+        "message": format!("Wiki entry '{}' saved successfully", entry_path)
+    }))?)])
 }
 
 #[instrument(skip(ctx, args))]
@@ -589,9 +563,7 @@ pub async fn handle_complete_compile_job(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
-    let job_id = args["job_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing job_id"))?;
+    let job_id = args["job_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing job_id"))?;
     let force = args["force"].as_bool().unwrap_or(false);
     let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
@@ -631,9 +603,7 @@ pub async fn handle_mark_plan_task_done(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
-    let task_id = args["task_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing task_id"))?;
+    let task_id = args["task_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing task_id"))?;
     let plan = CompilePlanStore::new(&kb_path).mark_task_done(task_id)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
         "status": "ok",
@@ -669,7 +639,7 @@ mod tests {
     fn test_knowledge_tool_definitions() {
         let defs = knowledge_tool_definitions();
         assert!(defs.len() >= 8);
-        
+
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"compile_to_wiki"));
         assert!(names.contains(&"compile_uploaded_pdf"));
@@ -722,12 +692,12 @@ mod tests {
         let ctx = create_test_context();
         let path_str = pdf_path.to_str().expect("Path should be valid UTF-8");
         eprintln!("Testing with path: {:?}", path_str);
-        
+
         let args = serde_json::json!({
             "pdf_path": path_str
         });
         eprintln!("Args: {:?}", args);
-        
+
         let result = handle_micro_compile(&ctx, &args).await;
         match result {
             Ok(content) => {
@@ -736,7 +706,8 @@ mod tests {
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -756,13 +727,13 @@ mod tests {
         let ctx = create_test_context();
         let path_str = pdf_path.to_str().expect("Path should be valid UTF-8");
         eprintln!("Testing with path: {:?}", path_str);
-        
+
         let args = serde_json::json!({
             "pdf_path": path_str,
             "page_range": "1-2"
         });
         eprintln!("Args: {:?}", args);
-        
+
         let result = handle_micro_compile(&ctx, &args).await;
         match result {
             Ok(content) => {
@@ -771,7 +742,8 @@ mod tests {
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH") {
+                if err_msg.contains("Failed to load pdfium") || err_msg.contains("PDFIUM_LIB_PATH")
+                {
                     eprintln!("Skipping test: pdfium not available - {:?}", err_msg);
                     return;
                 }
@@ -786,7 +758,7 @@ mod tests {
         let args = serde_json::json!({
             "knowledge_base": "/tmp/test_kb"
         });
-        
+
         let result = handle_compile_to_wiki(&ctx, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing pdf_path"));
@@ -804,7 +776,7 @@ mod tests {
         let args = serde_json::json!({
             "pdf_path": pdf_path.to_str().unwrap()
         });
-        
+
         let result = handle_compile_to_wiki(&ctx, &args).await;
         assert!(result.is_err());
     }
@@ -813,7 +785,7 @@ mod tests {
     async fn test_incremental_compile_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
-        
+
         let result = handle_incremental_compile(&ctx, &args).await;
         assert!(result.is_ok());
     }
@@ -822,7 +794,7 @@ mod tests {
     async fn test_aggregate_entries_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
-        
+
         let result = handle_aggregate_entries(&ctx, &args).await;
         assert!(result.is_ok());
     }
@@ -831,7 +803,7 @@ mod tests {
     async fn test_hypothesis_test_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
-        
+
         let result = handle_hypothesis_test(&ctx, &args).await;
         assert!(result.is_ok());
     }
@@ -842,7 +814,7 @@ mod tests {
         let args = serde_json::json!({
             "entry_path": "test.md"
         });
-        
+
         let result = handle_recompile_entry(&ctx, &args).await;
         assert!(result.is_err());
     }
@@ -853,7 +825,7 @@ mod tests {
         let args = serde_json::json!({
             "knowledge_base": "/tmp/test_kb"
         });
-        
+
         let result = handle_recompile_entry(&ctx, &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));

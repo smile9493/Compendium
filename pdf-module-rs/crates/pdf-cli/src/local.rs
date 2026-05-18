@@ -17,9 +17,7 @@ use std::sync::Arc;
 /// Create a properly initialized KnowledgeEngine for the given kb path.
 fn create_engine(kb_path: &Path) -> Result<KnowledgeEngine> {
     let config = ServerConfig::from_env().unwrap_or_default();
-    let pipeline = Arc::new(
-        McpPdfPipeline::new(&config).context("Failed to create PDF pipeline")?,
-    );
+    let pipeline = Arc::new(McpPdfPipeline::new(&config).context("Failed to create PDF pipeline")?);
     KnowledgeEngine::new(pipeline, kb_path).context("Failed to create knowledge engine")
 }
 
@@ -44,10 +42,8 @@ pub async fn micro_compile(
     let pipeline = Arc::new(McpPdfPipeline::new(&config)?);
     let options = pdf_core::dto::ExtractOptions::default();
 
-    let result = pipeline
-        .extract_structured(pdf_path, &options)
-        .await
-        .context("PDF extraction failed")?;
+    let result =
+        pipeline.extract_structured(pdf_path, &options).await.context("PDF extraction failed")?;
 
     let text = if let Some(range) = page_range {
         let pages_to_include = parse_page_range(range, result.page_count);
@@ -62,10 +58,7 @@ pub async fn micro_compile(
         result.extracted_text.clone()
     };
 
-    let source_name = pdf_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown");
+    let source_name = pdf_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
 
     let output = format!(
         r#"# Micro-Compile: {}
@@ -81,9 +74,7 @@ pub async fn micro_compile(
 "#,
         source_name,
         result.page_count,
-        page_range
-            .map(|r| format!("\n- Range: {}", r))
-            .unwrap_or_default(),
+        page_range.map(|r| format!("\n- Range: {}", r)).unwrap_or_default(),
         text
     );
 
@@ -302,8 +293,10 @@ fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
             for p in start..=end.min(max_page) {
                 pages.push(p);
             }
-        } else if let Ok(p) = part.parse::<u32>() && p <= max_page {
-                pages.push(p);
+        } else if let Ok(p) = part.parse::<u32>()
+            && p <= max_page
+        {
+            pages.push(p);
         }
     }
     pages.sort();

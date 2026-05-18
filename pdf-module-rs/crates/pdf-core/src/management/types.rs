@@ -39,34 +39,21 @@ impl fmt::Display for HealthReport {
         writeln!(f, "Orphan entries:       {}", self.orphan_count)?;
         writeln!(f, "Contradictions:       {}", self.contradiction_count)?;
         writeln!(f, "Broken links:         {}", self.broken_link_count)?;
-        writeln!(
-            f,
-            "Index size:           {} MB",
-            self.index_size_bytes / 1024 / 1024
-        )?;
+        writeln!(f, "Index size:           {} MB", self.index_size_bytes / 1024 / 1024)?;
         writeln!(
             f,
             "Graph:                {} nodes, {} edges",
             self.graph_node_count, self.graph_edge_count
         )?;
-        writeln!(
-            f,
-            "Avg quality score:    {:.1}%",
-            self.avg_quality_score * 100.0
-        )?;
+        writeln!(f, "Avg quality score:    {:.1}%", self.avg_quality_score * 100.0)?;
         writeln!(f, "Domains:              {}", self.domains.join(", "))?;
         writeln!(
             f,
             "Last compile:         {}",
-            self.last_compile.map_or("never".to_string(), |t| t
-                .format("%Y-%m-%d %H:%M")
-                .to_string())
+            self.last_compile
+                .map_or("never".to_string(), |t| t.format("%Y-%m-%d %H:%M").to_string())
         )?;
-        writeln!(
-            f,
-            "Generated at:         {}",
-            self.generated_at.format("%Y-%m-%d %H:%M:%S")
-        )?;
+        writeln!(f, "Generated at:         {}", self.generated_at.format("%Y-%m-%d %H:%M:%S"))?;
         Ok(())
     }
 }
@@ -113,34 +100,23 @@ impl fmt::Display for CompileStatusRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Compile Status")?;
         writeln!(f, "──────────────")?;
-        writeln!(
-            f,
-            "Running:      {}",
-            if self.running { "yes" } else { "no" }
-        )?;
+        writeln!(f, "Running:      {}", if self.running { "yes" } else { "no" })?;
         writeln!(
             f,
             "Last started: {}",
-            self.last_started.map_or("never".to_string(), |t| t
-                .format("%Y-%m-%d %H:%M")
-                .to_string())
+            self.last_started
+                .map_or("never".to_string(), |t| t.format("%Y-%m-%d %H:%M").to_string())
         )?;
         writeln!(
             f,
             "Last finished:{}",
-            self.last_finished.map_or(" never".to_string(), |t| format!(
-                " {}",
-                t.format("%Y-%m-%d %H:%M")
-            ))
+            self.last_finished
+                .map_or(" never".to_string(), |t| format!(" {}", t.format("%Y-%m-%d %H:%M")))
         )?;
         if let Some(ms) = self.last_duration_ms {
             writeln!(f, "Duration:     {} ms", ms)?;
         }
-        writeln!(
-            f,
-            "Outcome:      {}",
-            self.last_outcome.as_deref().unwrap_or("n/a")
-        )?;
+        writeln!(f, "Outcome:      {}", self.last_outcome.as_deref().unwrap_or("n/a"))?;
         writeln!(f, "Message:      {}", self.message)?;
         if !self.history.is_empty() {
             writeln!(f, "\nRecent history:")?;

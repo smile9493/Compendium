@@ -99,10 +99,7 @@ mod tests {
     #[test]
     fn layout_chaos_triggers_vlm() {
         let det = EscalationDetector::default();
-        assert_eq!(
-            det.detect(&extraction(200, 0.1)),
-            DetectionResult::LayoutChaos
-        );
+        assert_eq!(det.detect(&extraction(200, 0.1)), DetectionResult::LayoutChaos);
     }
 
     #[test]
@@ -125,9 +122,6 @@ mod tests {
     fn boundary_confidence() {
         let det = EscalationDetector::default();
         assert_eq!(det.detect(&extraction(500, 0.3)), DetectionResult::Normal);
-        assert_eq!(
-            det.detect(&extraction(500, 0.299)),
-            DetectionResult::LayoutChaos
-        );
+        assert_eq!(det.detect(&extraction(500, 0.299)), DetectionResult::LayoutChaos);
     }
 }

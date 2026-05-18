@@ -89,18 +89,10 @@ impl HashCache {
             })?;
             let last_root = Self::parse_root_hex(&state.merkle_root);
             info!(entries = state.entries.len(), root = %state.merkle_root, "Loaded hash cache");
-            Ok(Self {
-                entries: state.entries,
-                cache_path,
-                last_merkle_root: last_root,
-            })
+            Ok(Self { entries: state.entries, cache_path, last_merkle_root: last_root })
         } else {
             info!("No hash cache found, creating empty cache");
-            Ok(Self {
-                entries: HashMap::new(),
-                cache_path,
-                last_merkle_root: None,
-            })
+            Ok(Self { entries: HashMap::new(), cache_path, last_merkle_root: None })
         }
     }
 
@@ -124,11 +116,8 @@ impl HashCache {
             tree.root().map(hex::encode).unwrap_or_default()
         };
 
-        let state = PersistedState {
-            merkle_root: root_hex,
-            leaf_paths,
-            entries: self.entries.clone(),
-        };
+        let state =
+            PersistedState { merkle_root: root_hex, leaf_paths, entries: self.entries.clone() };
         let json = serde_json::to_string_pretty(&state).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to serialize hash cache: {}", e))
         })?;
@@ -343,9 +332,7 @@ mod tests {
         let mut f = fs::File::create(&pdf_path).unwrap();
         f.write_all(b"%PDF-1.4 fake content").unwrap();
 
-        cache
-            .record_compile(&pdf_path, vec!["wiki/it/concept.md".into()])
-            .unwrap();
+        cache.record_compile(&pdf_path, vec!["wiki/it/concept.md".into()]).unwrap();
         cache.save().unwrap();
 
         // Reload and verify
@@ -372,17 +359,11 @@ mod tests {
         assert!(cache.needs_compile(&pdf_path).unwrap());
 
         // Record compile
-        cache
-            .record_compile(&pdf_path, vec!["wiki/it/c.md".into()])
-            .unwrap();
+        cache.record_compile(&pdf_path, vec!["wiki/it/c.md".into()]).unwrap();
         assert!(!cache.needs_compile(&pdf_path).unwrap());
 
         // Modify file -> needs recompile
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(&pdf_path)
-            .unwrap();
+        let mut f = fs::OpenOptions::new().write(true).truncate(true).open(&pdf_path).unwrap();
         f.write_all(b"%PDF-1.4 content v2 modified").unwrap();
         assert!(cache.needs_compile(&pdf_path).unwrap());
     }
@@ -398,21 +379,11 @@ mod tests {
 
         let pdf1 = dir.path().join("a.pdf");
         let pdf2 = dir.path().join("b.pdf");
-        fs::File::create(&pdf1)
-            .unwrap()
-            .write_all(b"content_a")
-            .unwrap();
-        fs::File::create(&pdf2)
-            .unwrap()
-            .write_all(b"content_b")
-            .unwrap();
+        fs::File::create(&pdf1).unwrap().write_all(b"content_a").unwrap();
+        fs::File::create(&pdf2).unwrap().write_all(b"content_b").unwrap();
 
-        cache
-            .record_compile(&pdf1, vec!["wiki/a.md".into()])
-            .unwrap();
-        cache
-            .record_compile(&pdf2, vec!["wiki/b.md".into()])
-            .unwrap();
+        cache.record_compile(&pdf1, vec!["wiki/a.md".into()]).unwrap();
+        cache.record_compile(&pdf2, vec!["wiki/b.md".into()]).unwrap();
 
         let root1 = cache.compute_merkle_root().unwrap();
         cache.save().unwrap();
@@ -423,15 +394,9 @@ mod tests {
         assert!(!loaded.has_changes());
 
         // Modify file — root should differ
-        fs::File::create(&pdf1)
-            .unwrap()
-            .write_all(b"modified")
-            .unwrap();
-        loaded
-            .entries
-            .get_mut(&pdf1.to_string_lossy().to_string())
-            .unwrap()
-            .source_hash = HashCache::hash_bytes(b"modified");
+        fs::File::create(&pdf1).unwrap().write_all(b"modified").unwrap();
+        loaded.entries.get_mut(&pdf1.to_string_lossy().to_string()).unwrap().source_hash =
+            HashCache::hash_bytes(b"modified");
         assert!(loaded.has_changes());
     }
 }

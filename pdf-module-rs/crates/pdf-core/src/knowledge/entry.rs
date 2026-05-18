@@ -195,15 +195,9 @@ pub struct KnowledgeEntry {
     pub version: u32,
 
     // === Timestamps ===
-    #[serde(
-        serialize_with = "serialize_utc_date",
-        deserialize_with = "deserialize_utc_date"
-    )]
+    #[serde(serialize_with = "serialize_utc_date", deserialize_with = "deserialize_utc_date")]
     pub created: DateTime<Utc>,
-    #[serde(
-        serialize_with = "serialize_utc_date",
-        deserialize_with = "deserialize_utc_date"
-    )]
+    #[serde(serialize_with = "serialize_utc_date", deserialize_with = "deserialize_utc_date")]
     pub updated: DateTime<Utc>,
 }
 
@@ -273,9 +267,7 @@ impl KnowledgeEntry {
 
     /// Compute the expected filename: `[Domain] Title.md`
     pub fn filename(&self) -> String {
-        let safe_title = self
-            .title
-            .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+        let safe_title = self.title.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
         format!("[{}] {}.md", self.domain, safe_title)
     }
 
@@ -382,9 +374,6 @@ related: []
         let mut entry = KnowledgeEntry::new("HTTP/2 多路复用", "IT");
         assert_eq!(entry.filename(), "[IT] HTTP_2 多路复用.md");
         entry.domain = "Math".into();
-        assert_eq!(
-            entry.relative_path(),
-            PathBuf::from("math/[Math] HTTP_2 多路复用.md")
-        );
+        assert_eq!(entry.relative_path(), PathBuf::from("math/[Math] HTTP_2 多路复用.md"));
     }
 }

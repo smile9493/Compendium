@@ -7,7 +7,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::error::PdfResult;
-use crate::knowledge::quality::{analyze_wiki, build_next_actions, IssueSeverity, QualityIssue, QualityReport};
+use crate::knowledge::quality::{
+    analyze_wiki, build_next_actions, IssueSeverity, QualityIssue, QualityReport,
+};
 
 /// Stable issue identifier for `fix_suggest`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,14 +116,9 @@ pub fn fix_suggest(
 ) -> PdfResult<serde_json::Value> {
     let report = analyze_wiki(wiki_dir)?;
     let all = collect_issues(&report, None, usize::MAX);
-    let issue = all
-        .into_iter()
-        .find(|i| i.issue_id == issue_id)
-        .ok_or_else(|| {
-            crate::error::PdfModuleError::FileNotFound(format!(
-                "Quality issue not found: {issue_id}"
-            ))
-        })?;
+    let issue = all.into_iter().find(|i| i.issue_id == issue_id).ok_or_else(|| {
+        crate::error::PdfModuleError::FileNotFound(format!("Quality issue not found: {issue_id}"))
+    })?;
 
     let mut suggestions = Vec::new();
     match issue.kind.as_str() {
@@ -160,9 +157,7 @@ pub fn fix_suggest(
     }))
 }
 
-pub fn issues_from_contradictions(
-    pairs: &[(String, String)],
-) -> Vec<ListedQualityIssue> {
+pub fn issues_from_contradictions(pairs: &[(String, String)]) -> Vec<ListedQualityIssue> {
     pairs
         .iter()
         .map(|(a, b)| {

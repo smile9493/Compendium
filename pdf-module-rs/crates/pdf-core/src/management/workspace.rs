@@ -41,7 +41,10 @@ impl WorkspaceRegistry {
     pub fn load_default() -> PdfResult<Self> {
         let config_dir = config_dir();
         fs::create_dir_all(&config_dir).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to create config dir {}: {e}", config_dir.display()))
+            PdfModuleError::Storage(format!(
+                "Failed to create config dir {}: {e}",
+                config_dir.display()
+            ))
         })?;
         let config_path = config_dir.join("workspaces.toml");
         Self::load(&config_path)
@@ -54,9 +57,8 @@ impl WorkspaceRegistry {
             let raw = fs::read_to_string(config_path).map_err(|e| {
                 PdfModuleError::Storage(format!("Failed to read {}: {e}", config_path.display()))
             })?;
-            toml::from_str(&raw).map_err(|e| {
-                PdfModuleError::Storage(format!("Invalid workspaces.toml: {e}"))
-            })?
+            toml::from_str(&raw)
+                .map_err(|e| PdfModuleError::Storage(format!("Invalid workspaces.toml: {e}")))?
         } else {
             WorkspaceFile::default()
         };
@@ -104,11 +106,7 @@ impl WorkspaceRegistry {
     /// Active workspace id, if any.
     pub fn active_id(&self) -> PdfResult<Option<WorkspaceId>> {
         let file = self.inner.read().map_err(|_| lock_poisoned())?;
-        Ok(file
-            .workspaces
-            .iter()
-            .find(|w| w.active)
-            .map(|w| w.id.clone()))
+        Ok(file.workspaces.iter().find(|w| w.active).map(|w| w.id.clone()))
     }
 
     /// Resolve `kb_id` or legacy path string to an absolute KB path.
@@ -196,9 +194,8 @@ impl WorkspaceRegistry {
     }
 
     fn persist(&self, file: &WorkspaceFile) -> PdfResult<()> {
-        let serialized = toml::to_string_pretty(file).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to serialize workspaces: {e}"))
-        })?;
+        let serialized = toml::to_string_pretty(file)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to serialize workspaces: {e}")))?;
         let tmp = self.config_path.with_extension("toml.tmp");
         fs::write(&tmp, &serialized).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to write {}: {e}", tmp.display()))
@@ -263,11 +260,9 @@ impl WorkspaceRegistry {
 }
 
 fn config_dir() -> PathBuf {
-    std::env::var("RSUT_CONFIG_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs_home().map(|h| h.join(".rsut")).unwrap_or_else(|| PathBuf::from(".rsut"))
-        })
+    std::env::var("RSUT_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|_| {
+        dirs_home().map(|h| h.join(".rsut")).unwrap_or_else(|| PathBuf::from(".rsut"))
+    })
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -280,13 +275,7 @@ fn dirs_home() -> Option<PathBuf> {
 fn parse_allowed_roots() -> Vec<PathBuf> {
     std::env::var("RSUT_ALLOWED_KB_ROOTS")
         .ok()
-        .map(|s| {
-            s.split(',')
-                .map(str::trim)
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
-                .collect()
-        })
+        .map(|s| s.split(',').map(str::trim).filter(|p| !p.is_empty()).map(PathBuf::from).collect())
         .unwrap_or_default()
 }
 

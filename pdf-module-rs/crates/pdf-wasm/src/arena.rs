@@ -25,22 +25,14 @@ pub struct WasmPdfEngine {
 impl WasmPdfEngine {
     /// Create a new WASM PDF engine with a fresh arena.
     pub fn new() -> Self {
-        Self {
-            arena: Bump::new(),
-            pdf_data: Vec::new(),
-            page_count: 0,
-        }
+        Self { arena: Bump::new(), pdf_data: Vec::new(), page_count: 0 }
     }
 
     /// Create an engine with a pre-allocated arena capacity hint.
     ///
     /// Pre-allocating reduces re-allocation overhead for known workloads.
     pub fn with_capacity(bytes: usize) -> Self {
-        Self {
-            arena: Bump::with_capacity(bytes),
-            pdf_data: Vec::new(),
-            page_count: 0,
-        }
+        Self { arena: Bump::with_capacity(bytes), pdf_data: Vec::new(), page_count: 0 }
     }
 
     /// Load PDF bytes into the engine.
@@ -59,7 +51,11 @@ impl WasmPdfEngine {
     }
 
     /// Render page thumbnail as RGBA bytes wrapped in [`OwnedSlice`].
-    pub fn render_page_thumbnail(&mut self, page: u32, max_px: u32) -> Result<OwnedSlice, WasmError> {
+    pub fn render_page_thumbnail(
+        &mut self,
+        page: u32,
+        max_px: u32,
+    ) -> Result<OwnedSlice, WasmError> {
         if page >= self.page_count {
             return Err(WasmError::InvalidPdf(format!("page {page} out of range")));
         }

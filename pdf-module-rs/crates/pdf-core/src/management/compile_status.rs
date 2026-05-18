@@ -35,11 +35,7 @@ pub struct CompileGuard {
 
 impl CompileStatusStore {
     pub fn new(knowledge_base: &Path) -> Self {
-        Self {
-            path: knowledge_base
-                .join(".rsut_index")
-                .join("compile_status.json"),
-        }
+        Self { path: knowledge_base.join(".rsut_index").join("compile_status.json") }
     }
 
     /// Read current status, or default when missing or corrupt.
@@ -48,9 +44,8 @@ impl CompileStatusStore {
             return Ok(default_record());
         }
 
-        let content = fs::read_to_string(&self.path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to read compile status: {e}"))
-        })?;
+        let content = fs::read_to_string(&self.path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read compile status: {e}")))?;
 
         match serde_json::from_str::<CompileStatusRecord>(&content) {
             Ok(record) => Ok(record),
@@ -69,10 +64,7 @@ impl CompileStatusStore {
         record.message = "Compile in progress.".to_string();
         self.write_atomic(&record)?;
 
-        Ok(CompileGuard {
-            store: self.clone(),
-            started: Instant::now(),
-        })
+        Ok(CompileGuard { store: self.clone(), started: Instant::now() })
     }
 
     /// Write the full status record (used by compile job store).
@@ -82,9 +74,8 @@ impl CompileStatusStore {
 
     fn write_atomic(&self, record: &CompileStatusRecord) -> PdfResult<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                PdfModuleError::Storage(format!("Failed to create index dir: {e}"))
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|e| PdfModuleError::Storage(format!("Failed to create index dir: {e}")))?;
         }
 
         let json = serde_json::to_string_pretty(record).map_err(|e| {
@@ -92,9 +83,8 @@ impl CompileStatusStore {
         })?;
 
         let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, &json).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to write compile status: {e}"))
-        })?;
+        fs::write(&tmp, &json)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to write compile status: {e}")))?;
         fs::rename(&tmp, &self.path).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to commit compile status: {e}"))
         })?;
@@ -109,11 +99,7 @@ impl CompileGuard {
     }
 
     pub fn finish_error(self, message: impl Into<String>) -> PdfResult<()> {
-        self.finish_with_outcome(
-            "error",
-            Some(message.into()),
-            CompileFinishStats::default(),
-        )
+        self.finish_with_outcome("error", Some(message.into()), CompileFinishStats::default())
     }
 
     fn finish_with_outcome(
@@ -182,10 +168,7 @@ mod tests {
         assert!(reading.running);
 
         guard
-            .finish_success(CompileFinishStats {
-                entries_compiled: 3,
-                entries_skipped: 1,
-            })
+            .finish_success(CompileFinishStats { entries_compiled: 3, entries_skipped: 1 })
             .unwrap();
 
         let done = store.read().unwrap();

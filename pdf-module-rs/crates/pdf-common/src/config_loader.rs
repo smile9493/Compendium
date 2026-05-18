@@ -62,11 +62,7 @@ fn default_workers() -> usize {
 
 impl Default for ServerSettings {
     fn default() -> Self {
-        Self {
-            host: default_host(),
-            port: default_port(),
-            workers: default_workers(),
-        }
+        Self { host: default_host(), port: default_port(), workers: default_workers() }
     }
 }
 
@@ -111,10 +107,7 @@ fn default_log_level() -> String {
 
 impl Default for LoggingSettings {
     fn default() -> Self {
-        Self {
-            level: default_log_level(),
-            json: false,
-        }
+        Self { level: default_log_level(), json: false }
     }
 }
 
@@ -152,7 +145,9 @@ impl Default for SecuritySettings {
 /// 2. `config.toml` (or the file at `config_path`)
 /// 3. `config.local.toml` (git-ignored overrides)
 /// 4. Rust `Default` impl
-pub fn load_config<T: DeserializeOwned + Default>(config_path: Option<PathBuf>) -> Result<T, figment::Error> {
+pub fn load_config<T: DeserializeOwned + Default>(
+    config_path: Option<PathBuf>,
+) -> Result<T, figment::Error> {
     let config_file = config_path.unwrap_or_else(|| PathBuf::from("config.toml"));
 
     Figment::from(T::default())

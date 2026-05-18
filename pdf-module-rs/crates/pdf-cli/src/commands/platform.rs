@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 use pdf_core::management::{
-    sync_pull, sync_push, sync_status, FileSyncRemote, WorkspaceEntry, WorkspaceRegistry,
+    FileSyncRemote, WorkspaceEntry, WorkspaceRegistry, sync_pull, sync_push, sync_status,
 };
 
 use super::{CmdResult, Mode};
@@ -67,12 +67,8 @@ fn resolve_kb(
     knowledge_base: Option<&PathBuf>,
 ) -> anyhow::Result<PathBuf> {
     let registry = WorkspaceRegistry::load_default()?;
-    let kb_path = knowledge_base
-        .map(|p| p.as_path())
-        .or(config.knowledge_base.as_deref());
-    registry
-        .resolve_kb(kb_id, kb_path.and_then(|p| p.to_str()))
-        .map_err(|e| anyhow::anyhow!("{e}"))
+    let kb_path = knowledge_base.map(|p| p.as_path()).or(config.knowledge_base.as_deref());
+    registry.resolve_kb(kb_id, kb_path.and_then(|p| p.to_str())).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 pub fn run_workspace(
@@ -92,12 +88,7 @@ pub fn run_workspace(
             serde_json::json!({ "active_kb_id": kb_id })
         }
         WorkspaceAction::Add { kb_id, name, path } => {
-            registry.upsert(WorkspaceEntry {
-                id: kb_id.clone(),
-                name,
-                path,
-                active: false,
-            })?;
+            registry.upsert(WorkspaceEntry { id: kb_id.clone(), name, path, active: false })?;
             serde_json::json!({ "registered": kb_id })
         }
     };
@@ -114,32 +105,19 @@ pub fn run_sync(
         anyhow::bail!("sync commands require local mode");
     }
     let result = match action {
-        SyncAction::Status {
-            remote_url,
-            knowledge_base,
-            kb_id,
-        } => {
+        SyncAction::Status { remote_url, knowledge_base, kb_id } => {
             let kb = resolve_kb(config, kb_id.as_deref(), knowledge_base.as_ref())?;
             let remote = FileSyncRemote::from_url(&remote_url)?;
             let status = sync_status(&kb, &remote)?;
             serde_json::to_value(status)?
         }
-        SyncAction::Push {
-            remote_url,
-            knowledge_base,
-            kb_id,
-        } => {
+        SyncAction::Push { remote_url, knowledge_base, kb_id } => {
             let kb = resolve_kb(config, kb_id.as_deref(), knowledge_base.as_ref())?;
             let remote = FileSyncRemote::from_url(&remote_url)?;
             let report = sync_push(&kb, &remote)?;
             serde_json::to_value(report)?
         }
-        SyncAction::Pull {
-            remote_url,
-            knowledge_base,
-            kb_id,
-            rebuild_index,
-        } => {
+        SyncAction::Pull { remote_url, knowledge_base, kb_id, rebuild_index } => {
             let kb = resolve_kb(config, kb_id.as_deref(), knowledge_base.as_ref())?;
             let remote = FileSyncRemote::from_url(&remote_url)?;
             let report = sync_pull(&kb, &remote)?;

@@ -26,26 +26,11 @@ pub struct ExtractionCapabilities {
 }
 
 impl ExtractionCapabilities {
-    pub const PDFIUM: Self = Self {
-        text: true,
-        ocr: false,
-        layout: false,
-        structured: true,
-    };
+    pub const PDFIUM: Self = Self { text: true, ocr: false, layout: false, structured: true };
 
-    pub const VLM: Self = Self {
-        text: true,
-        ocr: true,
-        layout: true,
-        structured: false,
-    };
+    pub const VLM: Self = Self { text: true, ocr: true, layout: true, structured: false };
 
-    pub const REMOTE_OCR: Self = Self {
-        text: true,
-        ocr: true,
-        layout: false,
-        structured: false,
-    };
+    pub const REMOTE_OCR: Self = Self { text: true, ocr: true, layout: false, structured: false };
 }
 
 /// Backend plugin for PDF text extraction.

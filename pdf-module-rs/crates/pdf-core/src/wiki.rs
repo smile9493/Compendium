@@ -186,12 +186,7 @@ impl WikiStorage {
             .map(|l| l.trim().to_string())
             .unwrap_or_default();
 
-        Some(EntityInfo {
-            filename,
-            domain,
-            title: name,
-            abstract_text,
-        })
+        Some(EntityInfo { filename, domain, title: name, abstract_text })
     }
 
     fn build_index(entities: &[EntityInfo]) -> String {
@@ -214,10 +209,8 @@ impl WikiStorage {
                     content.push_str("|------|------|\n");
                 }
 
-                content.push_str(&format!(
-                    "| [[{}]] | {} |\n",
-                    entity.filename, entity.abstract_text
-                ));
+                content
+                    .push_str(&format!("| [[{}]] | {} |\n", entity.filename, entity.abstract_text));
             }
         }
 
@@ -229,10 +222,7 @@ impl WikiStorage {
     }
 
     fn extract_source_name(path: &Path) -> String {
-        path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string()
+        path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown").to_string()
     }
 
     fn compute_file_hash(content: &str) -> String {
@@ -330,11 +320,7 @@ impl AgentPayload {
             extraction_result.extracted_text
         );
 
-        Self {
-            metadata,
-            content: extraction_result.extracted_text.clone(),
-            prompt,
-        }
+        Self { metadata, content: extraction_result.extracted_text.clone(), prompt }
     }
 
     pub fn to_markdown(&self) -> String {

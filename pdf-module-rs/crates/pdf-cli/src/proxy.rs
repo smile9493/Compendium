@@ -15,31 +15,20 @@ use std::sync::Arc;
 
 /// Run stdio proxy, forwarding all JSON-RPC lines to the remote HTTP server.
 pub async fn run_proxy(config: &CliConfig) -> Result<()> {
-    let server = config
-        .server
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!(
+    let server = config.server.as_deref().ok_or_else(|| {
+        anyhow::anyhow!(
             "No remote server configured. Use --server flag or 'config set server <URL>'."
-        ))?;
+        )
+    })?;
 
-    let token = config
-        .token
-        .clone()
-        .or_else(|| std::env::var("RSUT_PDF_TOKEN").ok());
+    let token = config.token.clone().or_else(|| std::env::var("RSUT_PDF_TOKEN").ok());
 
-    let remote_cfg = RemoteConfig {
-        server: server.to_string(),
-        token,
-        timeout_secs: 600,
-    };
+    let remote_cfg = RemoteConfig { server: server.to_string(), token, timeout_secs: 600 };
 
     let client = RemoteClient::new(remote_cfg)?;
     let client = Arc::new(client);
 
-    eprintln!(
-        "Proxy mode: forwarding stdio ↔ {}",
-        server
-    );
+    eprintln!("Proxy mode: forwarding stdio ↔ {}", server);
     eprintln!("Waiting for MCP JSON-RPC messages on stdin...");
 
     let stdin = std::io::stdin();
@@ -121,11 +110,7 @@ pub async fn run_proxy(config: &CliConfig) -> Result<()> {
         if method == "tools/call" {
             let tool_name = request["params"]["name"].as_str().unwrap_or("");
             let arguments = request["params"]["arguments"].clone();
-            let arguments = if arguments.is_null() {
-                serde_json::json!({})
-            } else {
-                arguments
-            };
+            let arguments = if arguments.is_null() { serde_json::json!({}) } else { arguments };
 
             match client.call_tool(tool_name, arguments).await {
                 Ok(result) => {

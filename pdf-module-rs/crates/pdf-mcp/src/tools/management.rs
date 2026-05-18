@@ -1,10 +1,10 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
+use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{
     build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
 };
-use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -145,8 +145,7 @@ pub async fn handle_get_config(
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let mut cm = ConfigManager::new(&kb_path);
-    cm.load()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    cm.load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
 
     let data: std::collections::HashMap<String, String> = cm.all().clone();
     let result = serde_json::json!({
@@ -163,18 +162,12 @@ pub async fn handle_set_config(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let key = args["key"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing key"))?;
-    let value = args["value"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing value"))?;
+    let key = args["key"].as_str().ok_or_else(|| anyhow::anyhow!("Missing key"))?;
+    let value = args["value"].as_str().ok_or_else(|| anyhow::anyhow!("Missing value"))?;
 
     let mut cm = ConfigManager::new(&kb_path);
-    cm.load()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
-    cm.set(key, value)
-        .map_err(|e| anyhow::anyhow!("Failed to set config: {}", e))?;
+    cm.load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    cm.set(key, value).map_err(|e| anyhow::anyhow!("Failed to set config: {}", e))?;
 
     let result = serde_json::json!({
         "status": "success",
@@ -192,13 +185,11 @@ pub async fn handle_get_health_report(
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
     let reporter = HealthReporter::new(&kb_path);
-    let report = reporter
-        .report()
-        .map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
+    let report =
+        reporter.report().map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
 
-    let quality_snapshot = pdf_core::management::QualitySnapshotStore::new(&kb_path)
-        .read()
-        .unwrap_or_default();
+    let quality_snapshot =
+        pdf_core::management::QualitySnapshotStore::new(&kb_path).read().unwrap_or_default();
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
@@ -269,9 +260,7 @@ pub async fn handle_fix_suggest(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let issue_id = args["issue_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing issue_id"))?;
+    let issue_id = args["issue_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing issue_id"))?;
     let wiki_dir = kb_path.join("wiki");
     let kb_str = kb_path.to_string_lossy();
     let result = pdf_core::knowledge::fix_suggest(&wiki_dir, &kb_str, issue_id)?;
@@ -327,7 +316,7 @@ mod tests {
     fn test_management_tool_definitions() {
         let defs = management_tool_definitions();
         assert!(defs.len() >= 6);
-        
+
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"get_config"));
         assert!(names.contains(&"set_config"));
@@ -340,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_config_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
@@ -352,7 +341,7 @@ mod tests {
             "key": "test_key",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
@@ -364,7 +353,7 @@ mod tests {
             "knowledge_base": "/tmp/test_kb",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
@@ -377,7 +366,7 @@ mod tests {
             "knowledge_base": "/tmp/test_kb",
             "key": "test_key"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_err());
@@ -387,7 +376,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_health_report_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_health_report(&registry, &args).await;
         assert!(result.is_ok());
@@ -397,7 +386,7 @@ mod tests {
     async fn test_trigger_incremental_compile_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
-        
+
         let result = handle_trigger_incremental_compile(&ctx, &args).await;
         assert!(result.is_ok());
     }
@@ -405,7 +394,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_compile_status_default_kb() {
         let args = serde_json::json!({});
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_compile_status(&registry, &args).await;
         assert!(result.is_ok());
@@ -417,8 +406,9 @@ mod tests {
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["type"], "resource");
         assert_eq!(parsed["uri"], "ui://wiki/browser");
     }
@@ -427,21 +417,22 @@ mod tests {
     async fn test_get_config_with_valid_kb() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let index_dir = kb_path.join(".rsut_index");
         tokio::fs::create_dir_all(&index_dir).await.expect("Failed to create index dir");
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap()
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_get_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert!(parsed.get("config").is_some());
     }
 
@@ -449,23 +440,24 @@ mod tests {
     async fn test_set_config_with_valid_kb() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let index_dir = kb_path.join(".rsut_index");
         tokio::fs::create_dir_all(&index_dir).await.expect("Failed to create index dir");
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap(),
             "key": "test_key",
             "value": "test_value"
         });
-        
+
         let registry = create_test_context().workspace_registry;
         let result = handle_set_config(&registry, &args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["status"], "success");
         assert_eq!(parsed["key"], "test_key");
         assert_eq!(parsed["value"], "test_value");
@@ -475,17 +467,18 @@ mod tests {
     async fn test_get_compile_status_no_prior_compile() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let kb_path = temp_dir.path();
-        
+
         let args = serde_json::json!({
             "knowledge_base": kb_path.to_str().unwrap()
         });
-        
+
         let result = handle_get_compile_status(&args).await;
         assert!(result.is_ok());
         let content = result.unwrap();
         assert_eq!(content.len(), 1);
-        
-        let parsed: serde_json::Value = serde_json::from_str(&content[0].text).expect("Should be valid JSON");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content[0].text).expect("Should be valid JSON");
         assert_eq!(parsed["running"], false);
         assert_eq!(parsed["last_started"], serde_json::Value::Null);
         assert!(parsed.get("history").and_then(|h| h.as_array()).is_some());

@@ -27,12 +27,7 @@ impl<'a> VisualBuffer<'a> {
 
         let pixels = arena.alloc_slice_fill_default(size);
 
-        Self {
-            arena,
-            pixels,
-            width,
-            height,
-        }
+        Self { arena, pixels, width, height }
     }
 
     /// Encode the pixel data to Base64 directly from Arena memory.

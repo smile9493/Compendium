@@ -42,11 +42,7 @@ pub struct QualitySnapshotStore {
 
 impl QualitySnapshotStore {
     pub fn new(knowledge_base: &Path) -> Self {
-        Self {
-            path: knowledge_base
-                .join(".rsut_index")
-                .join("quality_snapshot.json"),
-        }
+        Self { path: knowledge_base.join(".rsut_index").join("quality_snapshot.json") }
     }
 
     pub fn read(&self) -> PdfResult<QualitySnapshot> {
@@ -142,12 +138,7 @@ pub fn count_contradiction_pairs(wiki_dir: &Path) -> usize {
 }
 
 #[allow(clippy::only_used_in_recursion)]
-fn scan_contradictions(
-    base: &Path,
-    dir: &Path,
-    seen: &mut HashSet<String>,
-    count: &mut usize,
-) {
+fn scan_contradictions(base: &Path, dir: &Path, seen: &mut HashSet<String>, count: &mut usize) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -160,11 +151,7 @@ fn scan_contradictions(
                 continue;
             };
             if let Some(entry) = crate::knowledge::entry::KnowledgeEntry::from_markdown(&content) {
-                let rel = path
-                    .strip_prefix(base)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .to_string();
+                let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                 for contra in &entry.contradictions {
                     let mut pair_key = [rel.clone(), contra.clone()];
                     pair_key.sort();

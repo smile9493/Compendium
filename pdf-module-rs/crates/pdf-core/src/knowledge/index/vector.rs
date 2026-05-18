@@ -68,11 +68,7 @@ pub struct TfidfModel {
 impl TfidfModel {
     /// Create a new TF-IDF model with the given output dimension.
     pub fn new(dimension: usize) -> Self {
-        Self {
-            dimension,
-            idf: HashMap::new(),
-            doc_count: 0.0,
-        }
+        Self { dimension, idf: HashMap::new(), doc_count: 0.0 }
     }
 
     /// Train the model on a corpus of documents (jieba-tokenized).
@@ -195,9 +191,7 @@ pub struct VectorStore {
 
 impl VectorStore {
     pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
+        Self { entries: Vec::new() }
     }
 
     /// Add or update a vector entry (upsert by path).
@@ -222,11 +216,7 @@ impl VectorStore {
             })
             .collect();
 
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(top_k);
         scored
     }
@@ -295,22 +285,14 @@ impl VectorIndex {
         let model = TfidfModel::new(dimension);
         let store = VectorStore::new();
 
-        Ok(Self {
-            model,
-            store,
-            index_dir,
-        })
+        Ok(Self { model, store, index_dir })
     }
 
     /// Train the TF-IDF model on the entire corpus of wiki entries.
     /// Must be called before embedding individual entries.
     pub fn train_model(&mut self, documents: &[String]) {
         self.model.train(documents);
-        info!(
-            count = documents.len(),
-            dim = self.model.dimension(),
-            "TF-IDF model trained"
-        );
+        info!(count = documents.len(), dim = self.model.dimension(), "TF-IDF model trained");
     }
 
     /// Embed and index a single entry.
@@ -370,11 +352,8 @@ impl VectorIndex {
         let mut store = VectorStore::new();
 
         // Rebuild IDF from saved entries
-        let docs: Vec<String> = snapshot
-            .entries
-            .iter()
-            .map(|e| format!("{} {}", e.title, e.path))
-            .collect();
+        let docs: Vec<String> =
+            snapshot.entries.iter().map(|e| format!("{} {}", e.title, e.path)).collect();
         model.train(&docs);
 
         for entry in snapshot.entries {
@@ -382,11 +361,7 @@ impl VectorIndex {
         }
 
         info!(entries = store.len(), "Vector index loaded from disk");
-        Ok(Some(Self {
-            model,
-            store,
-            index_dir,
-        }))
+        Ok(Some(Self { model, store, index_dir }))
     }
 
     /// Get the number of indexed entries.

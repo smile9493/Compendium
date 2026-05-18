@@ -47,12 +47,12 @@ pub mod validator;
 pub mod wiki;
 
 pub use config::ServerConfig;
-pub use extraction::{ExtractionRouter, ExtractionBackend, RemoteExtractionConfig};
+pub use extraction::{ExtractionBackend, ExtractionRouter, RemoteExtractionConfig};
 pub use extractor::McpPdfPipeline;
 #[cfg(feature = "knowledge")]
 pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};
 pub use tracing_setup::{
-    init_compact, init_development, init_production, init_with_config,
-    request_span, LogFormat, TracingConfig,
+    init_compact, init_development, init_production, init_with_config, request_span, LogFormat,
+    TracingConfig,
 };
 pub use validator::{FileValidator, PathValidationConfig};

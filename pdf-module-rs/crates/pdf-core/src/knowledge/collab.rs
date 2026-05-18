@@ -111,9 +111,8 @@ pub fn apply_patch_proposal(
     actor: Option<String>,
 ) -> PdfResult<WikiPatchResult> {
     let path = proposals_dir(knowledge_base).join(format!("{proposal_id}.json"));
-    let raw = fs::read_to_string(&path).map_err(|_| {
-        PdfModuleError::Storage(format!("proposal not found: {proposal_id}"))
-    })?;
+    let raw = fs::read_to_string(&path)
+        .map_err(|_| PdfModuleError::Storage(format!("proposal not found: {proposal_id}")))?;
     let proposal: PatchProposal =
         serde_json::from_str(&raw).map_err(|e| storage_err(&e.to_string()))?;
     ensure_lock_free(knowledge_base, &proposal.request.entry_path)?;
@@ -217,10 +216,7 @@ fn lock_expired(lock: &EntryLock) -> bool {
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 fn storage_err(e: impl std::fmt::Display) -> PdfModuleError {

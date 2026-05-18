@@ -42,13 +42,13 @@ use tokio::sync::oneshot;
 use tracing::{info, instrument};
 
 use pdf_core::knowledge::index::MetadataStore;
-use pdf_core::knowledge::renderer::WikiRenderer;
 use pdf_core::knowledge::quality::analyze_wiki;
+use pdf_core::knowledge::renderer::WikiRenderer;
 use pdf_core::knowledge::{graph, rebuild_all, search_with_mode, KnowledgeEngine, SearchMode};
 use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract};
 use pdf_core::management::{
-    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter, QualitySnapshotStore,
-    WorkspaceRegistry,
+    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
+    QualitySnapshotStore, WorkspaceRegistry,
 };
 use pdf_core::McpPdfPipeline;
 
@@ -66,10 +66,7 @@ pub struct HttpState {
     pub http_metrics: Option<Arc<HttpMetrics>>,
 }
 
-fn resolve_kb_from_request(
-    state: &HttpState,
-    kb_id: Option<&str>,
-) -> Option<PathBuf> {
+fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
     let resolved = if let Some(id) = kb_id {
         state.workspace_registry.path_for_id(id).ok()
     } else if let Some(ref p) = state.kb_path {
@@ -109,9 +106,7 @@ pub async fn run_http_server(
         let _ = tx.send(());
     }
 
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| anyhow::anyhow!("HTTP server error: {}", e))
+    axum::serve(listener, app).await.map_err(|e| anyhow::anyhow!("HTTP server error: {}", e))
 }
 
 fn build_router(state: HttpState) -> Router {
@@ -157,9 +152,7 @@ fn build_router(state: HttpState) -> Router {
 /// Serve the Vue3 SPA using OriginalUri to extract the request path.
 /// For requested paths under `/app/`, we serve static files from the
 /// embedded dist and fall back to `index.html` for SPA client-side routing.
-async fn serve_spa(
-    uri: axum::extract::OriginalUri,
-) -> impl IntoResponse {
+async fn serve_spa(uri: axum::extract::OriginalUri) -> impl IntoResponse {
     let path = uri.path();
 
     // Don't interfere with API paths (return 404 for unknown API endpoints)
@@ -169,7 +162,11 @@ async fn serve_spa(
 
     // Strip leading slash and optional /app/ prefix for asset lookup
     let lookup = if let Some(rest) = path.strip_prefix("/app/") {
-        if rest.is_empty() { "index.html" } else { rest }
+        if rest.is_empty() {
+            "index.html"
+        } else {
+            rest
+        }
     } else if path == "/app" {
         "index.html"
     } else {
@@ -180,27 +177,16 @@ async fn serve_spa(
 
     if let Some(content) = Assets::get(lookup) {
         let mime = mime_from_path(lookup);
-        return (
-            [("Content-Type", mime)],
-            content.data.into_owned(),
-        )
-            .into_response();
+        return ([("Content-Type", mime)], content.data.into_owned()).into_response();
     }
 
     // SPA fallback: serve index.html for all unmatched non-API paths
     if let Some(content) = Assets::get("index.html") {
-        return (
-            [("Content-Type", "text/html; charset=utf-8")],
-            content.data.into_owned(),
-        )
+        return ([("Content-Type", "text/html; charset=utf-8")], content.data.into_owned())
             .into_response();
     }
 
-    (
-        axum::http::StatusCode::NOT_FOUND,
-        "SPA not found (pdf-web-ui not built?)",
-    )
-        .into_response()
+    (axum::http::StatusCode::NOT_FOUND, "SPA not found (pdf-web-ui not built?)").into_response()
 }
 
 fn mime_from_path(path: &str) -> &'static str {
@@ -300,11 +286,7 @@ async fn api_wiki_search(
         return Json(serde_json::json!({"results": [], "total": 0}));
     }
 
-    let mode = query
-        .mode
-        .as_deref()
-        .map(SearchMode::parse)
-        .unwrap_or(SearchMode::Hybrid);
+    let mode = query.mode.as_deref().map(SearchMode::parse).unwrap_or(SearchMode::Hybrid);
 
     let hits = match search_with_mode(&kb, &query.q, query.limit, mode) {
         Ok(h) => h,
@@ -323,13 +305,7 @@ async fn api_wiki_search(
 
     let results: Vec<serde_json::Value> = hits
         .into_iter()
-        .filter(|h| {
-            if let Some(ref domain) = query.domain {
-                h.domain == *domain
-            } else {
-                true
-            }
-        })
+        .filter(|h| if let Some(ref domain) = query.domain { h.domain == *domain } else { true })
         .map(|h| {
             *domain_counts.entry(h.domain.clone()).or_insert(0) += 1;
             let match_count = h.snippet.to_lowercase().matches(&lower_q).count().max(1);
@@ -459,15 +435,16 @@ async fn api_health(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return Json(serde_json::json!({"error": "No knowledge base configured"})).into_response(),
+        None => {
+            return Json(serde_json::json!({"error": "No knowledge base configured"}))
+                .into_response()
+        }
     };
 
     let reporter = HealthReporter::new(&kb);
     match reporter.report() {
         Ok(report) => {
-            let quality_snapshot = QualitySnapshotStore::new(&kb)
-                .read()
-                .unwrap_or_default();
+            let quality_snapshot = QualitySnapshotStore::new(&kb).read().unwrap_or_default();
             Json(serde_json::json!({
                 "total_entries": report.total_entries,
                 "orphan_count": report.orphan_count,
@@ -500,7 +477,13 @@ async fn api_config_get(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
     };
 
     let mut cm = ConfigManager::new(&kb);
@@ -528,7 +511,13 @@ async fn api_config_set(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
     };
 
     let mut cm = ConfigManager::new(&kb);
@@ -557,7 +546,13 @@ async fn api_config_remove(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
     };
 
     let mut cm = ConfigManager::new(&kb);
@@ -783,7 +778,13 @@ async fn api_compile_status(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
     };
 
     match build_compile_status_json(&kb) {
@@ -803,7 +804,13 @@ async fn api_index_rebuild(
 ) -> impl IntoResponse {
     let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
         Some(p) => p,
-        None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response()
+        }
     };
 
     if !kb.join("wiki").exists() {
@@ -955,7 +962,9 @@ fn count_entries_by_domain(wiki_dir: &PathBuf) -> std::collections::HashMap<Stri
                         for f in files.flatten() {
                             let fp = f.path();
                             if fp.extension().map_or(false, |e| e == "md")
-                                && fp.file_name().map_or(false, |n| !n.to_string_lossy().starts_with('.'))
+                                && fp
+                                    .file_name()
+                                    .map_or(false, |n| !n.to_string_lossy().starts_with('.'))
                             {
                                 count += 1;
                             }
@@ -997,12 +1006,14 @@ fn highlight_snippet(snippet: &str, query: &str) -> String {
 
     let mut i = 0usize;
     while i < s_chars.len() {
-        if s_chars[i..].len() >= q_chars.len()
-            && s_chars[i..i + q_chars.len()] == q_chars[..]
-        {
-            result.push_str(&orig_chars[last_end..i].iter().map(|&c| esc_char(c)).collect::<String>());
+        if s_chars[i..].len() >= q_chars.len() && s_chars[i..i + q_chars.len()] == q_chars[..] {
+            result.push_str(
+                &orig_chars[last_end..i].iter().map(|&c| esc_char(c)).collect::<String>(),
+            );
             result.push_str("<mark>");
-            result.push_str(&orig_chars[i..i + q_chars.len()].iter().map(|&c| esc_char(c)).collect::<String>());
+            result.push_str(
+                &orig_chars[i..i + q_chars.len()].iter().map(|&c| esc_char(c)).collect::<String>(),
+            );
             result.push_str("</mark>");
             i += q_chars.len();
             last_end = i;

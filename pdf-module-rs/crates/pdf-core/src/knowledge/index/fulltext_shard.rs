@@ -70,11 +70,7 @@ impl FulltextShardManager {
         // Evict coldest if at capacity
         self.evict_if_needed();
 
-        let domain_index_dir = self
-            .knowledge_base
-            .join(".rsut_index")
-            .join("tantivy")
-            .join(domain);
+        let domain_index_dir = self.knowledge_base.join(".rsut_index").join("tantivy").join(domain);
 
         std::fs::create_dir_all(&domain_index_dir).map_err(|e| {
             PdfModuleError::Storage(format!(
@@ -88,13 +84,7 @@ impl FulltextShardManager {
         // Instead we open at the domain-specific path by tricking the knowledge_base parameter.
         let index = FulltextIndex::open_at(&domain_index_dir)?;
 
-        self.warm.insert(
-            domain.to_string(),
-            WarmShard {
-                index,
-                last_access: Instant::now(),
-            },
-        );
+        self.warm.insert(domain.to_string(), WarmShard { index, last_access: Instant::now() });
 
         debug!(domain = %domain, "Fulltext shard warmed");
         Ok(())
@@ -147,11 +137,7 @@ impl FulltextShardManager {
             }
         }
 
-        info!(
-            domains = domains.len(),
-            total = total,
-            "All fulltext shards rebuilt"
-        );
+        info!(domains = domains.len(), total = total, "All fulltext shards rebuilt");
         Ok(total)
     }
 
@@ -184,11 +170,7 @@ impl FulltextShardManager {
         }
 
         // Sort by score descending
-        all_hits.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        all_hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         all_hits.truncate(limit);
 
         Ok(all_hits)
@@ -204,10 +186,7 @@ impl FulltextShardManager {
             shard.last_access = Instant::now();
             f(&mut shard.index)
         } else {
-            Err(PdfModuleError::Storage(format!(
-                "Shard '{}' not available after warm",
-                domain
-            )))
+            Err(PdfModuleError::Storage(format!("Shard '{}' not available after warm", domain)))
         }
     }
 
@@ -239,11 +218,8 @@ impl FulltextShardManager {
 
     fn evict_if_needed(&mut self) {
         while self.warm.len() >= self.max_warm {
-            let coldest = self
-                .warm
-                .iter()
-                .min_by_key(|(_, s)| s.last_access)
-                .map(|(d, _)| d.clone());
+            let coldest =
+                self.warm.iter().min_by_key(|(_, s)| s.last_access).map(|(d, _)| d.clone());
 
             if let Some(domain) = coldest {
                 self.warm.remove(&domain);
@@ -327,10 +303,7 @@ Content here."#,
 
         let mut mgr = FulltextShardManager::new(dir.path());
         mgr.warm_shard("rust").unwrap();
-        mgr.with_shard("rust", |idx| {
-            idx.rebuild(&dir.path().join("wiki").join("rust"))
-        })
-        .unwrap();
+        mgr.with_shard("rust", |idx| idx.rebuild(&dir.path().join("wiki").join("rust"))).unwrap();
 
         let results = mgr.search("test", 10).unwrap();
         assert!(!results.is_empty(), "Should find at least one result");

@@ -48,12 +48,7 @@ pub struct CacheConfig {
 
 impl Default for CacheConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            max_size: 1000,
-            ttl_seconds: 3600,
-            cache_dir: None,
-        }
+        Self { enabled: true, max_size: 1000, ttl_seconds: 3600, cache_dir: None }
     }
 }
 
@@ -96,9 +91,7 @@ pub enum AuditBackendConfig {
 
 impl Default for AuditBackendConfig {
     fn default() -> Self {
-        Self::File {
-            log_dir: "./logs/audit".to_string(),
-        }
+        Self::File { log_dir: "./logs/audit".to_string() }
     }
 }
 
@@ -112,11 +105,7 @@ pub struct AuditConfig {
 
 impl Default for AuditConfig {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            backend: AuditBackendConfig::default(),
-            retention_days: 30,
-        }
+        Self { enabled: true, backend: AuditBackendConfig::default(), retention_days: 30 }
     }
 }
 
@@ -152,10 +141,7 @@ pub struct LoggingConfig {
 
 impl Default for LoggingConfig {
     fn default() -> Self {
-        Self {
-            level: "info".to_string(),
-            format: LogFormat::Json,
-        }
+        Self { level: "info".to_string(), format: LogFormat::Json }
     }
 }
 
@@ -173,11 +159,7 @@ pub struct PathValidationConfig {
 
 impl Default for PathValidationConfig {
     fn default() -> Self {
-        Self {
-            require_absolute: true,
-            allow_traversal: false,
-            base_dir: None,
-        }
+        Self { require_absolute: true, allow_traversal: false, base_dir: None }
     }
 }
 
@@ -226,15 +208,9 @@ pub struct S3StorageConfig {
     pub region: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prefix: Option<String>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "redact_secret"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "redact_secret")]
     pub access_key: Option<String>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "redact_secret"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "redact_secret")]
     pub secret_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
@@ -273,9 +249,7 @@ impl Default for FileStorageConfig {
     fn default() -> Self {
         Self {
             storage_type: StorageType::Local,
-            local: Some(LocalStorageConfig {
-                base_dir: "./data".to_string(),
-            }),
+            local: Some(LocalStorageConfig { base_dir: "./data".to_string() }),
             s3: None,
             gcs: None,
             azure: None,
@@ -290,9 +264,9 @@ impl FileStorageConfig {
             StorageType::Local if self.local.is_none() => Err(PdfError::Config(
                 "Local storage config is required for local storage type".into(),
             )),
-            StorageType::S3 if self.s3.is_none() => Err(PdfError::Config(
-                "S3 storage config is required for S3 storage type".into(),
-            )),
+            StorageType::S3 if self.s3.is_none() => {
+                Err(PdfError::Config("S3 storage config is required for S3 storage type".into()))
+            }
             _ => Ok(()),
         }
     }
@@ -399,20 +373,14 @@ impl AppConfig {
         let content = std::fs::read_to_string(path)
             .map_err(|e| PdfError::Config(format!("Failed to read config file: {}", e)))?;
 
-        let ext = std::path::Path::new(path)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let ext = std::path::Path::new(path).extension().and_then(|s| s.to_str()).unwrap_or("");
 
         let config: Self = match ext.to_lowercase().as_str() {
             "toml" => toml::from_str(&content)
                 .map_err(|e| PdfError::Config(format!("Failed to parse TOML: {}", e))),
             "json" => serde_json::from_str(&content)
                 .map_err(|e| PdfError::Config(format!("Failed to parse JSON: {}", e))),
-            _ => Err(PdfError::Config(format!(
-                "Unsupported config format: {}",
-                ext
-            ))),
+            _ => Err(PdfError::Config(format!("Unsupported config format: {}", ext))),
         }?;
         config.validate()?;
         Ok(config)
@@ -458,10 +426,7 @@ mod tests {
     #[test]
     fn test_max_file_size_bytes() {
         let config = AppConfig {
-            security: SecurityConfig {
-                max_file_size_mb: 200,
-                ..Default::default()
-            },
+            security: SecurityConfig { max_file_size_mb: 200, ..Default::default() },
             ..Default::default()
         };
         assert_eq!(config.max_file_size_bytes(), 200 * 1024 * 1024);

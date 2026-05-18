@@ -79,9 +79,7 @@ pub fn resolve_wiki_path(knowledge_base: &Path, entry_path: &str) -> PdfResult<P
         )));
     }
     if !entry_path.ends_with(".md") {
-        return Err(PdfModuleError::Storage(format!(
-            "entry_path must end with .md: {entry_path}"
-        )));
+        return Err(PdfModuleError::Storage(format!("entry_path must end with .md: {entry_path}")));
     }
 
     let wiki_dir = knowledge_base.join("wiki");
@@ -98,14 +96,15 @@ pub fn resolve_wiki_path(knowledge_base: &Path, entry_path: &str) -> PdfResult<P
 }
 
 /// Preview patch without writing to disk.
-pub fn preview_patch(knowledge_base: &Path, request: &WikiPatchRequest) -> PdfResult<WikiPatchResult> {
+pub fn preview_patch(
+    knowledge_base: &Path,
+    request: &WikiPatchRequest,
+) -> PdfResult<WikiPatchResult> {
     let target = resolve_wiki_path(knowledge_base, &request.entry_path)?;
     let original = if target.exists() {
         fs::read_to_string(&target).map_err(|e| PdfModuleError::Storage(e.to_string()))?
     } else {
-        return Err(PdfModuleError::FileNotFound(
-            target.to_string_lossy().to_string(),
-        ));
+        return Err(PdfModuleError::FileNotFound(target.to_string_lossy().to_string()));
     };
 
     let patched = apply_operations(&original, &request.operations)?;
@@ -118,7 +117,10 @@ pub fn preview_patch(knowledge_base: &Path, request: &WikiPatchRequest) -> PdfRe
 }
 
 /// Apply patch atomically (write `.md.tmp` then rename).
-pub fn apply_patch(knowledge_base: &Path, request: &WikiPatchRequest) -> PdfResult<WikiPatchResult> {
+pub fn apply_patch(
+    knowledge_base: &Path,
+    request: &WikiPatchRequest,
+) -> PdfResult<WikiPatchResult> {
     let target = resolve_wiki_path(knowledge_base, &request.entry_path)?;
     let original = fs::read_to_string(&target).map_err(|e| {
         PdfModuleError::Storage(format!("Failed to read {}: {e}", request.entry_path))
@@ -149,18 +151,15 @@ fn apply_operations(content: &str, ops: &[PatchOp]) -> PdfResult<String> {
 
 fn apply_one(content: &str, op: &PatchOp) -> PdfResult<String> {
     match op {
-        PatchOp::ReplaceSection { heading, new_content } => replace_section(content, heading, new_content),
-        PatchOp::ReplaceFrontMatter {
-            tags,
-            related,
-            contradictions,
-            quality_score,
-        } => merge_front_matter(content, tags, related, contradictions, *quality_score),
-        PatchOp::SearchReplace {
-            old,
-            new,
-            occurrence,
-        } => search_replace(content, old, new, occurrence),
+        PatchOp::ReplaceSection { heading, new_content } => {
+            replace_section(content, heading, new_content)
+        }
+        PatchOp::ReplaceFrontMatter { tags, related, contradictions, quality_score } => {
+            merge_front_matter(content, tags, related, contradictions, *quality_score)
+        }
+        PatchOp::SearchReplace { old, new, occurrence } => {
+            search_replace(content, old, new, occurrence)
+        }
     }
 }
 
@@ -196,9 +195,8 @@ fn replace_section(content: &str, heading: &str, new_content: &str) -> PdfResult
         }
     }
 
-    let start_idx = start_idx.ok_or_else(|| {
-        PdfModuleError::Storage(format!("Heading not found: {heading}"))
-    })?;
+    let start_idx = start_idx
+        .ok_or_else(|| PdfModuleError::Storage(format!("Heading not found: {heading}")))?;
 
     let mut new_body = String::new();
     for (i, line) in lines.iter().enumerate() {
@@ -224,9 +222,8 @@ fn merge_front_matter(
     contradictions: &Option<Vec<String>>,
     quality_score: Option<f32>,
 ) -> PdfResult<String> {
-    let entry = KnowledgeEntry::from_markdown(content).ok_or_else(|| {
-        PdfModuleError::Storage("Missing or invalid YAML front matter".into())
-    })?;
+    let entry = KnowledgeEntry::from_markdown(content)
+        .ok_or_else(|| PdfModuleError::Storage("Missing or invalid YAML front matter".into()))?;
 
     let mut lines: Vec<String> = Vec::new();
     lines.push("---".to_string());
@@ -236,12 +233,8 @@ fn merge_front_matter(
         let joined: String = t.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("tags: [{joined}]"));
     } else {
-        let joined: String = entry
-            .tags
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let joined: String =
+            entry.tags.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("tags: [{joined}]"));
     }
     lines.push(format!("level: {}", level_yaml(&entry.level)));
@@ -253,24 +246,16 @@ fn merge_front_matter(
         let joined: String = r.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("related: [{joined}]"));
     } else {
-        let joined: String = entry
-            .related
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let joined: String =
+            entry.related.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("related: [{joined}]"));
     }
     if let Some(c) = contradictions {
         let joined: String = c.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("contradictions: [{joined}]"));
     } else {
-        let joined: String = entry
-            .contradictions
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let joined: String =
+            entry.contradictions.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
         lines.push(format!("contradictions: [{joined}]"));
     }
     lines.push("---".to_string());

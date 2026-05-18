@@ -28,9 +28,7 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use tower::{Layer, Service};
 
-static DEFAULT_BUCKETS: &[f64] = &[
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-];
+static DEFAULT_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
 pub struct HttpMetrics {
     pub registry: Registry,
@@ -40,15 +38,11 @@ pub struct HttpMetrics {
 
 impl HttpMetrics {
     pub fn new() -> Self {
-        let registry = Registry::new_custom(
-            Some("rsut_pdf_mcp".into()),
-            None,
-        )
-        .expect("failed to create metrics registry");
+        let registry = Registry::new_custom(Some("rsut_pdf_mcp".into()), None)
+            .expect("failed to create metrics registry");
 
         let requests_total = IntCounterVec::new(
-            Opts::new("http_requests_total", "Total HTTP requests")
-                .namespace("rsut_pdf_mcp"),
+            Opts::new("http_requests_total", "Total HTTP requests").namespace("rsut_pdf_mcp"),
             &["method", "path", "status"],
         )
         .expect("failed to create http_requests_total");
@@ -73,11 +67,7 @@ impl HttpMetrics {
             .register(Box::new(process_collector))
             .expect("failed to register process collector");
 
-        Self {
-            registry,
-            requests_total,
-            request_duration,
-        }
+        Self { registry, requests_total, request_duration }
     }
 
     pub fn render(&self) -> String {
@@ -96,16 +86,16 @@ impl Default for HttpMetrics {
 }
 
 /// Handler for `GET /metrics`.
-pub async fn metrics_endpoint(Extension(metrics): Extension<Arc<HttpMetrics>>) -> impl IntoResponse {
+pub async fn metrics_endpoint(
+    Extension(metrics): Extension<Arc<HttpMetrics>>,
+) -> impl IntoResponse {
     let body = metrics.render();
     (StatusCode::OK, body)
 }
 
 /// Attach the `/metrics` route to an existing router.
 pub fn add_metrics_route(router: Router, metrics: Arc<HttpMetrics>) -> Router {
-    router
-        .route("/metrics", get(metrics_endpoint))
-        .layer(axum::extract::Extension(metrics))
+    router.route("/metrics", get(metrics_endpoint)).layer(axum::extract::Extension(metrics))
 }
 
 /// Tower Layer that wraps every request with metrics tracking.
@@ -124,10 +114,7 @@ impl<S> Layer<S> for MetricsLayer {
     type Service = MetricsService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        MetricsService {
-            inner,
-            metrics: Arc::clone(&self.metrics),
-        }
+        MetricsService { inner, metrics: Arc::clone(&self.metrics) }
     }
 }
 
@@ -146,7 +133,9 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -165,14 +154,8 @@ where
             let status = response.status().as_u16().to_string();
             let duration = start.elapsed().as_secs_f64();
 
-            metrics
-                .requests_total
-                .with_label_values(&[&method, &path, &status])
-                .inc();
-            metrics
-                .request_duration
-                .with_label_values(&[&method, &path])
-                .observe(duration);
+            metrics.requests_total.with_label_values(&[&method, &path, &status]).inc();
+            metrics.request_duration.with_label_values(&[&method, &path]).observe(duration);
 
             Ok(response)
         })
@@ -186,9 +169,7 @@ mod tests {
     #[test]
     fn metrics_render_opens_with_help() {
         let m = HttpMetrics::new();
-        m.requests_total
-            .with_label_values(&["GET", "/health", "200"])
-            .inc();
+        m.requests_total.with_label_values(&["GET", "/health", "200"]).inc();
         let output = m.render();
         assert!(output.contains("http_requests_total"));
         assert!(output.contains("rsut_pdf_mcp"));
@@ -197,15 +178,9 @@ mod tests {
     #[test]
     fn metrics_records_multiple_statuses() {
         let m = HttpMetrics::new();
-        m.requests_total
-            .with_label_values(&["GET", "/api/health", "200"])
-            .inc();
-        m.requests_total
-            .with_label_values(&["POST", "/api/config", "500"])
-            .inc();
-        m.requests_total
-            .with_label_values(&["GET", "/api/health", "200"])
-            .inc();
+        m.requests_total.with_label_values(&["GET", "/api/health", "200"]).inc();
+        m.requests_total.with_label_values(&["POST", "/api/config", "500"]).inc();
+        m.requests_total.with_label_values(&["GET", "/api/health", "200"]).inc();
 
         let output = m.render();
         assert!(output.contains("200"));
@@ -215,12 +190,8 @@ mod tests {
     #[test]
     fn histogram_observes_durations() {
         let m = HttpMetrics::new();
-        m.request_duration
-            .with_label_values(&["GET", "/api/search"])
-            .observe(0.15);
-        m.request_duration
-            .with_label_values(&["GET", "/api/search"])
-            .observe(0.35);
+        m.request_duration.with_label_values(&["GET", "/api/search"]).observe(0.15);
+        m.request_duration.with_label_values(&["GET", "/api/search"]).observe(0.35);
 
         let output = m.render();
         assert!(output.contains("http_request_duration_seconds"));

@@ -3,10 +3,10 @@
 //! Persists full jobs under `.rsut_index/compile_jobs/{job_id}.json` and keeps
 //! a compatibility summary in `compile_status.json`.
 
-use std::fs;
-use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::error::{PdfModuleError, PdfResult};
@@ -118,10 +118,7 @@ fn default_stages() -> Vec<CompileStageRecord> {
     CompileStage::ALL
         .into_iter()
         .map(|s| {
-            let retryable = matches!(
-                s,
-                CompileStage::IndexRebuild | CompileStage::QualityGate
-            );
+            let retryable = matches!(s, CompileStage::IndexRebuild | CompileStage::QualityGate);
             CompileStageRecord::new(s, retryable)
         })
         .collect()
@@ -250,16 +247,12 @@ impl CompileJobStore {
     pub fn load_job(&self, job_id: &str) -> PdfResult<CompileJob> {
         let path = self.job_path(job_id);
         if !path.exists() {
-            return Err(PdfModuleError::FileNotFound(format!(
-                "Compile job not found: {job_id}"
-            )));
+            return Err(PdfModuleError::FileNotFound(format!("Compile job not found: {job_id}")));
         }
-        let content = fs::read_to_string(&path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to read compile job: {e}"))
-        })?;
-        serde_json::from_str(&content).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to parse compile job: {e}"))
-        })
+        let content = fs::read_to_string(&path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read compile job: {e}")))?;
+        serde_json::from_str(&content)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to parse compile job: {e}")))
     }
 
     pub fn active_job_id(&self) -> PdfResult<Option<String>> {
@@ -333,9 +326,8 @@ impl CompileJobStore {
     pub fn set_awaiting_agent(&self, job_id: &str) -> PdfResult<CompileJob> {
         let mut job = self.load_job(job_id)?;
         job.pipeline_status = PipelineStatus::AwaitingAgent;
-        job.message = Some(
-            "Extraction complete. Waiting for Agent to write wiki entries.".to_string(),
-        );
+        job.message =
+            Some("Extraction complete. Waiting for Agent to write wiki entries.".to_string());
         job.updated_at = Utc::now();
         self.write_job(&job)?;
         self.sync_status_summary(&job, false)?;
@@ -356,7 +348,11 @@ impl CompileJobStore {
         self.write_job(&job)
     }
 
-    pub fn record_entry_saved(&self, job_id: &str, entry_path: impl Into<String>) -> PdfResult<CompileJob> {
+    pub fn record_entry_saved(
+        &self,
+        job_id: &str,
+        entry_path: impl Into<String>,
+    ) -> PdfResult<CompileJob> {
         let path = entry_path.into();
         let mut job = self.load_job(job_id)?;
         if !job.saved_entry_paths.contains(&path) {
@@ -407,10 +403,7 @@ impl CompileJobStore {
         };
         let running = record.running
             || job.as_ref().is_some_and(|j| {
-                matches!(
-                    j.pipeline_status,
-                    PipelineStatus::Running | PipelineStatus::AwaitingAgent
-                )
+                matches!(j.pipeline_status, PipelineStatus::Running | PipelineStatus::AwaitingAgent)
             });
         let pipeline_status = job
             .as_ref()
@@ -444,12 +437,10 @@ impl CompileJobStore {
         })?;
         let path = self.job_path(&job.job_id);
         let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, &json).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to write compile job: {e}"))
-        })?;
-        fs::rename(&tmp, &path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to commit compile job: {e}"))
-        })?;
+        fs::write(&tmp, &json)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to write compile job: {e}")))?;
+        fs::rename(&tmp, &path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to commit compile job: {e}")))?;
         Ok(())
     }
 
@@ -549,13 +540,7 @@ mod tests {
         assert_eq!(loaded.pipeline_status, PipelineStatus::AwaitingAgent);
 
         store.record_entry_saved(&id, "wiki/it/foo.md").unwrap();
-        store
-            .complete_job(
-                &id,
-                PipelineStatus::Completed,
-                Some("done".to_string()),
-            )
-            .unwrap();
+        store.complete_job(&id, PipelineStatus::Completed, Some("done".to_string())).unwrap();
 
         let view = store.build_view().unwrap();
         assert!(!view.running);
@@ -570,12 +555,9 @@ pub fn build_compile_status_json(knowledge_base: &Path) -> PdfResult<serde_json:
 
     let store = CompileJobStore::new(knowledge_base);
     let view = store.build_view()?;
-    let mut value = serde_json::to_value(&view).map_err(|e| {
-        PdfModuleError::Storage(format!("Failed to serialize compile view: {e}"))
-    })?;
-    let snapshot = QualitySnapshotStore::new(knowledge_base)
-        .read()
-        .unwrap_or_default();
+    let mut value = serde_json::to_value(&view)
+        .map_err(|e| PdfModuleError::Storage(format!("Failed to serialize compile view: {e}")))?;
+    let snapshot = QualitySnapshotStore::new(knowledge_base).read().unwrap_or_default();
     if let Some(obj) = value.as_object_mut() {
         obj.insert(
             "quality_snapshot".to_string(),

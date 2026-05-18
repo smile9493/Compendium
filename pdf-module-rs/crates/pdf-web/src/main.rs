@@ -60,19 +60,12 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    tracing::warn!(
-        "pdf-web is deprecated; use pdf-mcp for unified HTTP + wiki UI (pdf-web-ui)"
-    );
+    tracing::warn!("pdf-web is deprecated; use pdf-mcp for unified HTTP + wiki UI (pdf-web-ui)");
 
     let cli = Cli::parse();
-    let state = AppState {
-        kb_path: cli.knowledge_base,
-    };
+    let state = AppState { kb_path: cli.knowledge_base };
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
     let app = Router::new()
         .route("/api/health", get(api_health))
@@ -88,9 +81,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Web panel listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
 
     Ok(())
 }
@@ -134,11 +125,10 @@ async fn api_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             "report_text": report.to_string(),
         }))
         .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }
 
@@ -178,11 +168,10 @@ async fn api_config_set(
     }
     match cm.set(&body.key, &body.value) {
         Ok(()) => Json(serde_json::json!({"status": "ok", "key": body.key})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }
 
@@ -200,22 +189,20 @@ async fn api_config_remove(
     }
     match cm.remove(&key) {
         Ok(()) => Json(serde_json::json!({"status": "ok", "removed": key})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }
 
 async fn api_compile_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match pdf_core::management::build_compile_status_json(&state.kb_path) {
         Ok(v) => Json(v).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }
 
@@ -249,11 +236,10 @@ async fn api_compile_trigger(State(state): State<Arc<AppState>>) -> impl IntoRes
             "incremental_result": result,
         }))
         .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }
 
@@ -274,10 +260,9 @@ async fn api_index_rebuild(State(state): State<Arc<AppState>>) -> impl IntoRespo
             "graph_edges": stats.graph_edges,
         }))
         .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        }
     }
 }

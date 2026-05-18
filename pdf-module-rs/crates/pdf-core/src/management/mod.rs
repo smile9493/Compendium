@@ -5,25 +5,25 @@
 //!
 //! All entry points call into these modules to ensure data consistency.
 
-pub mod compile_status;
 #[cfg(feature = "knowledge")]
 pub mod compile_job;
+pub mod compile_status;
 pub mod config_manager;
 #[cfg(feature = "knowledge")]
 pub mod health_reporter;
 #[cfg(feature = "knowledge")]
 pub mod quality_snapshot;
-pub mod types;
 #[cfg(feature = "knowledge")]
 pub mod sync;
+pub mod types;
 pub mod workspace;
 
-pub use compile_status::{CompileFinishStats, CompileGuard, CompileStatusStore};
 #[cfg(feature = "knowledge")]
 pub use compile_job::{
     build_compile_status_json, CompileArtifacts, CompileJob, CompileJobStats, CompileJobStore,
     CompileJobView, CompileStage, CompileStageRecord, CompileTrigger, PipelineStatus, StageStatus,
 };
+pub use compile_status::{CompileFinishStats, CompileGuard, CompileStatusStore};
 pub use config_manager::ConfigManager;
 #[cfg(feature = "knowledge")]
 pub use health_reporter::HealthReporter;
@@ -31,10 +31,10 @@ pub use health_reporter::HealthReporter;
 pub use quality_snapshot::{
     refresh_quality_snapshot, QualityIssueBrief, QualitySnapshot, QualitySnapshotStore,
 };
-pub use types::{CompileStatusRecord, HealthReport};
 #[cfg(feature = "knowledge")]
 pub use sync::{
-    build_local_manifest, sync_dir, sync_pull, sync_push, sync_status, FileSyncRemote, SyncManifest,
-    SyncRemote, SyncReport, SyncStatus,
+    build_local_manifest, sync_dir, sync_pull, sync_push, sync_status, FileSyncRemote,
+    SyncManifest, SyncRemote, SyncReport, SyncStatus,
 };
+pub use types::{CompileStatusRecord, HealthReport};
 pub use workspace::{WorkspaceEntry, WorkspaceId, WorkspaceRegistry};

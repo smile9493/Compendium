@@ -100,19 +100,12 @@ impl FulltextIndex {
         // Register CJK tokenizer
         tokenizer::register_cjk_tokenizer(&index);
 
-        let reader = index
-            .reader_builder()
-            .reload_policy(ReloadPolicy::Manual)
-            .try_into()
-            .map_err(|e| {
+        let reader =
+            index.reader_builder().reload_policy(ReloadPolicy::Manual).try_into().map_err(|e| {
                 PdfModuleError::Storage(format!("Failed to create tantivy reader: {}", e))
             })?;
 
-        Ok(Self {
-            index,
-            reader,
-            index_dir: index_dir.to_path_buf(),
-        })
+        Ok(Self { index, reader, index_dir: index_dir.to_path_buf() })
     }
 
     /// Rebuild the entire index by scanning all wiki Markdown files.
@@ -142,9 +135,7 @@ impl FulltextIndex {
     pub fn upsert_entry(&self, wiki_dir: &Path, rel_path: &str) -> PdfResult<()> {
         let full_path = wiki_dir.join(rel_path);
         if !full_path.exists() {
-            return Err(PdfModuleError::FileNotFound(
-                full_path.to_string_lossy().to_string(),
-            ));
+            return Err(PdfModuleError::FileNotFound(full_path.to_string_lossy().to_string()));
         }
 
         let schema = self.index.schema();
@@ -158,27 +149,23 @@ impl FulltextIndex {
 
         let _deleted = writer.delete_term(Term::from_field_text(path_field, rel_path));
 
-        let content = fs::read_to_string(&full_path).map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to read {}: {}", rel_path, e))
-        })?;
+        let content = fs::read_to_string(&full_path)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to read {}: {}", rel_path, e)))?;
 
-        let (title, domain, tags, body) = if let Some(entry) = KnowledgeEntry::from_markdown(&content)
-        {
-            let body = content.split("---").nth(2).unwrap_or(&content).to_string();
-            (entry.title, entry.domain, entry.tags.join(" "), body)
-        } else {
-            let filename = full_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("entry");
-            let title = filename.replace(".md", "").replace('_', " ");
-            let body = if content.starts_with("---") {
-                content.split("---").nth(2).unwrap_or(&content).to_string()
+        let (title, domain, tags, body) =
+            if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                let body = content.split("---").nth(2).unwrap_or(&content).to_string();
+                (entry.title, entry.domain, entry.tags.join(" "), body)
             } else {
-                content.clone()
+                let filename = full_path.file_name().and_then(|n| n.to_str()).unwrap_or("entry");
+                let title = filename.replace(".md", "").replace('_', " ");
+                let body = if content.starts_with("---") {
+                    content.split("---").nth(2).unwrap_or(&content).to_string()
+                } else {
+                    content.clone()
+                };
+                (title, String::new(), String::new(), body)
             };
-            (title, String::new(), String::new(), body)
-        };
 
         let title_field = schema.get_field(FIELD_TITLE).expect("field exists");
         let domain_field = schema.get_field(FIELD_DOMAIN).expect("field exists");
@@ -199,9 +186,9 @@ impl FulltextIndex {
             PdfModuleError::Storage(format!("Failed to commit tantivy index: {}", e))
         })?;
 
-        self.reader.reload().map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to reload reader: {}", e))
-        })?;
+        self.reader
+            .reload()
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to reload reader: {}", e)))?;
 
         debug!(path = %rel_path, "Tantivy entry upserted");
         Ok(())
@@ -209,9 +196,9 @@ impl FulltextIndex {
 
     /// Search the index for a query string.
     pub fn is_empty(&self) -> PdfResult<bool> {
-        self.reader.reload().map_err(|e| {
-            PdfModuleError::Storage(format!("Failed to reload reader: {}", e))
-        })?;
+        self.reader
+            .reload()
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to reload reader: {}", e)))?;
         let searcher = self.reader.searcher();
         Ok(searcher.num_docs() == 0)
     }
@@ -272,13 +259,7 @@ impl FulltextIndex {
             // Try to read the file for a snippet
             let snippet = self.extract_snippet(&path, query_str);
 
-            hits.push(SearchHit {
-                path,
-                title,
-                domain,
-                score,
-                snippet,
-            });
+            hits.push(SearchHit { path, title, domain, score, snippet });
         }
 
         Ok(hits)
@@ -314,11 +295,8 @@ impl FulltextIndex {
                 }
 
                 if let Ok(content) = fs::read_to_string(&path) {
-                    let rel = path
-                        .strip_prefix(base)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .to_string();
+                    let rel =
+                        path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
 
                     let (title, domain, tags, body) =
                         if let Some(entry) = KnowledgeEntry::from_markdown(&content) {

@@ -20,11 +20,7 @@ use pdf_core::{McpPdfPipeline, PathValidationConfig};
 use std::sync::Arc;
 
 pub fn default_path_config() -> PathValidationConfig {
-    PathValidationConfig {
-        require_absolute: true,
-        allow_traversal: false,
-        base_dir: None,
-    }
+    PathValidationConfig { require_absolute: true, allow_traversal: false, base_dir: None }
 }
 
 pub struct ToolContext {
@@ -49,12 +45,7 @@ impl ToolContext {
         upload_store: Option<Arc<UploadStore>>,
         workspace_registry: Arc<WorkspaceRegistry>,
     ) -> Self {
-        Self {
-            pipeline,
-            path_config: default_path_config(),
-            upload_store,
-            workspace_registry,
-        }
+        Self { pipeline, path_config: default_path_config(), upload_store, workspace_registry }
     }
 }
 
@@ -84,9 +75,7 @@ pub async fn dispatch_tool(
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
         "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
         "incremental_compile" => handle_incremental_compile(ctx, args).await,
-        "search_knowledge" => {
-            handle_search_knowledge(&ctx.workspace_registry, args).await
-        }
+        "search_knowledge" => handle_search_knowledge(&ctx.workspace_registry, args).await,
         "rebuild_index" => handle_rebuild_index(&ctx.workspace_registry, args).await,
         "get_entry_context" => handle_get_entry_context(&ctx.workspace_registry, args).await,
         "get_agent_context" => handle_get_agent_context(&ctx.workspace_registry, args).await,
@@ -115,16 +104,16 @@ pub async fn dispatch_tool(
         "apply_quality_gate" => handle_apply_quality_gate(&ctx.workspace_registry, args).await,
         "show_wiki_browser" => handle_show_wiki_browser().await,
         "list_workspaces" => handle_list_workspaces(&ctx.workspace_registry).await,
-        "set_active_workspace" => {
-            handle_set_active_workspace(&ctx.workspace_registry, args).await
-        }
+        "set_active_workspace" => handle_set_active_workspace(&ctx.workspace_registry, args).await,
         "register_workspace" => handle_register_workspace(&ctx.workspace_registry, args).await,
         "list_extraction_plugins" => handle_list_extraction_plugins(ctx).await,
         "probe_extraction" => handle_probe_extraction(ctx, args).await,
         "sync_status" => handle_sync_status(&ctx.workspace_registry, args).await,
         "sync_push" => handle_sync_push(&ctx.workspace_registry, args).await,
         "sync_pull" => handle_sync_pull(&ctx.workspace_registry, args).await,
-        "submit_patch_proposal" => handle_submit_patch_proposal(&ctx.workspace_registry, args).await,
+        "submit_patch_proposal" => {
+            handle_submit_patch_proposal(&ctx.workspace_registry, args).await
+        }
         "apply_patch_proposal" => handle_apply_patch_proposal(&ctx.workspace_registry, args).await,
         _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
     }
@@ -137,9 +126,7 @@ pub fn parse_kb_path(
 ) -> anyhow::Result<std::path::PathBuf> {
     let kb_id = args["kb_id"].as_str();
     let knowledge_base = args["knowledge_base"].as_str();
-    registry
-        .resolve_kb(kb_id, knowledge_base)
-        .map_err(|e| anyhow::anyhow!("{e}"))
+    registry.resolve_kb(kb_id, knowledge_base).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 #[cfg(test)]
@@ -167,7 +154,8 @@ mod tests {
     #[test]
     fn test_all_tool_definitions_unique_names() {
         let tools = all_tool_definitions();
-        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        let names: std::collections::HashSet<&str> =
+            tools.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names.len(), 40, "All tool names should be unique");
     }
 

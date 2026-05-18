@@ -8,7 +8,7 @@ pub mod platform;
 pub mod query;
 
 use crate::config::CliConfig;
-use crate::output::{print_info, print_result, OutputFormat};
+use crate::output::{OutputFormat, print_info, print_result};
 use crate::remote::{RemoteClient, RemoteConfig};
 use anyhow::Result;
 use serde_json::Value;
@@ -69,10 +69,7 @@ pub struct CmdResult {
 
 impl CmdResult {
     pub fn new(label: impl Into<String>, value: Value) -> Self {
-        Self {
-            label: label.into(),
-            value,
-        }
+        Self { label: label.into(), value }
     }
 
     /// Print this result in the requested format.
@@ -83,17 +80,13 @@ impl CmdResult {
 
 /// Build a remote client from CLI config, or error if not configured.
 pub fn build_remote_client(config: &CliConfig) -> Result<RemoteClient> {
-    let server = config
-        .server
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!(
+    let server = config.server.as_deref().ok_or_else(|| {
+        anyhow::anyhow!(
             "No remote server configured. Use 'config set server <URL>' or --server flag."
-        ))?;
+        )
+    })?;
 
-    let mut cfg = RemoteConfig {
-        server: server.to_string(),
-        ..Default::default()
-    };
+    let mut cfg = RemoteConfig { server: server.to_string(), ..Default::default() };
 
     if let Some(ref token) = config.token {
         cfg.token = Some(token.clone());
@@ -151,9 +144,7 @@ pub async fn remote_compile_uploaded(
         args["domain"] = serde_json::Value::String(d.to_string());
     }
 
-    let result = client
-        .call_tool("compile_uploaded_pdf", args)
-        .await?;
+    let result = client.call_tool("compile_uploaded_pdf", args).await?;
 
     Ok(CmdResult::new("Compile Result", result))
 }

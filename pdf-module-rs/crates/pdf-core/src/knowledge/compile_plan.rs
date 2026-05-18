@@ -69,26 +69,21 @@ pub struct CompilePlanStore {
 
 impl CompilePlanStore {
     pub fn new(knowledge_base: &Path) -> Self {
-        Self {
-            path: knowledge_base.join(".rsut_index").join(PLAN_FILE),
-        }
+        Self { path: knowledge_base.join(".rsut_index").join(PLAN_FILE) }
     }
 
     pub fn read(&self) -> PdfResult<Option<CompilePlan>> {
         if !self.path.exists() {
             return Ok(None);
         }
-        let content = fs::read_to_string(&self.path)
-            .map_err(|e| PdfModuleError::Storage(e.to_string()))?;
-        serde_json::from_str(&content)
-            .map_err(|e| PdfModuleError::Storage(e.to_string()))
-            .map(Some)
+        let content =
+            fs::read_to_string(&self.path).map_err(|e| PdfModuleError::Storage(e.to_string()))?;
+        serde_json::from_str(&content).map_err(|e| PdfModuleError::Storage(e.to_string())).map(Some)
     }
 
     pub fn write(&self, plan: &CompilePlan) -> PdfResult<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| PdfModuleError::Storage(e.to_string()))?;
+            fs::create_dir_all(parent).map_err(|e| PdfModuleError::Storage(e.to_string()))?;
         }
         let json = serde_json::to_string_pretty(plan)
             .map_err(|e| PdfModuleError::Storage(e.to_string()))?;
@@ -121,16 +116,14 @@ impl KnowledgeEngine {
 
         let cache = HashCache::load_or_create(kb)?;
         if raw_dir.exists() {
-            for entry in fs::read_dir(&raw_dir).map_err(|e| PdfModuleError::Storage(e.to_string()))?
+            for entry in
+                fs::read_dir(&raw_dir).map_err(|e| PdfModuleError::Storage(e.to_string()))?
             {
                 let entry = entry.map_err(|e| PdfModuleError::Storage(e.to_string()))?;
                 let path = entry.path();
                 if path.extension().is_some_and(|e| e == "pdf") {
                     if cache.needs_compile(&path).unwrap_or(true) {
-                        let stem = path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("unknown");
+                        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
                         let prompt = format!("raw/{stem}.compile_prompt.md");
                         tasks.push(PlanTask {
                             id: format!("l1-{stem}"),
@@ -178,11 +171,7 @@ impl KnowledgeEngine {
 
         scan_recompile_tasks(&wiki_dir, &wiki_dir, &mut tasks)?;
 
-        Ok(CompilePlan {
-            plan_version: 1,
-            generated_at: Utc::now().to_rfc3339(),
-            tasks,
-        })
+        Ok(CompilePlan { plan_version: 1, generated_at: Utc::now().to_rfc3339(), tasks })
     }
 
     /// Generate and persist the compile plan.
@@ -252,11 +241,7 @@ fn scan_recompile_tasks(base: &Path, dir: &Path, tasks: &mut Vec<PlanTask>) -> P
         if path.is_dir() {
             scan_recompile_tasks(base, &path, tasks)?;
         } else if path.extension().is_some_and(|e| e == "md") {
-            let rel = path
-                .strip_prefix(base)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
+            let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().replace('\\', "/");
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Some(meta) = KnowledgeEntry::from_markdown(&content) {
                     if meta.status == CompileStatus::NeedsRecompile {

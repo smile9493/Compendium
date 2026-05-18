@@ -48,19 +48,11 @@ use std::path::{Path, PathBuf};
 struct Cli {
     /// Use local mode: direct pdf-core integration, zero network
     /// Defaults to config file `mode` setting, or local if unset.
-    #[arg(
-        long,
-        global = true,
-        conflicts_with = "remote",
-    )]
+    #[arg(long, global = true, conflicts_with = "remote")]
     local: bool,
 
     /// Use remote mode: connect to a remote MCP server via HTTP
-    #[arg(
-        long,
-        global = true,
-        conflicts_with = "local",
-    )]
+    #[arg(long, global = true, conflicts_with = "local")]
     remote: bool,
 
     /// Remote server URL (overrides config)
@@ -233,50 +225,26 @@ async fn main() -> Result<()> {
         Mode::from_config(&cfg)
     };
 
-    let format = if cli.json {
-        OutputFormat::Json
-    } else {
-        OutputFormat::Text
-    };
+    let format = if cli.json { OutputFormat::Json } else { OutputFormat::Text };
 
     let result = match &cli.command {
-        Commands::Compile(args) => {
-            commands::compile::run_compile(&cfg, mode, args).await
-        }
+        Commands::Compile(args) => commands::compile::run_compile(&cfg, mode, args).await,
         Commands::MicroCompile(args) => {
             commands::compile::run_micro_compile(&cfg, mode, args).await
         }
-        Commands::Recompile(args) => {
-            commands::compile::run_recompile(&cfg, mode, args).await
-        }
-        Commands::Incremental(args) => {
-            commands::compile::run_incremental(&cfg, mode, args).await
-        }
-        Commands::Search(args) => {
-            commands::query::run_search(&cfg, mode, args).await
-        }
-        Commands::Context(args) => {
-            commands::query::run_context(&cfg, mode, args).await
-        }
-        Commands::ConceptMap(args) => {
-            commands::query::run_concept_map(&cfg, mode, args).await
-        }
-        Commands::Orphans(args) => {
-            commands::query::run_orphans(&cfg, mode, args).await
-        }
-        Commands::Stats(args) => {
-            commands::query::run_stats(&cfg, mode, args).await
-        }
+        Commands::Recompile(args) => commands::compile::run_recompile(&cfg, mode, args).await,
+        Commands::Incremental(args) => commands::compile::run_incremental(&cfg, mode, args).await,
+        Commands::Search(args) => commands::query::run_search(&cfg, mode, args).await,
+        Commands::Context(args) => commands::query::run_context(&cfg, mode, args).await,
+        Commands::ConceptMap(args) => commands::query::run_concept_map(&cfg, mode, args).await,
+        Commands::Orphans(args) => commands::query::run_orphans(&cfg, mode, args).await,
+        Commands::Stats(args) => commands::query::run_stats(&cfg, mode, args).await,
         Commands::Config { action } => cmd_config(&mut cfg, action, format),
-        Commands::Health { knowledge_base } => {
-            cmd_health(&cfg, mode, knowledge_base.as_deref())
-        }
+        Commands::Health { knowledge_base } => cmd_health(&cfg, mode, knowledge_base.as_deref()),
         Commands::Index { action } => cmd_index(&cfg, mode, action),
         Commands::Server { action } => cmd_server(action),
         Commands::Proxy => cmd_proxy(&cfg).await,
-        Commands::Workspace { action } => {
-            commands::platform::run_workspace(&cfg, action, format)?
-        }
+        Commands::Workspace { action } => commands::platform::run_workspace(&cfg, action, format)?,
         Commands::Sync { action } => commands::platform::run_sync(&cfg, mode, action, format)?,
     }?;
 
@@ -300,17 +268,20 @@ fn cmd_config(
             } else {
                 "No configuration file found (defaults apply).".to_string()
             };
-            Ok(CmdResult::new("CLI Configuration", serde_json::json!({
-                "config_path": path.to_string_lossy(),
-                "content": content,
-                "effective": {
-                    "mode": config.mode,
-                    "server": config.server,
-                    "token": config.token.as_ref().map(|_| "***"),
-                    "knowledge_base": config.knowledge_base,
-                    "remote_knowledge_base": config.remote_knowledge_base,
-                }
-            })))
+            Ok(CmdResult::new(
+                "CLI Configuration",
+                serde_json::json!({
+                    "config_path": path.to_string_lossy(),
+                    "content": content,
+                    "effective": {
+                        "mode": config.mode,
+                        "server": config.server,
+                        "token": config.token.as_ref().map(|_| "***"),
+                        "knowledge_base": config.knowledge_base,
+                        "remote_knowledge_base": config.remote_knowledge_base,
+                    }
+                }),
+            ))
         }
         ConfigAction::Get { key } => {
             let value = match key.as_str() {
@@ -322,16 +293,12 @@ fn cmd_config(
                     .as_ref()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default(),
-                "remote_knowledge_base" | "remote_kb" => config
-                    .remote_knowledge_base
-                    .clone()
-                    .unwrap_or_default(),
+                "remote_knowledge_base" | "remote_kb" => {
+                    config.remote_knowledge_base.clone().unwrap_or_default()
+                }
                 _ => anyhow::bail!("Unknown config key: {}", key),
             };
-            Ok(CmdResult::new(
-                format!("Config: {}", key),
-                serde_json::json!({ key: value }),
-            ))
+            Ok(CmdResult::new(format!("Config: {}", key), serde_json::json!({ key: value })))
         }
         ConfigAction::Set { key, value } => {
             match key.as_str() {
@@ -372,11 +339,7 @@ fn cmd_config(
 }
 
 /// Health check
-fn cmd_health(
-    config: &config::CliConfig,
-    mode: Mode,
-    kb_path: Option<&str>,
-) -> Result<CmdResult> {
+fn cmd_health(config: &config::CliConfig, mode: Mode, kb_path: Option<&str>) -> Result<CmdResult> {
     match mode {
         Mode::Local => {
             let kb = commands::resolve_kb_path(config, kb_path.map(PathBuf::from).as_deref());
@@ -395,11 +358,7 @@ fn cmd_health(
 }
 
 /// Index management
-fn cmd_index(
-    config: &config::CliConfig,
-    mode: Mode,
-    action: &IndexAction,
-) -> Result<CmdResult> {
+fn cmd_index(config: &config::CliConfig, mode: Mode, action: &IndexAction) -> Result<CmdResult> {
     match action {
         IndexAction::Rebuild { knowledge_base } => match mode {
             Mode::Local => {
@@ -413,15 +372,17 @@ fn cmd_index(
             Mode::Remote => {
                 let client = commands::build_remote_client(config)?;
                 let result = futures::executor::block_on(async {
-                    client.call_tool(
-                        "rebuild_index",
-                        serde_json::json!({
-                            "knowledge_base": commands::resolve_remote_kb(
-                                config,
-                                knowledge_base.as_deref(),
-                            ),
-                        }),
-                    ).await
+                    client
+                        .call_tool(
+                            "rebuild_index",
+                            serde_json::json!({
+                                "knowledge_base": commands::resolve_remote_kb(
+                                    config,
+                                    knowledge_base.as_deref(),
+                                ),
+                            }),
+                        )
+                        .await
                 })?;
                 Ok(CmdResult::new("Index Rebuild", result))
             }
@@ -433,8 +394,8 @@ fn cmd_index(
 fn cmd_server(action: &ServerAction) -> Result<CmdResult> {
     match action {
         ServerAction::Start => {
-            let bin_path = std::env::current_exe()
-                .context("Cannot determine current executable path")?;
+            let bin_path =
+                std::env::current_exe().context("Cannot determine current executable path")?;
             let bin_dir = bin_path.parent().unwrap_or(&bin_path);
 
             let mcp_bin = find_server_binary(bin_dir);
@@ -477,10 +438,7 @@ fn cmd_server(action: &ServerAction) -> Result<CmdResult> {
                 .context("Failed to run pkill")?;
 
             if output.status.success() {
-                Ok(CmdResult::new(
-                    "Server Stop",
-                    serde_json::json!({ "status": "stopped" }),
-                ))
+                Ok(CmdResult::new("Server Stop", serde_json::json!({ "status": "stopped" })))
             } else {
                 Ok(CmdResult::new(
                     "Server Stop",
@@ -537,11 +495,7 @@ fn find_server_binary(search_dir: &Path) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths).find_map(|dir| {
             let candidate = dir.join("pdf-mcp");
-            if candidate.exists() {
-                Some(candidate)
-            } else {
-                None
-            }
+            if candidate.exists() { Some(candidate) } else { None }
         })
     })
 }

@@ -31,13 +31,11 @@ pub struct UploadedFile {
 impl UploadStore {
     /// Create a new upload store with a temp directory.
     pub fn new() -> Result<Self> {
-        let temp_dir = std::env::temp_dir().join(format!("rsut-pdf-uploads-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("rsut-pdf-uploads-{}", std::process::id()));
         std::fs::create_dir_all(&temp_dir)
             .with_context(|| format!("Failed to create upload temp dir: {}", temp_dir.display()))?;
-        Ok(Self {
-            inner: Mutex::new(HashMap::new()),
-            temp_dir,
-        })
+        Ok(Self { inner: Mutex::new(HashMap::new()), temp_dir })
     }
 
     /// Store an uploaded file and return its `file_id`.
@@ -48,35 +46,22 @@ impl UploadStore {
         std::fs::write(&temp_path, data)
             .with_context(|| format!("Failed to write upload to: {}", temp_path.display()))?;
 
-        let file = UploadedFile {
-            temp_path,
-            filename: filename.to_string(),
-            size: data.len() as u64,
-        };
+        let file =
+            UploadedFile { temp_path, filename: filename.to_string(), size: data.len() as u64 };
 
-        self.inner
-            .lock()
-            .expect("UploadStore mutex poisoned")
-            .insert(file_id.clone(), file);
+        self.inner.lock().expect("UploadStore mutex poisoned").insert(file_id.clone(), file);
 
         Ok(file_id)
     }
 
     /// Retrieve a stored file by `file_id`.
     pub fn get(&self, file_id: &str) -> Option<UploadedFile> {
-        self.inner
-            .lock()
-            .expect("UploadStore mutex poisoned")
-            .get(file_id)
-            .cloned()
+        self.inner.lock().expect("UploadStore mutex poisoned").get(file_id).cloned()
     }
 
     /// Remove and return a stored file (for cleanup after processing).
     pub fn take(&self, file_id: &str) -> Option<UploadedFile> {
-        self.inner
-            .lock()
-            .expect("UploadStore mutex poisoned")
-            .remove(file_id)
+        self.inner.lock().expect("UploadStore mutex poisoned").remove(file_id)
     }
 
     /// Remove a stored file and delete its temp file from disk.
@@ -93,13 +78,8 @@ impl UploadStore {
 
     /// Clean up all stored files and remove the temp directory.
     pub fn cleanup(&self) {
-        let files: Vec<String> = self
-            .inner
-            .lock()
-            .expect("UploadStore mutex poisoned")
-            .keys()
-            .cloned()
-            .collect();
+        let files: Vec<String> =
+            self.inner.lock().expect("UploadStore mutex poisoned").keys().cloned().collect();
         for id in files {
             self.remove(&id);
         }
@@ -108,10 +88,7 @@ impl UploadStore {
 
     /// Current number of stored files.
     pub fn count(&self) -> usize {
-        self.inner
-            .lock()
-            .expect("UploadStore mutex poisoned")
-            .len()
+        self.inner.lock().expect("UploadStore mutex poisoned").len()
     }
 }
 

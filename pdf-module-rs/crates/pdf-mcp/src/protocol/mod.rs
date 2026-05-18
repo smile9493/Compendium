@@ -45,55 +45,29 @@ pub struct JsonRpcError {
 
 impl JsonRpcError {
     pub fn parse_error() -> Self {
-        Self {
-            code: -32700,
-            message: "Parse error".to_string(),
-            data: None,
-        }
+        Self { code: -32700, message: "Parse error".to_string(), data: None }
     }
 
     pub fn method_not_found(method: &str) -> Self {
-        Self {
-            code: -32601,
-            message: format!("Method not found: {}", method),
-            data: None,
-        }
+        Self { code: -32601, message: format!("Method not found: {}", method), data: None }
     }
 
     pub fn invalid_params(message: &str) -> Self {
-        Self {
-            code: -32602,
-            message: format!("Invalid params: {}", message),
-            data: None,
-        }
+        Self { code: -32602, message: format!("Invalid params: {}", message), data: None }
     }
 
     pub fn internal_error(message: &str) -> Self {
-        Self {
-            code: -32603,
-            message: message.to_string(),
-            data: None,
-        }
+        Self { code: -32603, message: message.to_string(), data: None }
     }
 }
 
 impl JsonRpcResponse {
     pub fn success(id: Option<Value>, result: Value) -> Self {
-        Self {
-            jsonrpc: "2.0".to_string(),
-            id,
-            result: Some(result),
-            error: None,
-        }
+        Self { jsonrpc: "2.0".to_string(), id, result: Some(result), error: None }
     }
 
     pub fn error(id: Option<Value>, error: JsonRpcError) -> Self {
-        Self {
-            jsonrpc: "2.0".to_string(),
-            id,
-            result: None,
-            error: Some(error),
-        }
+        Self { jsonrpc: "2.0".to_string(), id, result: None, error: Some(error) }
     }
 }
 
@@ -116,10 +90,7 @@ pub struct Content {
 
 impl Content {
     pub fn text(text: String) -> Self {
-        Self {
-            content_type: "text".to_string(),
-            text,
-        }
+        Self { content_type: "text".to_string(), text }
     }
 }
 

@@ -49,11 +49,7 @@ impl WasmSlice {
     /// remains valid for the lifetime of the returned `WasmSlice`.
     /// The underlying memory must not be freed while this slice exists.
     pub unsafe fn new(ptr: *const u8, len: usize) -> Self {
-        Self {
-            ptr,
-            len,
-            _marker: PhantomData,
-        }
+        Self { ptr, len, _marker: PhantomData }
     }
 
     /// Convert to Rust slice for internal processing.

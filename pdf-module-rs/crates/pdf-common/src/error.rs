@@ -291,30 +291,15 @@ mod tests {
         assert_eq!(PdfError::AdapterNotFound("x".into()).status_code(), 400);
         assert_eq!(PdfError::Timeout(5000).status_code(), 408);
         assert_eq!(PdfError::ToolNotFound("x".into()).status_code(), 404);
-        assert_eq!(
-            PdfError::ToolAlreadyRegistered("x".into()).status_code(),
-            409
-        );
+        assert_eq!(PdfError::ToolAlreadyRegistered("x".into()).status_code(), 409);
     }
 
     #[test]
     fn test_error_category() {
-        assert_eq!(
-            PdfError::FileNotFound("x".into()).category(),
-            ErrorCategory::FileSystem
-        );
-        assert_eq!(
-            PdfError::Extraction("x".into()).category(),
-            ErrorCategory::Extraction
-        );
-        assert_eq!(
-            PdfError::ToolExecution("x".into()).category(),
-            ErrorCategory::Plugin
-        );
-        assert_eq!(
-            PdfError::Database("x".into()).category(),
-            ErrorCategory::Database
-        );
+        assert_eq!(PdfError::FileNotFound("x".into()).category(), ErrorCategory::FileSystem);
+        assert_eq!(PdfError::Extraction("x".into()).category(), ErrorCategory::Extraction);
+        assert_eq!(PdfError::ToolExecution("x".into()).category(), ErrorCategory::Plugin);
+        assert_eq!(PdfError::Database("x".into()).category(), ErrorCategory::Database);
         assert_eq!(PdfError::LLM("x".into()).category(), ErrorCategory::LLM);
         assert_eq!(PdfError::Timeout(1000).category(), ErrorCategory::Network);
     }
