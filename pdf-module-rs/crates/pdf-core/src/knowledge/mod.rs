@@ -16,6 +16,7 @@
 pub mod collab;
 pub mod compile_pipeline;
 pub mod compile_plan;
+pub mod markdown_contract;
 pub mod engine;
 pub mod entry;
 pub mod hash_cache;
@@ -34,13 +35,14 @@ pub use compile_pipeline::{
     complete_compile_job, run_incremental_extract, run_single_pdf_extract, CompleteCompileJobResult,
 };
 pub use compile_plan::{CompilePlan, CompilePlanStore, PlanTask, PlanTaskKind, PlanTaskStatus};
+pub use markdown_contract::{analyze_markdown_body, MarkdownStructure};
 pub use engine::KnowledgeEngine;
 pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry, PublishStatus};
 pub use hash_cache::HashCache;
 pub use index::{
     detect_communities, graph, rebuild_all, rebuild_vectors, reindex_entry, search,
-    search_with_mode, wiki_dir, Community, FulltextIndex, GraphIndex, RebuildStats, SearchMode,
-    VectorIndex,
+    search_with_mode, search_with_options, wiki_dir, Community, FulltextIndex, GraphIndex,
+    IndexCache, RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, VectorIndex,
 };
 pub use patch::{apply_patch, preview_patch, resolve_wiki_path, WikiPatchRequest, WikiPatchResult};
 pub use publish_gate::{

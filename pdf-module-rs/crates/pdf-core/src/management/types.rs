@@ -29,6 +29,17 @@ pub struct HealthReport {
     pub last_compile: Option<DateTime<Utc>>,
     /// Timestamp of this report generation.
     pub generated_at: DateTime<Utc>,
+    /// Extraction stack snapshot (backends, VLM availability).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extraction: Option<ExtractionHealth>,
+}
+
+/// Extraction subsystem health embedded in [`HealthReport`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractionHealth {
+    pub backends: Vec<String>,
+    pub vlm_configured: bool,
+    pub default_method: String,
 }
 
 impl fmt::Display for HealthReport {

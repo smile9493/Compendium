@@ -78,6 +78,19 @@ pub struct ToolDefinition {
     pub description: String,
     #[serde(rename = "inputSchema")]
     pub input_schema: Value,
+    #[serde(rename = "outputSchema", skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<Value>,
+}
+
+impl From<pdf_mcp_contracts::McpToolSpec> for ToolDefinition {
+    fn from(spec: pdf_mcp_contracts::McpToolSpec) -> Self {
+        Self {
+            name: spec.name,
+            description: spec.description,
+            input_schema: spec.input_schema,
+            output_schema: Some(spec.output_schema),
+        }
+    }
 }
 
 /// Text content block for tool call results

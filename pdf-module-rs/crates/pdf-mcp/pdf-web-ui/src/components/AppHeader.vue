@@ -22,7 +22,8 @@
       </select>
     </div>
 
-    <div class="search-bar-wrap">
+    <div class="search-bar-wrap" :class="{ active: searchStore.open }">
+      <Search :size="14" class="search-bar-icon" />
       <input
         ref="searchInputRef"
         type="text"
@@ -33,7 +34,10 @@
         placeholder="搜索知识库…"
         autocomplete="off"
       />
-      <span class="search-shortcut"><span class="kbd">/</span></span>
+      <button v-if="searchStore.query" class="search-clear-btn" @click="clearSearch">
+        <X :size="12" />
+      </button>
+      <span v-else class="search-shortcut"><span class="kbd">/</span></span>
     </div>
 
     <span class="header-spacer"></span>
@@ -84,7 +88,7 @@ import { setActiveKbId } from '@/api'
 import { openEntry } from '@/composables/useWikiNavigation'
 import {
   Menu, PanelLeft, PanelRight, PanelRightClose, BookOpen, BookMarked,
-  Tag, BarChart2, GitBranch, Hammer, Sun, Moon, Settings,
+  Tag, BarChart2, GitBranch, Hammer, Sun, Moon, Settings, Search, X,
 } from 'lucide-vue-next'
 
 defineProps({
@@ -112,10 +116,20 @@ function onSearchInput() {
   searchStore.triggerSearch(searchStore.query)
 }
 
+function clearSearch() {
+  searchStore.query = ''
+  searchStore.triggerSearch('')
+  searchInputRef.value?.focus()
+}
+
 function onSearchKeydown(e) {
   if (e.key === 'Escape') {
-    searchStore.close()
-    searchInputRef.value?.blur()
+    if (searchStore.open) {
+      searchStore.close()
+    } else {
+      searchStore.clearAndClose()
+      searchInputRef.value?.blur()
+    }
     return
   }
   if (e.key === 'ArrowDown') {

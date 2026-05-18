@@ -160,7 +160,7 @@ impl FulltextShardManager {
         for domain in &domain_list {
             if let Some(shard) = self.warm.get_mut(domain) {
                 shard.last_access = Instant::now();
-                match shard.index.search(query, limit) {
+                match shard.index.search(query, limit, None) {
                     Ok(hits) => all_hits.extend(hits),
                     Err(e) => {
                         debug!(domain = %domain, error = %e, "Search failed on shard, skipping");
@@ -270,6 +270,8 @@ domain: "{}"
 tags: ["test"]
 level: l1
 status: compiled
+publish_status: published
+quality_score: 0.9
 created: 2026-01-01T00:00:00Z
 updated: 2026-01-01T00:00:00Z
 ---

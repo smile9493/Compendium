@@ -1,5 +1,11 @@
-use crate::protocol::{Content, ToolDefinition};
-use crate::tools::{parse_kb_path, ToolContext};
+use crate::tools::json::json_content;
+use crate::tools::{attach_compile_sampling, parse_kb_path, ToolContext};
+use pdf_mcp_contracts::{
+    AggregateEntriesOutput, CompileToWikiOutput, CompileUploadedPdfOutput,
+    CompleteCompileJobOutput, GenerateCompilePlanOutput, GetCompilePlanOutput,
+    HypothesisTestOutput, IncrementalCompileOutput, MarkPlanTaskDoneOutput, MicroCompileOutput,
+    RecompileEntryOutput, SaveWikiEntryOutput,
+};
 use pdf_core::dto::ExtractOptions;
 use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
 use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract, CompilePlanStore};
@@ -8,219 +14,11 @@ use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
 
-pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
-    vec![
-        ToolDefinition {
-            name: "compile_to_wiki".to_string(),
-            description: "Compile a PDF into the knowledge base: extract text, save to raw/, generate compilation prompt for AI. This is the primary entry point for the Karpathy compiler pattern.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "pdf_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    },
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "domain": {
-                        "type": "string",
-                        "description": "Domain classification (e.g. 'IT', 'Math'). Default: '未分类'"
-                    }
-                },
-                "required": ["pdf_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "incremental_compile".to_string(),
-            description: "Scan raw/ directory for new or changed PDFs and compile only those that need it. Uses SHA-256 hash comparison for change detection.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "micro_compile".to_string(),
-            description: "On-demand extraction from a PDF for the current conversation context. Results are NOT saved to wiki — they are injected directly into the AI session for immediate use.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "pdf_path": {
-                        "type": "string",
-                        "description": "Absolute path to the PDF file"
-                    },
-                    "page_range": {
-                        "type": "string",
-                        "description": "Page range to extract (e.g. '1-5', '3,7,12'). Default: all pages"
-                    }
-                },
-                "required": ["pdf_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "aggregate_entries".to_string(),
-            description: "Identify clusters of related L1 wiki entries that can be aggregated into L2 summary entries. Returns clusters with shared tags for AI to synthesize. (Phase 3: Hierarchical compilation)".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "hypothesis_test".to_string(),
-            description: "Find pairs of entries that explicitly contradict each other, and generate a debate framework for AI to resolve the contradictions. Returns contradiction pairs with entry context for AI-driven analysis. (Phase 4: Dynamic reasoning)".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "recompile_entry".to_string(),
-            description: "Recompile a single wiki entry: bumps version, creates backup, checks if source PDF changed, and generates a recompile prompt for AI. Use for quality drift correction.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "entry_path": {
-                        "type": "string",
-                        "description": "Relative path of the entry within wiki/ (e.g. 'it/concept.md')"
-                    }
-                },
-                "required": ["entry_path"]
-            }),
-        },
-        ToolDefinition {
-            name: "save_wiki_entry".to_string(),
-            description: "Create or update a wiki entry in the knowledge base. This is the primary write tool for the AI Agent to persist compiled knowledge entries. Entry content MUST follow the YAML front matter format with required fields (domain, level, tags, status, created, updated). Use after compile_to_wiki to save the AI-generated wiki content back to the server, completing the compilation loop.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "entry_path": {
-                        "type": "string",
-                        "description": "Relative path within wiki/ directory, e.g. 'IT/concept.md'. Must end with .md and must not contain '..' path traversal"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Full markdown content with YAML front matter header. Required format: ---\ndomain: XX\nlevel: L1\ntags: [tag1, tag2]\nstatus: compiled\npublish_status: draft\ncreated: YYYY-MM-DD\nupdated: YYYY-MM-DD\n---\n\n# Title\nContent..."
-                    },
-                    "job_id": {
-                        "type": "string",
-                        "description": "Compile job id from compile_to_wiki (links Agent phase to pipeline)"
-                    },
-                    "plan_task_id": {
-                        "type": "string",
-                        "description": "Optional compile plan task id to mark done"
-                    },
-                    "mark_compiled": {
-                        "type": "boolean",
-                        "description": "Set entry status to compiled if not set (default true)"
-                    }
-                },
-                "required": ["entry_path", "content"]
-            }),
-        },
-        ToolDefinition {
-            name: "complete_compile_job".to_string(),
-            description: "Finish a compile job: rebuild indexes and run quality gate. Call after save_wiki_entry.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" },
-                    "job_id": { "type": "string" },
-                    "force": { "type": "boolean", "description": "Re-run even if already completed" }
-                },
-                "required": ["job_id"]
-            }),
-        },
-        ToolDefinition {
-            name: "generate_compile_plan".to_string(),
-            description: "Generate compile_plan.json with L1/L2/L3 and recompile tasks.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "get_compile_plan".to_string(),
-            description: "Read the current compile plan and task statuses.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" }
-                },
-                "required": []
-            }),
-        },
-        ToolDefinition {
-            name: "mark_plan_task_done".to_string(),
-            description: "Mark a compile plan task as done.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "knowledge_base": { "type": "string" },
-                    "task_id": { "type": "string" }
-                },
-                "required": ["task_id"]
-            }),
-        },
-        ToolDefinition {
-            name: "compile_uploaded_pdf".to_string(),
-            description: "Compile an uploaded PDF identified by file_id into the knowledge base. Use after uploading a file via POST /api/upload. This enables cross-network PDF compilation where the client cannot share a filesystem with the server.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "file_id": {
-                        "type": "string",
-                        "description": "File ID returned from POST /api/upload"
-                    },
-                    "knowledge_base": {
-                        "type": "string",
-                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
-                    },
-                    "domain": {
-                        "type": "string",
-                        "description": "Domain classification (e.g. 'IT', 'Math'). Default: '未分类'"
-                    }
-                },
-                "required": ["file_id"]
-            }),
-        },
-    ]
-}
-
 #[instrument(skip(ctx, args))]
 pub async fn handle_compile_to_wiki(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let pdf_path_str =
         args["pdf_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
     let pdf_path = std::path::Path::new(pdf_path_str);
@@ -234,39 +32,41 @@ pub async fn handle_compile_to_wiki(
     let job_store = CompileJobStore::new(&kb_path);
     let (job_id, result) = run_single_pdf_extract(&engine, &job_store, pdf_path, domain).await?;
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "job_id": job_id,
         "pipeline_status": "awaiting_agent",
         "compile_result": result,
         "next_step": "save_wiki_entry then complete_compile_job"
     });
-    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
+    attach_compile_sampling(ctx, &kb_path, &job_id, &mut payload).await;
+    json_content(&CompileToWikiOutput { result: payload })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_incremental_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let job_store = CompileJobStore::new(&kb_path);
     let (job_id, result) = run_incremental_extract(&engine, &job_store).await?;
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "job_id": job_id,
         "pipeline_status": "awaiting_agent",
         "incremental_result": result,
         "next_step": "save_wiki_entry then complete_compile_job"
     });
-    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
+    attach_compile_sampling(ctx, &kb_path, &job_id, &mut payload).await;
+    json_content(&IncrementalCompileOutput { result: payload })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_micro_compile(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let pdf_path_str =
         args["pdf_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing pdf_path"))?;
     let pdf_path = std::path::Path::new(pdf_path_str);
@@ -315,7 +115,9 @@ pub async fn handle_micro_compile(
         text
     );
 
-    Ok(vec![Content::text(output)])
+    json_content(&MicroCompileOutput {
+        result: serde_json::json!({ "markdown": output }),
+    })
 }
 
 fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
@@ -345,7 +147,7 @@ fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
 pub async fn handle_aggregate_entries(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
@@ -364,14 +166,14 @@ pub async fn handle_aggregate_entries(
         "total_tasks": plan.tasks.len(),
         "instructions": "Execute tasks from get_compile_plan; use save_wiki_entry(plan_task_id=...) then complete_compile_job."
     });
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    json_content(&AggregateEntriesOutput { result })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_hypothesis_test(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
@@ -429,14 +231,14 @@ pub async fn handle_hypothesis_test(
             "For each pair, read both entries and conduct a structured debate: 1) State the core claim of each entry, 2) Identify the precise point of disagreement, 3) Evaluate supporting evidence, 4) Propose a resolution or mark as 'open question'. Use patch_wiki_entry with resolution_template fields.".to_string()
         }
     });
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    json_content(&HypothesisTestOutput { result })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_recompile_entry(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -445,14 +247,16 @@ pub async fn handle_recompile_entry(
 
     let result = engine.recompile_entry(std::path::Path::new(entry_path))?;
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    json_content(&RecompileEntryOutput {
+        result: serde_json::to_value(&result)?,
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_compile_uploaded_pdf(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let file_id = args["file_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing file_id"))?;
 
     let upload_store = ctx
@@ -474,18 +278,19 @@ pub async fn handle_compile_uploaded_pdf(
 
     upload_store.remove(file_id);
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "job_id": job_id,
         "pipeline_status": "awaiting_agent",
         "compile_result": result,
     });
-    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
+    attach_compile_sampling(ctx, &kb_path, &job_id, &mut payload).await;
+    json_content(&CompileUploadedPdfOutput { result: payload })
 }
 
 pub async fn handle_save_wiki_entry(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let entry_path =
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let content = args["content"].as_str().ok_or_else(|| anyhow::anyhow!("Missing content"))?;
@@ -547,69 +352,80 @@ pub async fn handle_save_wiki_entry(
     let _ = pdf_core::knowledge::reindex_entry(&kb_path, entry_path);
 
     let relative_path = entry_path.to_string();
-    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
-        "status": "success",
-        "path": relative_path,
-        "absolute_path": target_path.to_string_lossy(),
-        "size_bytes": final_content.len(),
-        "job_id": args["job_id"].as_str(),
-        "message": format!("Wiki entry '{}' saved successfully", entry_path)
-    }))?)])
+    json_content(&SaveWikiEntryOutput {
+        result: serde_json::json!({
+            "status": "success",
+            "path": relative_path,
+            "absolute_path": target_path.to_string_lossy(),
+            "size_bytes": final_content.len(),
+            "job_id": args["job_id"].as_str(),
+            "message": format!("Wiki entry '{}' saved successfully", entry_path)
+        }),
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_complete_compile_job(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let job_id = args["job_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing job_id"))?;
     let force = args["force"].as_bool().unwrap_or(false);
     let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    ctx.index_cache.invalidate(&kb_path);
+    json_content(&CompleteCompileJobOutput {
+        result: serde_json::to_value(&result)?,
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_generate_compile_plan(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let plan = engine.generate_compile_plan()?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
-        "plan_version": plan.plan_version,
-        "generated_at": plan.generated_at,
-        "task_count": plan.tasks.len(),
-        "tasks": plan.tasks,
-    }))?)])
+    json_content(&GenerateCompilePlanOutput {
+        result: serde_json::json!({
+            "plan_version": plan.plan_version,
+            "generated_at": plan.generated_at,
+            "task_count": plan.tasks.len(),
+            "tasks": plan.tasks,
+        }),
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_get_compile_plan(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let plan = CompilePlanStore::new(&kb_path)
         .read()?
         .ok_or_else(|| anyhow::anyhow!("No compile plan; call generate_compile_plan first"))?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&plan)?)])
+    json_content(&GetCompilePlanOutput {
+        result: serde_json::to_value(&plan)?,
+    })
 }
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_mark_plan_task_done(
     ctx: &ToolContext,
     args: &serde_json::Value,
-) -> anyhow::Result<Vec<Content>> {
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let task_id = args["task_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing task_id"))?;
     let plan = CompilePlanStore::new(&kb_path).mark_task_done(task_id)?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
-        "status": "ok",
-        "task_id": task_id,
-        "remaining_pending": plan.tasks.iter().filter(|t| t.status == pdf_core::knowledge::PlanTaskStatus::Pending).count(),
-    }))?)])
+    json_content(&MarkPlanTaskDoneOutput {
+        result: serde_json::json!({
+            "status": "ok",
+            "task_id": task_id,
+            "remaining_pending": plan.tasks.iter().filter(|t| t.status == pdf_core::knowledge::PlanTaskStatus::Pending).count(),
+        }),
+    })
 }
 
 #[cfg(test)]
@@ -624,20 +440,31 @@ mod tests {
     }
 
     fn create_test_context() -> ToolContext {
-        let config = ServerConfig::from_env().unwrap_or_default();
-        let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        let registry = Arc::new(
-            pdf_core::management::WorkspaceRegistry::load(
-                std::env::temp_dir().join("rsut_test_workspaces.toml"),
-            )
-            .expect("registry"),
-        );
-        ToolContext::new(pipeline, registry)
+        crate::tools::create_test_tool_context()
     }
 
     #[test]
     fn test_knowledge_tool_definitions() {
-        let defs = knowledge_tool_definitions();
+        let defs: Vec<_> = pdf_mcp_contracts::all_tool_specs()
+            .into_iter()
+            .filter(|t| {
+                matches!(
+                    t.name.as_str(),
+                    "compile_to_wiki"
+                        | "incremental_compile"
+                        | "micro_compile"
+                        | "aggregate_entries"
+                        | "hypothesis_test"
+                        | "recompile_entry"
+                        | "save_wiki_entry"
+                        | "complete_compile_job"
+                        | "generate_compile_plan"
+                        | "get_compile_plan"
+                        | "mark_plan_task_done"
+                        | "compile_uploaded_pdf"
+                )
+            })
+            .collect();
         assert!(defs.len() >= 8);
 
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();

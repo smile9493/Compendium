@@ -1,0 +1,15 @@
+{
+  "hits": [
+    {
+      "path": "it/concept.md",
+      "title": "Concept",
+      "score": 0.9,
+      "snippet": "snippet"
+    }
+  ],
+  "meta": {
+    "index_empty": false,
+    "used_fallback": false,
+    "mode": "hybrid"
+  }
+}

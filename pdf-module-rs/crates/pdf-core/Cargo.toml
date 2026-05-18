@@ -18,7 +18,6 @@ knowledge = [
     "dep:rs_merkle",
     "dep:bincode",
     "dep:sled",
-    "dep:pulldown-cmark",
     "dep:fnv",
     "dep:hex",
     "dep:sha2",
@@ -54,6 +53,7 @@ memmap2 = { workspace = true }
 rayon = { workspace = true }
 num_cpus = { workspace = true }
 crossbeam-deque = { workspace = true }
+parking_lot = { workspace = true }
 
 # Optional: VLM (Vision Language Model) enhancement
 vlm-visual-gateway = { workspace = true, optional = true }
@@ -65,7 +65,6 @@ jieba-rs = { workspace = true, optional = true }
 rs_merkle = { workspace = true, optional = true }
 bincode = { workspace = true, optional = true }
 sled = { workspace = true, optional = true }
-pulldown-cmark = { workspace = true, optional = true }
 fnv = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }

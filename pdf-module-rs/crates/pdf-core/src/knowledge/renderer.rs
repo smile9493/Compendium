@@ -1,10 +1,8 @@
-//! Markdown renderer — converts wiki entries to HTML and builds tree views.
+//! Wiki entry rendering for HTTP/MCP APIs and tree views.
 //!
-//! Uses `pulldown_cmark` for CommonMark-compliant Markdown → HTML conversion.
-//! Provides `RenderedEntry` for dashboard display and `TreeNode` for
-//! hierarchical wiki browsing.
+//! Strips YAML front matter and returns `body_markdown` for client-side rendering
+//! (Vue SPA uses `marked`). Does not generate server-side HTML.
 
-use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -309,30 +307,6 @@ impl WikiRenderer {
         backlinks.dedup();
         backlinks
     }
-}
-
-fn markdown_to_html(md: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_FOOTNOTES);
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TASKLISTS);
-    let parser = Parser::new_ext(md, options);
-    let mut html_output = String::with_capacity(md.len() * 2);
-    html::push_html(&mut html_output, parser);
-    process_wikilinks(&html_output)
-}
-
-fn process_wikilinks(html: &str) -> String {
-    let re = regex::Regex::new(r"\[\[([^\]]+)\]\]").unwrap_or_else(|_| {
-        let re = regex::Regex::new(r"^\z").unwrap();
-        re
-    });
-    re.replace_all(html, |caps: &regex::Captures| {
-        let target = &caps[1];
-        format!(r#"<a class="wikilink" href="/api/wiki/entries/{}.md">{}</a>"#, target, target)
-    })
-    .into_owned()
 }
 
 fn split_front_matter(content: &str) -> &str {

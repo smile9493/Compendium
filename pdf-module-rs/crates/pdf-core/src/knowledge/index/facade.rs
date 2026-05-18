@@ -55,6 +55,52 @@ pub struct RebuildStats {
     pub vector_entries_indexed: usize,
 }
 
+/// Options controlling search behavior across HTTP, MCP, and CLI.
+#[derive(Debug, Clone)]
+pub struct SearchOptions {
+    /// When true, use filesystem scan if Tantivy returns no hits or errors.
+    pub allow_fs_fallback: bool,
+    /// When true, rebuild Tantivy from wiki if the index is empty before searching.
+    pub rebuild_if_empty: bool,
+    /// Restrict keyword search to this domain (Tantivy filter).
+    pub domain: Option<String>,
+}
+
+impl Default for SearchOptions {
+    fn default() -> Self {
+        let allow_fs_fallback = std::env::var("RSUT_SEARCH_ALLOW_FS_FALLBACK")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        Self { allow_fs_fallback, rebuild_if_empty: false, domain: None }
+    }
+}
+
+impl SearchOptions {
+    /// HTTP / MCP defaults: Tantivy only, no implicit rebuild.
+    pub fn for_api() -> Self {
+        Self { allow_fs_fallback: false, rebuild_if_empty: false, domain: None }
+    }
+
+    /// CLI defaults: rebuild empty index on demand.
+    pub fn for_cli() -> Self {
+        Self { allow_fs_fallback: false, rebuild_if_empty: true, domain: None }
+    }
+}
+
+/// Metadata returned alongside search hits.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct SearchMeta {
+    pub index_empty: bool,
+    pub used_fallback: bool,
+    pub mode: String,
+}
+
+/// Unified search response for HTTP and MCP.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResponse {
+    pub hits: Vec<SearchHit>,
+    pub meta: SearchMeta,
+}
+
 /// Wiki directory under a knowledge base root.
 pub fn wiki_dir(knowledge_base: &Path) -> PathBuf {
     knowledge_base.join("wiki")
@@ -62,27 +108,78 @@ pub fn wiki_dir(knowledge_base: &Path) -> PathBuf {
 
 /// Hybrid search (default): Tantivy CJK + TF-IDF vectors fused via RRF.
 pub fn search(knowledge_base: &Path, query: &str, limit: usize) -> PdfResult<Vec<SearchHit>> {
-    search_with_mode(knowledge_base, query, limit, SearchMode::Hybrid)
+    Ok(search_with_options(knowledge_base, query, limit, SearchMode::Hybrid, SearchOptions::default())?
+        .hits)
 }
 
-/// Search with an explicit mode.
+/// Search with an explicit mode (hits only; default options).
 pub fn search_with_mode(
     knowledge_base: &Path,
     query: &str,
     limit: usize,
     mode: SearchMode,
 ) -> PdfResult<Vec<SearchHit>> {
+    Ok(search_with_options(knowledge_base, query, limit, mode, SearchOptions::default())?.hits)
+}
+
+/// Search with explicit mode and options.
+pub fn search_with_options(
+    knowledge_base: &Path,
+    query: &str,
+    limit: usize,
+    mode: SearchMode,
+    opts: SearchOptions,
+) -> PdfResult<SearchResponse> {
+    search_with_options_ft(knowledge_base, query, limit, mode, opts, None)
+}
+
+/// Search using an optional pre-opened fulltext index (from [`IndexCache`]).
+pub fn search_with_options_ft(
+    knowledge_base: &Path,
+    query: &str,
+    limit: usize,
+    mode: SearchMode,
+    opts: SearchOptions,
+    ft_override: Option<&FulltextIndex>,
+) -> PdfResult<SearchResponse> {
     let wd = wiki_dir(knowledge_base);
+    let mode_str = format!("{:?}", mode).to_lowercase();
     if !wd.exists() || query.trim().is_empty() {
-        return Ok(Vec::new());
+        return Ok(SearchResponse {
+            hits: Vec::new(),
+            meta: SearchMeta { mode: mode_str, ..Default::default() },
+        });
     }
 
-    let hits = match mode {
-        SearchMode::Keyword => search_keyword(knowledge_base, &wd, query, limit),
-        SearchMode::Semantic => search_semantic(knowledge_base, query, limit),
-        SearchMode::Hybrid => search_hybrid(knowledge_base, &wd, query, limit),
-    }?;
-    Ok(filter_searchable(knowledge_base, &wd, hits, limit))
+    let (hits, index_empty, used_fallback) = match mode {
+        SearchMode::Keyword => {
+            let kr = search_keyword(knowledge_base, &wd, query, limit, &opts, ft_override)?;
+            (kr.hits, kr.index_empty, kr.used_fallback)
+        }
+        SearchMode::Semantic => (search_semantic(knowledge_base, query, limit)?, false, false),
+        SearchMode::Hybrid => {
+            let kr = search_keyword(knowledge_base, &wd, query, limit.saturating_mul(2).max(limit), &opts, ft_override)?;
+            let index_empty = kr.index_empty;
+            let used_fallback = kr.used_fallback;
+            let semantic = match ensure_vector_index(knowledge_base) {
+                Ok(()) => {
+                    let index = load_vector_index(knowledge_base)?;
+                    index.search(query, limit.saturating_mul(2).max(limit))
+                }
+                Err(e) => {
+                    debug!(error = %e, "Vector index unavailable for hybrid search");
+                    Vec::new()
+                }
+            };
+            (rrf_merge(kr.hits, semantic, limit), index_empty, used_fallback)
+        }
+    };
+
+    let hits = filter_searchable(knowledge_base, &wd, hits, limit);
+    Ok(SearchResponse {
+        hits,
+        meta: SearchMeta { index_empty, used_fallback, mode: mode_str },
+    })
 }
 
 fn filter_searchable(
@@ -106,20 +203,36 @@ fn filter_searchable(
         .collect()
 }
 
+struct KeywordSearchResult {
+    hits: Vec<SearchHit>,
+    index_empty: bool,
+    used_fallback: bool,
+}
+
 fn search_keyword(
     knowledge_base: &Path,
     wiki_dir: &Path,
     query: &str,
     limit: usize,
-) -> PdfResult<Vec<SearchHit>> {
+    opts: &SearchOptions,
+    ft_override: Option<&FulltextIndex>,
+) -> PdfResult<KeywordSearchResult> {
     let expanded = expand_query_for_tantivy(query);
-    match search_tantivy(knowledge_base, wiki_dir, &expanded, limit) {
-        Ok(hits) if !hits.is_empty() => Ok(hits),
-        Ok(_) => Ok(fs_fallback_search(wiki_dir, query, limit)),
-        Err(e) => {
-            debug!(error = %e, "Tantivy search failed, using filesystem fallback");
-            Ok(fs_fallback_search(wiki_dir, query, limit))
+    let domain = opts.domain.as_deref();
+    match search_tantivy(knowledge_base, wiki_dir, &expanded, limit, domain, opts, ft_override) {
+        Ok(result) if !result.hits.is_empty() => Ok(result),
+        Ok(result) if result.index_empty => Ok(result),
+        Ok(result) if opts.allow_fs_fallback => {
+            let hits = fs_fallback_search(wiki_dir, query, limit, domain);
+            Ok(KeywordSearchResult { hits, index_empty: result.index_empty, used_fallback: true })
         }
+        Ok(result) => Ok(result),
+        Err(e) if opts.allow_fs_fallback => {
+            debug!(error = %e, "Tantivy search failed, using filesystem fallback");
+            let hits = fs_fallback_search(wiki_dir, query, limit, domain);
+            Ok(KeywordSearchResult { hits, index_empty: false, used_fallback: true })
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -128,27 +241,6 @@ fn search_semantic(knowledge_base: &Path, query: &str, limit: usize) -> PdfResul
     let index = load_vector_index(knowledge_base)?;
     let hits = index.search(query, limit);
     Ok(vector_hits_to_search_hits(hits, knowledge_base, query))
-}
-
-fn search_hybrid(
-    knowledge_base: &Path,
-    wiki_dir: &Path,
-    query: &str,
-    limit: usize,
-) -> PdfResult<Vec<SearchHit>> {
-    let fetch = limit.saturating_mul(2).max(limit);
-    let keyword = search_keyword(knowledge_base, wiki_dir, query, fetch)?;
-    let semantic = match ensure_vector_index(knowledge_base) {
-        Ok(()) => {
-            let index = load_vector_index(knowledge_base)?;
-            index.search(query, fetch)
-        }
-        Err(e) => {
-            debug!(error = %e, "Vector index unavailable for hybrid search");
-            Vec::new()
-        }
-    };
-    Ok(rrf_merge(keyword, semantic, limit))
 }
 
 fn expand_query_for_tantivy(query: &str) -> String {
@@ -241,12 +333,39 @@ fn search_tantivy(
     wiki_dir: &Path,
     query: &str,
     limit: usize,
-) -> PdfResult<Vec<SearchHit>> {
-    let index = FulltextIndex::open_or_create(knowledge_base)?;
-    if index.is_empty()? {
-        index.rebuild(wiki_dir)?;
+    domain: Option<&str>,
+    opts: &SearchOptions,
+    ft_override: Option<&FulltextIndex>,
+) -> PdfResult<KeywordSearchResult> {
+    if let Some(ft) = ft_override {
+        return search_tantivy_with_index(ft, wiki_dir, query, limit, domain, opts);
     }
-    index.search(query, limit)
+    let owned = FulltextIndex::open_or_create(knowledge_base)?;
+    search_tantivy_with_index(&owned, wiki_dir, query, limit, domain, opts)
+}
+
+fn search_tantivy_with_index(
+    index: &FulltextIndex,
+    wiki_dir: &Path,
+    query: &str,
+    limit: usize,
+    domain: Option<&str>,
+    opts: &SearchOptions,
+) -> PdfResult<KeywordSearchResult> {
+    let empty = index.is_empty()?;
+    if empty {
+        if opts.rebuild_if_empty {
+            index.rebuild(wiki_dir)?;
+        } else {
+            return Ok(KeywordSearchResult {
+                hits: Vec::new(),
+                index_empty: true,
+                used_fallback: false,
+            });
+        }
+    }
+    let hits = index.search(query, limit, domain)?;
+    Ok(KeywordSearchResult { hits, index_empty: empty, used_fallback: false })
 }
 
 /// Load or rebuild the knowledge graph (persisted at `.rsut_index/graph.bin`).
@@ -411,7 +530,12 @@ fn scan_wiki_for_embedding(
 
 // ── Filesystem fallback (used when Tantivy is empty or errors) ──
 
-fn fs_fallback_search(wiki_dir: &Path, query: &str, limit: usize) -> Vec<SearchHit> {
+fn fs_fallback_search(
+    wiki_dir: &Path,
+    query: &str,
+    limit: usize,
+    domain_filter: Option<&str>,
+) -> Vec<SearchHit> {
     let mut results: Vec<SearchHit> = Vec::new();
     let lower_q = query.to_lowercase();
     let terms: Vec<String> = JIEBA
@@ -432,6 +556,9 @@ fn fs_fallback_search(wiki_dir: &Path, query: &str, limit: usize) -> Vec<SearchH
         }
         let domain = dp.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         if domain.starts_with('.') {
+            continue;
+        }
+        if domain_filter.is_some_and(|d| d != domain) {
             continue;
         }
 
@@ -570,6 +697,59 @@ mod tests {
             hybrid.iter().any(|h| h.path.contains("nginx_proxy")),
             "hybrid should find Chinese content"
         );
+    }
+
+    fn write_draft_entry(kb: &Path, domain: &str, name: &str, body: &str) {
+        let dir = kb.join("wiki").join(domain);
+        fs::create_dir_all(&dir).unwrap();
+        let content = format!(
+            "---\ntitle: \"{name}\"\ndomain: \"{domain}\"\ntags: [test]\nlevel: L1\nstatus: compiled\npublish_status: draft\nquality_score: 0.9\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\n{body}"
+        );
+        fs::write(dir.join(format!("{name}.md")), content).unwrap();
+    }
+
+    #[test]
+    fn test_draft_not_indexed_in_tantivy() {
+        let dir = tempfile::tempdir().unwrap();
+        let kb = dir.path();
+        write_draft_entry(kb, "IT", "secret_draft", "UniqueDraftTokenXYZ");
+        rebuild_all(kb).unwrap();
+
+        let opts = SearchOptions::for_api();
+        let resp =
+            search_with_options(kb, "UniqueDraftTokenXYZ", 5, SearchMode::Keyword, opts).unwrap();
+        assert!(
+            !resp.hits.iter().any(|h| h.path.contains("secret_draft")),
+            "draft entries must not appear in search"
+        );
+    }
+
+    #[test]
+    fn test_empty_index_returns_meta() {
+        let dir = tempfile::tempdir().unwrap();
+        let kb = dir.path();
+        fs::create_dir_all(kb.join("wiki")).unwrap();
+        let opts = SearchOptions::for_api();
+        let resp = search_with_options(kb, "anything", 5, SearchMode::Keyword, opts).unwrap();
+        assert!(resp.meta.index_empty);
+        assert!(!resp.meta.used_fallback);
+        assert!(resp.hits.is_empty());
+    }
+
+    #[test]
+    fn test_domain_filter_tantivy() {
+        let dir = tempfile::tempdir().unwrap();
+        let kb = dir.path();
+        write_entry(kb, "IT", "it_only", "DomainFilterToken");
+        write_entry(kb, "HR", "hr_only", "DomainFilterToken");
+        rebuild_all(kb).unwrap();
+
+        let mut opts = SearchOptions::for_api();
+        opts.domain = Some("IT".to_string());
+        let resp =
+            search_with_options(kb, "DomainFilterToken", 10, SearchMode::Keyword, opts).unwrap();
+        assert!(resp.hits.iter().all(|h| h.domain == "IT"));
+        assert!(resp.hits.iter().any(|h| h.path.contains("it_only")));
     }
 
     #[test]

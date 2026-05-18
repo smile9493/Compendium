@@ -8,6 +8,7 @@
 //! - **Community Detection**: Label Propagation algorithm for clustering related entries
 //! - **VectorIndex**: TF-IDF vector embeddings with cosine similarity search
 
+pub mod cache;
 pub mod community;
 pub mod facade;
 pub mod fulltext;
@@ -20,9 +21,11 @@ pub mod tokenizer;
 pub mod vector;
 
 pub use community::{detect_communities, Community};
+pub use cache::{IndexCache, KbIndexes};
 pub use facade::{
-    graph, rebuild_all, rebuild_vectors, reindex_entry, search, search_with_mode, wiki_dir,
-    RebuildStats, SearchMode,
+    graph, rebuild_all, rebuild_vectors, reindex_entry, search, search_with_mode,
+    search_with_options, search_with_options_ft, wiki_dir, RebuildStats, SearchMeta, SearchMode,
+    SearchOptions, SearchResponse,
 };
 pub use fulltext::FulltextIndex;
 pub use fulltext_shard::FulltextShardManager;

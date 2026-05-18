@@ -38,7 +38,7 @@ let result = engine.compile_to_wiki(Path::new("/path/to/paper.pdf"), Some("IT"))
 // 3. Search the knowledge base
 let idx = FulltextIndex::open_or_create(engine.knowledge_base())?;
 idx.rebuild(&engine.wiki_dir())?;
-let hits = idx.search("HTTP/2", 10)?;
+let hits = idx.search("HTTP/2", 10, None)?;
 
 // 4. Discover relationships
 let mut graph = GraphIndex::new();
@@ -103,14 +103,30 @@ if cache.needs_compile(&pdf_path)? {
 }
 ```
 
+## Search API (unified facade)
+
+All callers (HTTP `/api/wiki/search`, MCP `search_knowledge`, CLI) use `search_with_options`:
+
+- Default: Tantivy keyword + optional hybrid RRF; **no** silent filesystem fallback
+- `SearchMeta.index_empty`: true when the Tantivy index has no documents (rebuild via `rebuild_all` or `complete_compile_job`)
+- `SearchOptions.domain`: applied as a Tantivy filter (not post-filter on hits)
+- Only `publish_status: published` entries are indexed (aligned with `is_searchable`)
+
+## Markdown and Wikilinks
+
+- HTTP/MCP wiki entry APIs return `body_markdown` only (no server HTML)
+- The Vue SPA renders with `marked` (`MarkdownRenderer.vue`)
+- Wikilink syntax: `[[domain/path]]` or `[[path]]` — normalized by the client (`normalizeWikiPath`)
+- Structural contract tests: `markdown_contract.rs` + `pdf-web-ui` Vitest (`markdownContract.test.js`)
+
 ## Indexing
 
 ### Fulltext Search (Tantivy)
 
-- Uses CJK n-gram tokenizer (unigrams + bigrams) for Chinese support
-- Indexes: title, body, tags, domain
+- Uses CJK jieba tokenizer for Chinese support
+- Indexes: title, body, tags, domain (published entries only)
 - Stored at `.rsut_index/tantivy/`
-- Fully rebuildable from wiki files
+- Fully rebuildable from wiki files; use `IndexCache` in `pdf-mcp` HTTP server to avoid per-request reopen
 
 ### Knowledge Graph (petgraph)
 

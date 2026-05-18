@@ -44,7 +44,9 @@ use tracing::{info, instrument};
 use pdf_core::knowledge::index::MetadataStore;
 use pdf_core::knowledge::quality::analyze_wiki;
 use pdf_core::knowledge::renderer::WikiRenderer;
-use pdf_core::knowledge::{graph, rebuild_all, search_with_mode, KnowledgeEngine, SearchMode};
+use pdf_core::knowledge::{
+    rebuild_all, IndexCache, KnowledgeEngine, SearchMode, SearchOptions, SearchResponse,
+};
 use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract};
 use pdf_core::management::{
     build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
@@ -64,6 +66,7 @@ pub struct HttpState {
     pub upload_store: Option<Arc<UploadStore>>,
     pub pipeline: Option<Arc<McpPdfPipeline>>,
     pub http_metrics: Option<Arc<HttpMetrics>>,
+    pub index_cache: Arc<IndexCache>,
 }
 
 fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
@@ -287,14 +290,18 @@ async fn api_wiki_search(
     }
 
     let mode = query.mode.as_deref().map(SearchMode::parse).unwrap_or(SearchMode::Hybrid);
+    let mut opts = SearchOptions::for_api();
+    opts.domain = query.domain.clone();
 
-    let hits = match search_with_mode(&kb, &query.q, query.limit, mode) {
-        Ok(h) => h,
+    let SearchResponse { hits, meta } = match state.index_cache.search(&kb, &query.q, query.limit, mode, opts)
+    {
+        Ok(r) => r,
         Err(e) => {
             return Json(serde_json::json!({
                 "results": [],
                 "total": 0,
                 "error": e.to_string(),
+                "meta": { "index_empty": false, "used_fallback": false, "mode": format!("{:?}", mode).to_lowercase() },
             }));
         }
     };
@@ -305,17 +312,17 @@ async fn api_wiki_search(
 
     let results: Vec<serde_json::Value> = hits
         .into_iter()
-        .filter(|h| if let Some(ref domain) = query.domain { h.domain == *domain } else { true })
         .map(|h| {
             *domain_counts.entry(h.domain.clone()).or_insert(0) += 1;
-            let match_count = h.snippet.to_lowercase().matches(&lower_q).count().max(1);
+            // Display-only highlight count; ranking uses Tantivy `score`.
+            let highlight_count = h.snippet.to_lowercase().matches(&lower_q).count();
             serde_json::json!({
                 "path": h.path,
                 "title": h.title,
                 "domain": h.domain,
                 "score": h.score,
                 "snippet": highlight_snippet(&h.snippet, &query.q),
-                "match_count": match_count,
+                "highlight_count": highlight_count,
             })
         })
         .collect();
@@ -330,6 +337,7 @@ async fn api_wiki_search(
         "total": results.len(),
         "query": query.q,
         "domain_facets": domain_facets,
+        "meta": meta,
     }))
 }
 
@@ -348,14 +356,14 @@ async fn api_wiki_graph(
         return Json(serde_json::json!({"error": "Wiki directory not found"}));
     }
 
-    let graph_idx = match graph(&kb) {
+    let indexes = match state.index_cache.graph(&kb) {
         Ok(g) => g,
         Err(e) => {
             return Json(serde_json::json!({"error": format!("Graph load failed: {}", e)}));
         }
     };
 
-    let mermaid = graph_idx.export_concept_map(&path, 2);
+    let mermaid = indexes.graph.export_concept_map(&path, 2);
     Json(serde_json::json!({"mermaid": mermaid, "entry": path}))
 }
 
@@ -822,14 +830,17 @@ async fn api_index_rebuild(
     }
 
     match rebuild_all(&kb) {
-        Ok(stats) => Json(serde_json::json!({
-            "status": "success",
-            "fulltext_entries_indexed": stats.fulltext_entries_indexed,
-            "graph_nodes": stats.graph_nodes,
-            "graph_edges": stats.graph_edges,
-            "vector_entries_indexed": stats.vector_entries_indexed,
-        }))
-        .into_response(),
+        Ok(stats) => {
+            state.index_cache.invalidate(&kb);
+            Json(serde_json::json!({
+                "status": "success",
+                "fulltext_entries_indexed": stats.fulltext_entries_indexed,
+                "graph_nodes": stats.graph_nodes,
+                "graph_edges": stats.graph_edges,
+                "vector_entries_indexed": stats.vector_entries_indexed,
+            }))
+            .into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),

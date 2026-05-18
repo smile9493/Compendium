@@ -103,15 +103,17 @@ pub async fn incremental_compile(kb_path: &Path) -> Result<Value> {
 
 /// Full-text search across wiki entries.
 pub fn search(kb_path: &Path, query: &str, limit: usize) -> Result<Value> {
-    let index = FulltextIndex::open_or_create(kb_path).context("Failed to open fulltext index")?;
+    use pdf_core::knowledge::{search_with_options, SearchMode, SearchOptions};
 
-    let wiki_dir = kb_path.join("wiki");
-    if wiki_dir.exists() && index.is_empty().unwrap_or(true) {
-        index.rebuild(&wiki_dir)?;
-    }
-
-    let hits = index.search(query, limit)?;
-    Ok(serde_json::to_value(hits)?)
+    let resp = search_with_options(
+        kb_path,
+        query,
+        limit,
+        SearchMode::Hybrid,
+        SearchOptions::for_cli(),
+    )
+    .context("Search failed")?;
+    Ok(serde_json::to_value(&resp)?)
 }
 
 /// Get context/neighbors for an entry.

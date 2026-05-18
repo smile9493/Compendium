@@ -189,6 +189,7 @@ pub async fn run_stdio_with_tool_ctx(
     let sampling_client =
         Arc::new(SamplingClient::with_sender(sampling_config.timeout_secs, outgoing_tx.clone()));
     let pending_requests = sampling_client.pending_requests();
+    let ctx = ctx.with_sampling(Arc::clone(&sampling_client));
 
     let stdout = std::io::stdout();
     let mut stdout_lock = stdout.lock();
@@ -333,9 +334,17 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
             "sampling": {
                 "supported": true,
                 "messageTypes": ["text", "image"]
+            },
+            "extensions": {
+                "rsut": {
+                    "outputSchema": true,
+                    "contractVersion": pdf_mcp_contracts::CONTRACT_VERSION,
+                    "toolCount": pdf_mcp_contracts::tool_count(),
+                    "manifestSha256": pdf_mcp_contracts::manifest_sha256()
+                }
             }
         },
-        "instructions": "Knowledge engine. Compile loop: compile_to_wiki/incremental_compile → job_id + awaiting_agent → save_wiki_entry(job_id) → complete_compile_job → searchable index. Quality: list_quality_issues, fix_suggest, apply_quality_gate. Plan: generate_compile_plan, get_compile_plan, mark_plan_task_done, aggregate_entries. PDF: extract_*, compile_uploaded_pdf. Wiki: save_wiki_entry, patch_wiki_entry, search_knowledge, rebuild_index, check_quality, hypothesis_test, recompile_entry. Management: get_compile_status (stages + quality_snapshot), get_health_report, get/set_config.",
+        "instructions": "Knowledge engine (contract 1.0.0). Compile loop: compile_to_wiki/incremental_compile → job_id + awaiting_agent → get_compilation_context → save_wiki_entry(job_id) → complete_compile_job. Wiki: patch_wiki_entry or apply_wiki_patch (alias), preview_wiki_patch, get_agent_context, search_knowledge. PDF: extract_* returns JSON with extraction envelope. Management: get_compile_status, get_health_report (includes extraction stack).",
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)

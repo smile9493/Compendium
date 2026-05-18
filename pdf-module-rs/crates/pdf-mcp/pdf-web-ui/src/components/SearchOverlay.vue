@@ -1,22 +1,9 @@
 <template>
   <Transition name="search-slide">
     <div class="search-overlay" :class="{ open: searchStore.open }" @click.self="searchStore.close()">
-      <div class="search-header">
-        <div class="search-header-left">
-          <Search :size="16" class="search-icon" />
-          <input
-            type="text"
-            v-model="searchStore.query"
-            class="search-input"
-            placeholder="搜索知识库…"
-            @input="onSearch"
-            ref="searchInputRef"
-          />
-          <button v-if="searchStore.query" class="search-clear-btn" @click="clearSearch">
-            <X :size="14" />
-          </button>
-        </div>
-        <div class="search-header-right">
+      <div class="search-toolbar">
+        <div class="search-toolbar-left">
+          <span class="results-count">{{ searchStore.results.length }} 个结果</span>
           <div class="search-mode-toggle">
             <button
               type="button"
@@ -35,6 +22,8 @@
               关键词
             </button>
           </div>
+        </div>
+        <div class="search-toolbar-right">
           <span class="sh-hint">
             <span class="kbd">↑↓</span> 导航
             <span class="kbd">Enter</span> 打开
@@ -73,9 +62,6 @@
         </div>
 
         <template v-else-if="searchStore.results.length > 0">
-          <div class="search-results-header">
-            <span class="results-count">{{ searchStore.results.length }} 个结果</span>
-          </div>
           <div
             v-for="(r, i) in searchStore.results"
             :key="r.path"
@@ -106,6 +92,14 @@
           </div>
         </template>
 
+        <div v-else-if="searchStore.error" class="search-empty">
+          <div class="search-empty-icon">
+            <SearchX :size="48" />
+          </div>
+          <div class="search-empty-title">搜索出错</div>
+          <div class="search-empty-desc">{{ searchStore.error }}</div>
+        </div>
+
         <div v-else-if="searchStore.query && !searchStore.loading" class="search-empty">
           <div class="search-empty-icon">
             <SearchX :size="48" />
@@ -113,41 +107,24 @@
           <div class="search-empty-title">无匹配结果</div>
           <div class="search-empty-desc">尝试使用更短或更通用的关键词</div>
         </div>
-
-        <div v-else-if="!searchStore.query" class="search-hint-state">
-          <div class="search-hint-icon">
-            <Search :size="32" />
-          </div>
-          <div class="search-hint-text">输入关键词开始搜索</div>
-        </div>
       </div>
     </div>
   </Transition>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { computed } from 'vue'
 import { useSearchStore } from '@/stores/search'
 import { useWikiStore } from '@/stores/wiki'
 import { openEntry } from '@/composables/useWikiNavigation'
-import { Search, X, FileText, FolderOpen, Highlighter, SearchX } from 'lucide-vue-next'
+import { X, FileText, FolderOpen, Highlighter, SearchX } from 'lucide-vue-next'
 
 const searchStore = useSearchStore()
 const wikiStore = useWikiStore()
-const searchInputRef = ref(null)
 
 const totalFacetCount = computed(() => {
   return searchStore.domainFacets.reduce((s, f) => s + f.count, 0)
 })
-
-function onSearch() {
-  searchStore.triggerSearch(searchStore.query)
-}
-
-function clearSearch() {
-  searchStore.query = ''
-  searchStore.triggerSearch('')
-}
 
 function setMode(mode) {
   searchStore.searchMode = mode
@@ -156,19 +133,10 @@ function setMode(mode) {
   }
 }
 
-watch(() => searchStore.open, async (val) => {
-  if (val) {
-    await nextTick()
-    searchInputRef.value?.focus()
-  }
-})
-
 function scoreTier(score) {
   if (score >= 0.03) return { label: '极高', cls: 'score-extreme' }
   if (score >= 0.02) return { label: '高', cls: 'score-high' }
   if (score >= 0.01) return { label: '中', cls: 'score-med' }
-  if (score >= 20) return { label: '极高', cls: 'score-extreme' }
-  if (score >= 5) return { label: '高', cls: 'score-high' }
   return { label: '低', cls: 'score-low' }
 }
 
@@ -179,15 +147,56 @@ function openResult(r) {
 </script>
 
 <style scoped>
+.search-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-xl);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  min-height: 36px;
+}
+
+.search-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.search-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .search-mode-toggle {
   display: flex;
   gap: 4px;
-  margin-right: 8px;
 }
-.search-header-right {
+
+.sh-hint {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.search-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.search-close-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 </style>

@@ -1,0 +1,20 @@
+{
+  "total_entries": 1,
+  "orphan_count": 0,
+  "contradiction_count": 0,
+  "broken_link_count": 0,
+  "index_size_mb": 0,
+  "graph_nodes": 1,
+  "graph_edges": 0,
+  "avg_quality_score": "80.0%",
+  "domains": ["IT"],
+  "last_compile": null,
+  "generated_at": "2026-01-01T00:00:00Z",
+  "report_text": "report",
+  "quality_snapshot": {},
+  "extraction": {
+    "backends": ["pdfium"],
+    "vlm_configured": false,
+    "default_method": "pdfium"
+  }
+}
