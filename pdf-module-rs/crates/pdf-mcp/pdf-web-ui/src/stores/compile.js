@@ -28,9 +28,15 @@ export const useCompileStore = defineStore('compile', () => {
   const statusText = computed(() => {
     if (pipelineStatus.value === 'awaiting_agent') return '等待 Agent'
     if (isRunning.value && pipelineStatus.value === 'running') return '编译中'
-    if (pipelineStatus.value === 'completed' || compileStatus.value?.last_outcome === 'success')
+    if (
+      pipelineStatus.value === 'completed' ||
+      (!compileStatus.value?.active_job_id && compileStatus.value?.last_outcome === 'success')
+    )
       return '已完成'
-    if (pipelineStatus.value === 'partial' || compileStatus.value?.last_outcome === 'partial')
+    if (
+      pipelineStatus.value === 'partial' ||
+      (!compileStatus.value?.active_job_id && compileStatus.value?.last_outcome === 'partial')
+    )
       return '部分完成'
     if (pipelineStatus.value === 'failed' || compileStatus.value?.last_outcome === 'error')
       return '失败'
@@ -71,8 +77,9 @@ export const useCompileStore = defineStore('compile', () => {
       const done =
         data.pipeline_status === 'completed' ||
         data.pipeline_status === 'partial' ||
-        data.last_outcome === 'success' ||
-        data.last_outcome === 'partial'
+        (!data.active_job_id &&
+          !data.running &&
+          (data.last_outcome === 'success' || data.last_outcome === 'partial'))
       if (finished && finished !== prevFinished && done && !data.running) {
         const wikiStore = useWikiStore()
         await wikiStore.loadTree()

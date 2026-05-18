@@ -457,6 +457,15 @@ impl CompileJobStore {
         if running && record.last_started.is_none() {
             record.last_started = Some(job.created_at);
         }
+        // In-flight jobs must not inherit a prior terminal `last_outcome` (H1).
+        if running
+            || matches!(
+                job.pipeline_status,
+                PipelineStatus::Running | PipelineStatus::AwaitingAgent
+            )
+        {
+            record.last_outcome = None;
+        }
         record.message = job
             .message
             .clone()
@@ -545,6 +554,24 @@ mod tests {
         let view = store.build_view().unwrap();
         assert!(!view.running);
         assert_eq!(view.last_outcome.as_deref(), Some("success"));
+    }
+
+    #[test]
+    fn test_awaiting_agent_clears_stale_last_outcome() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = CompileJobStore::new(dir.path());
+
+        let first = store.begin_job(CompileTrigger::SinglePdf).unwrap();
+        store
+            .complete_job(&first.job_id, PipelineStatus::Completed, Some("first".into()))
+            .unwrap();
+
+        let second = store.begin_job(CompileTrigger::SinglePdf).unwrap();
+        store.set_awaiting_agent(&second.job_id).unwrap();
+
+        let view = store.build_view().unwrap();
+        assert_eq!(view.pipeline_status.as_deref(), Some("awaiting_agent"));
+        assert_eq!(view.last_outcome, None);
     }
 }
 
