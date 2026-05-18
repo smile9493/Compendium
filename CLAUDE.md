@@ -37,7 +37,6 @@ Before generating, modifying, or reviewing **any Rust code** in this project, yo
 ### Secondary: `rust-wasm-frontend-infra-guide` (WASM Boundary)
 
 **Invoke when working on:**
-- `crates/pdf-frontend/` — Leptos WASM frontend
 - `crates/pdf-wasm/` — WASM compilation target
 - Any `wasm32-unknown-unknown` target code
 - FFI boundaries between Rust and JavaScript
@@ -67,7 +66,6 @@ Before generating, modifying, or reviewing **any Rust code** in this project, yo
 | `pdf-mcp` | bin (server) | rust-architecture-guide + cloud-infra | MCP JSON-RPC, sampling, tools, observability |
 | `pdf-cli` | bin (CLI) | rust-architecture-guide | Health check, config, compile commands |
 | `vlm-visual-gateway` | lib | rust-architecture-guide + cloud-infra | VLM HTTP API, OCR, Prometheus metrics |
-| `pdf-frontend` | bin (WASM) | rust-architecture-guide + wasm-frontend | Leptos UI, JS FFI, binary size budget |
 | `pdf-wasm` | lib (WASM) | rust-architecture-guide + wasm-frontend | WASM exports, Arena, slice encoding |
 
 ---

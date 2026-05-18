@@ -1,0 +1,124 @@
+//! Performance profiling benchmarks using `pprof` + `criterion`.
+//!
+//! Generates flamegraph SVGs and protobuf profiles for CPU hotspots.
+//!
+//! Run with:
+//!   cargo bench --bench profiling_bench -- --profile-time 10
+//!
+//! Output:
+//!   target/criterion/<bench_name>/profile/flamegraph.svg
+
+use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
+use pprof::criterion::{Output, PProfProfiler};
+use std::fs;
+use std::path::PathBuf;
+
+/// Helper: get a test PDF path for benchmarking.
+fn test_pdf_path() -> PathBuf {
+    let candidates = [
+        "../test_fixtures/sample.pdf",
+        "../../test_fixtures/sample.pdf",
+        "test_fixtures/sample.pdf",
+    ];
+    for p in &candidates {
+        if PathBuf::from(p).exists() {
+            return PathBuf::from(p);
+        }
+    }
+    panic!("No test PDF found. Place one at test_fixtures/sample.pdf");
+}
+
+/// Ensure the test file exists, creating a minimal valid PDF if needed.
+fn ensure_test_pdf() -> PathBuf {
+    let path = PathBuf::from("test_fixtures");
+    fs::create_dir_all(&path).ok();
+    let pdf_path = path.join("sample.pdf");
+
+    if !pdf_path.exists() {
+        let minimal_pdf = vec![
+            0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, // %PDF-1.4
+            0x0A, 0x25, 0xC7, 0xEC, 0x8F, 0xA2, 0x0A, // binary comment
+            0x31, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A, 0x0A, // 1 0 obj
+            0x3C, 0x3C, 0x2F, 0x54, 0x79, 0x70, 0x65, 0x20, 0x2F, 0x43, 0x61, 0x74, 0x61, 0x6C, 0x6F, 0x67, // << /Type /Catalog
+            0x2F, 0x50, 0x61, 0x67, 0x65, 0x73, 0x20, 0x32, 0x20, 0x30, 0x20, 0x52, 0x0A, // /Pages 2 0 R
+            0x3E, 0x3E, 0x0A, 0x65, 0x6E, 0x64, 0x6F, 0x62, 0x6A, 0x0A, // >> endobj
+            0x32, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A, 0x0A, // 2 0 obj
+            0x3C, 0x3C, 0x2F, 0x54, 0x79, 0x70, 0x65, 0x20, 0x2F, 0x50, 0x61, 0x67, 0x65, 0x73, 0x0A, // << /Type /Pages
+            0x2F, 0x4B, 0x69, 0x64, 0x73, 0x20, 0x5B, 0x33, 0x20, 0x30, 0x20, 0x52, 0x5D, 0x0A, // /Kids [3 0 R]
+            0x2F, 0x43, 0x6F, 0x75, 0x6E, 0x74, 0x20, 0x31, 0x0A, // /Count 1
+            0x3E, 0x3E, 0x0A, 0x65, 0x6E, 0x64, 0x6F, 0x62, 0x6A, 0x0A, // >> endobj
+            0x33, 0x20, 0x30, 0x20, 0x6F, 0x62, 0x6A, 0x0A, // 3 0 obj
+            0x3C, 0x3C, 0x2F, 0x54, 0x79, 0x70, 0x65, 0x20, 0x2F, 0x50, 0x61, 0x67, 0x65, 0x0A, // << /Type /Page
+            0x2F, 0x50, 0x61, 0x72, 0x65, 0x6E, 0x74, 0x20, 0x32, 0x20, 0x30, 0x20, 0x52, 0x0A, // /Parent 2 0 R
+            0x2F, 0x4D, 0x65, 0x64, 0x69, 0x61, 0x42, 0x6F, 0x78, 0x0A, // /MediaBox
+            0x3E, 0x3E, 0x0A, 0x65, 0x6E, 0x64, 0x6F, 0x62, 0x6A, 0x0A, // >> endobj
+            0x78, 0x72, 0x65, 0x66, 0x0A, 0x30, 0x20, 0x33, 0x0A, // xref
+            0x74, 0x72, 0x61, 0x69, 0x6C, 0x65, 0x72, 0x0A, // trailer
+            0x3C, 0x3C, 0x2F, 0x52, 0x6F, 0x6F, 0x74, 0x20, 0x31, 0x20, 0x30, 0x20, 0x52, 0x0A, // << /Root 1 0 R
+            0x2F, 0x53, 0x69, 0x7A, 0x65, 0x20, 0x33, 0x0A, 0x3E, 0x3E, 0x0A, // /Size 3 >>
+            0x73, 0x74, 0x61, 0x72, 0x74, 0x78, 0x72, 0x65, 0x66, 0x0A, // startxref
+            0x30, 0x0A, 0x25, 0x25, 0x45, 0x4F, 0x46, // %%EOF
+        ];
+        fs::write(&pdf_path, minimal_pdf).ok();
+    }
+    pdf_path
+}
+
+fn bench_pdf_extraction(c: &mut Criterion) {
+    let pdf_path = ensure_test_pdf();
+
+    let mut group = c.benchmark_group("pdf_extraction");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(20);
+
+    group.bench_function("extract_text", |b| {
+        b.iter(|| {
+            let _ = pdf_extract::extract_text(&pdf_path);
+        });
+    });
+
+    group.bench_function("extract_text_from_bytes", |b| {
+        let data = fs::read(&pdf_path).unwrap();
+        b.iter(|| {
+            let _ = pdf_extract::extract_text_from_mem(&data);
+        });
+    });
+
+    group.finish();
+}
+
+fn bench_mmap_loading(c: &mut Criterion) {
+    let pdf_path = ensure_test_pdf();
+
+    let mut group = c.benchmark_group("mmap_loading");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(30);
+
+    group.bench_function("mmap_read", |b| {
+        b.iter(|| {
+            let file = fs::File::open(&pdf_path).unwrap();
+            let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
+            let _len = mmap.len();
+        });
+    });
+
+    group.bench_function("fs_read_to_end", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            let mut file = fs::File::open(&pdf_path).unwrap();
+            std::io::Read::read_to_end(&mut file, &mut buf).unwrap();
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group! {
+    name = pdf_profiling;
+    config = Criterion::default()
+        .with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)))
+        .sample_size(20);
+    targets = bench_pdf_extraction, bench_mmap_loading
+}
+
+criterion_main!(pdf_profiling);

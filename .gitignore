@@ -65,6 +65,10 @@ wiki/
 data/
 .rsut_index/
 .hash_cache
+test_kb/
+
+# ─── PDF Books ───────────────────────────────────
+*.pdf
 
 # ─── IDE ────────────────────────────────────────
 .idea/

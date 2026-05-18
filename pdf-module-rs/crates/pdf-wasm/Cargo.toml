@@ -5,6 +5,11 @@ edition = "2021"
 description = "WASM PDF extraction engine with Arena allocator and zero-copy interop"
 license = "MIT"
 
+[package.metadata.docs.rs]
+features = ["wasm"]
+default-target = "wasm32-unknown-unknown"
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

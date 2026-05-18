@@ -108,6 +108,28 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
+            name: "save_wiki_entry".to_string(),
+            description: "Create or update a wiki entry in the knowledge base. This is the primary write tool for the AI Agent to persist compiled knowledge entries. Entry content MUST follow the YAML front matter format with required fields (domain, level, tags, status, created, updated). Use after compile_to_wiki to save the AI-generated wiki content back to the server, completing the compilation loop.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": {
+                        "type": "string",
+                        "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
+                    },
+                    "entry_path": {
+                        "type": "string",
+                        "description": "Relative path within wiki/ directory, e.g. 'IT/concept.md'. Must end with .md and must not contain '..' path traversal"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Full markdown content with YAML front matter header. Required format: ---\ndomain: XX\nlevel: L1\ntags: [tag1, tag2]\nstatus: draft\ncreated: YYYY-MM-DD\nupdated: YYYY-MM-DD\n---\n\n# Title\nContent..."
+                    }
+                },
+                "required": ["entry_path", "content"]
+            }),
+        },
+        ToolDefinition {
             name: "compile_uploaded_pdf".to_string(),
             description: "Compile an uploaded PDF identified by file_id into the knowledge base. Use after uploading a file via POST /api/upload. This enables cross-network PDF compilation where the client cannot share a filesystem with the server.".to_string(),
             input_schema: serde_json::json!({
@@ -359,6 +381,65 @@ pub async fn handle_compile_uploaded_pdf(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+pub async fn handle_save_wiki_entry(
+    _ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let entry_path = args["entry_path"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let content = args["content"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
+
+    if content.trim().is_empty() {
+        return Err(anyhow::anyhow!("Content must not be empty"));
+    }
+    if entry_path.contains("..") || entry_path.starts_with('/') {
+        return Err(anyhow::anyhow!(
+            "entry_path must be a relative path within wiki/ (no '..' or absolute path): {}",
+            entry_path
+        ));
+    }
+    if !entry_path.ends_with(".md") {
+        return Err(anyhow::anyhow!("entry_path must end with .md, got: {}", entry_path));
+    }
+
+    let kb_path = parse_kb_path(args)?;
+    let wiki_dir = kb_path.join("wiki");
+    let target_path = wiki_dir.join(entry_path);
+
+    let resolved = target_path
+        .canonicalize()
+        .unwrap_or_else(|_| target_path.clone());
+    let wiki_canonical = wiki_dir
+        .canonicalize()
+        .unwrap_or_else(|_| wiki_dir.clone());
+    if !resolved.starts_with(&wiki_canonical) {
+        return Err(anyhow::anyhow!(
+            "Path traversal detected: resolved path '{}' is outside wiki directory '{}'",
+            resolved.display(),
+            wiki_canonical.display()
+        ));
+    }
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&target_path, content)?;
+
+    let relative_path = entry_path.to_string();
+    Ok(vec![Content::text(
+        serde_json::to_string_pretty(&serde_json::json!({
+            "status": "success",
+            "path": relative_path,
+            "absolute_path": target_path.to_string_lossy(),
+            "size_bytes": content.len(),
+            "message": format!("Wiki entry '{}' saved successfully", entry_path)
+        }))?,
+    )])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,7 +460,7 @@ mod tests {
     #[test]
     fn test_knowledge_tool_definitions() {
         let defs = knowledge_tool_definitions();
-        assert_eq!(defs.len(), 7);
+        assert_eq!(defs.len(), 8);
         
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"compile_to_wiki"));
@@ -389,6 +470,7 @@ mod tests {
         assert!(names.contains(&"aggregate_entries"));
         assert!(names.contains(&"hypothesis_test"));
         assert!(names.contains(&"recompile_entry"));
+        assert!(names.contains(&"save_wiki_entry"));
     }
 
     #[test]
@@ -520,33 +602,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_incremental_compile_missing_kb() {
+    async fn test_incremental_compile_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
         
         let result = handle_incremental_compile(&ctx, &args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_aggregate_entries_missing_kb() {
+    async fn test_aggregate_entries_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
         
         let result = handle_aggregate_entries(&ctx, &args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_hypothesis_test_missing_kb() {
+    async fn test_hypothesis_test_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
         
         let result = handle_hypothesis_test(&ctx, &args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -558,7 +637,6 @@ mod tests {
         
         let result = handle_recompile_entry(&ctx, &args).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
     }
 
     #[tokio::test]

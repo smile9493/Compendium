@@ -1,0 +1,30 @@
+[default]
+extend-ignore-re = [
+    "[0-9a-f]{40}",             # SHA hashes
+    "[0-9a-f]{64}",             # SHA-512 hashes
+]
+
+[default.extend-words]
+ba = "ba"                       # "by" typo, but used in hex/base64
+datas = "datas"                 # Plural of "data" in some contexts
+fo = "fo"                       # Used in error messages "Foo"
+hel = "hel"                     # Used in error messages "Hello"
+ser = "ser"                     # Used in serde derives
+teh = "teh"                     # Used in test data
+wass = "wass"                   # Used in wasm/wasm-pack references
+
+[files]
+extend-exclude = [
+    "*.lock",
+    "*.svg",
+    "*.png",
+    "*.ico",
+    "*.tgz",
+    "*.tar.gz",
+    "*.wasm",
+    "target/",
+    "node_modules/",
+    "dist/",
+    ".git/",
+    "Cargo.lock",
+]

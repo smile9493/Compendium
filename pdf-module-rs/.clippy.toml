@@ -1,1 +1,43 @@
 msrv = "1.91.0"
+
+allow-unwrap-in-tests = true
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+
+too-many-arguments-threshold = 8
+type-complexity-threshold = 300
+cognitive-complexity-threshold = 30
+
+doc-valid-idents = [
+    "AccessKit",
+    "GitHub",
+    "GitLab",
+    "JavaScript",
+    "MCP",
+    "Mutex",
+    "NaïveDate",
+    "PDF",
+    "PDFium",
+    "PostgreSQL",
+    "Redis",
+    "SQLite",
+    "SurrealDB",
+    "Tokio",
+    "VLM",
+    "WASM",
+    "WebSocket",
+    "gRPC",
+    "macOS",
+    "npm",
+    "pdfium",
+    "reStructuredText",
+    "stdin",
+    "stdio",
+    "todos",
+]
+
+avoid-breaking-exported-api = false
+disallowed-methods = []
+disallowed-types = []
+
+enforce-iter-loop-reborrow = true

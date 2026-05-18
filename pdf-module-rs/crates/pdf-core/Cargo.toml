@@ -5,6 +5,10 @@ edition = "2021"
 description = "Pure PDF extraction pipe: pdfium engine, zero state, zero cache"
 license = "MIT"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = ["knowledge", "vlm"]
 knowledge = [
@@ -22,6 +26,7 @@ knowledge = [
     "dep:bumpalo",
 ]
 vlm = ["dep:vlm-visual-gateway"]
+dhat-heap = ["dhat"]
 
 [dependencies]
 # Always-required: core runtime and serialization
@@ -64,5 +69,24 @@ sha2 = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 bumpalo = { workspace = true, optional = true }
 
+# Optional: profiling
+dhat = { workspace = true, optional = true }
+
 [dev-dependencies]
 tempfile = "3.10"
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.5"
+insta = { version = "1", features = ["json", "yaml"] }
+assert2 = "0.3"
+rstest = "0.22"
+pretty_assertions = "1"
+cargo-husky = { workspace = true }
+pprof = { workspace = true }
+
+[[bench]]
+name = "extractor_bench"
+harness = false
+
+[[bench]]
+name = "validator_bench"
+harness = false

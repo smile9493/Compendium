@@ -1,0 +1,37 @@
+# release-plz configuration — automated release management
+# Based on conventional commits: fix: / feat: / chore: etc.
+#
+# Usage:
+#   release-plz update                    # 预览变更
+#   release-plz release                   # 创建 release PR
+#   release-plz release-pr                # 仅创建 PR，不创建 GitHub Release
+
+[workspace]
+changelog_config = "pdf-module-rs/release-plz-changelog.toml"
+
+# All crates in workspace are auto-discovered.
+# Release with: release-plz release
+
+[package."pdf-core"]
+changelog_path = "crates/pdf-core/CHANGELOG.md"
+
+[package."pdf-mcp"]
+changelog_path = "crates/pdf-mcp/CHANGELOG.md"
+
+[package."pdf-cli"]
+changelog_path = "crates/pdf-cli/CHANGELOG.md"
+
+[package."pdf-web"]
+changelog_path = "crates/pdf-web/CHANGELOG.md"
+
+[package."pdf-common"]
+changelog_path = "crates/pdf-common/CHANGELOG.md"
+
+[package."pdf-wasm"]
+changelog_path = "crates/pdf-wasm/CHANGELOG.md"
+
+[package."vlm-visual-gateway"]
+changelog_path = "crates/vlm-visual-gateway/CHANGELOG.md"
+
+[package."pdf-macros"]
+changelog_path = "crates/pdf-macros/CHANGELOG.md"

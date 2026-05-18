@@ -1,0 +1,51 @@
+# cargo-release configuration for automated publishing.
+#
+# Install:  cargo install cargo-release
+# Usage:
+#   cargo release patch              # Bump version, tag, publish
+#   cargo release --dry-run major    # Preview what would happen
+#   cargo release --workspace patch  # Bump and publish all crates
+#
+# See: https://github.com/crate-ci/cargo-release
+
+# Consolidate commits before creating release
+consolidate-commits = true
+
+# Sign git tags (set false if no GPG key configured)
+sign-commit = false
+sign-tag = false
+
+# Push to remote after release
+push-remote = "origin"
+
+# Pre-release checks (all must pass before release proceeds)
+pre-release-commit-message = "chore: release {{crate_name}} v{{version}}"
+pre-release-replacements = [
+    { file = "README.md", search = "{{crate_name}} = \"[0-9.]+\"", replace = "{{crate_name}} = \"{{version}}\"" },
+    { file = "CHANGELOG.md", search = "Unreleased", replace = "{{version}}", exactly = 1 },
+    { file = "CHANGELOG.md", search = "\\.\\.\\.HEAD", replace = "...{{tag_name}}", exactly = 1 },
+]
+
+# Tag format
+tag-name = "v{{version}}"
+tag-prefix = "v"
+
+# Disable individual crate publishing — only publish from workspace root
+disable-publish = false
+
+# Pre-release hook: ensure all checks pass
+pre-release-hook = [
+    "cargo fmt --all -- --check",
+    "cargo clippy --workspace --all-targets -- -D warnings",
+    "cargo test --workspace",
+    "cargo doc --no-deps",
+    "git cliff -o CHANGELOG.md --tag v{{version}}",
+    "git add CHANGELOG.md",
+]
+
+# Publish command (use --no-verify if already verified above)
+publish = false
+
+# Shared workspace bumping
+shared-version = true
+consolidate-commits = true

@@ -9,8 +9,14 @@ members = [
     "crates/pdf-cli",
     "crates/pdf-wasm",
     "crates/vlm-visual-gateway",
-    "crates/pdf-frontend",
 ]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.91.0"
+license = "MIT"
+repository = "https://github.com/your-org/rsut-pdf-mcp"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -39,6 +45,7 @@ prometheus = "0.14"
 memmap2 = "0.9"
 bumpalo = { version = "3.16", features = ["collections"] }
 sha2 = "0.10"
+base64 = "0.22"
 # Parallel processing
 rayon = "1.10"
 num_cpus = "1.16"
@@ -68,16 +75,137 @@ tempfile = "3"
 # Stable hashing for deterministic feature hashing
 fnv = "1.0"
 
-# WASM release optimizations (see rust-wasm-frontend-infra-guide)
-[profile.wasm-release]
+# Git hooks (Rust-native, alternative to pre-commit)
+cargo-husky = "1"
+
+# Diagnostic error reporting (miette integration)
+miette = "7"
+
+# Config loading
+figment = { version = "0.10", features = ["env", "toml", "json"] }
+
+# Auth / Security
+jsonwebtoken = "9"
+argon2 = "0.5"
+aes-gcm = "0.10"
+ring = "0.17"
+
+# Database (optional)
+sea-orm = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "sqlite", "chrono", "uuid"] }
+
+# Profiling
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+dhat = "0.3"
+
+# API documentation
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
+
+# i18n
+fluent = "0.16"
+unic-langid = { version = "0.9", features = ["macros"] }
+intl-memoizer = "0.5"
+
+# Code generation
+prost = "0.13"
+prost-build = "0.13"
+tonic = "0.12"
+tonic-build = "0.12"
+
+# ============================================================
+# Global lints (Rust 1.74+) — applied to all workspace crates
+# ============================================================
+
+[workspace.lints.rust]
+# Deny common mistakes; allow dead_code universally (common during dev)
+unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "forbid"
+unused_must_use = "deny"
+unused_imports = "warn"
+rust_2018_idioms = "deny"
+rust_2021_compatibility = "deny"
+rust_2024_compatibility = "deny"
+missing_docs = "warn"
+future_incompatible = "deny"
+nonstandard_style = "deny"
+unnameable_types = "warn"
+unused_crate_dependencies = "warn"
+
+[workspace.lints.clippy]
+all = "deny"
+dbg_macro = "deny"
+todo = "deny"
+# unwrap/expect downgraded to warn at workspace level because tests use them;
+# file-level #![cfg_attr(not(test), deny(clippy::unwrap_used))] handles the non-test case
+unwrap_used = "warn"
+expect_used = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo_common_metadata = "warn"
+missing_panics_doc = "warn"
+missing_errors_doc = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "warn"
+return_self_not_must_use = "warn"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+if_not_else = "allow"
+too_many_lines = "allow"
+needless_pass_by_value = "warn"
+large_stack_frames = "deny"
+
+# ============================================================
+# Profile settings — ordered: dev → test → bench → release
+# ============================================================
+
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+codegen-units = 256
+incremental = true
+
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 1
+codegen-units = 32
+lto = "thin"
+debug = "limited"
+
+[profile.test]
+inherits = "dev"
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true
+codegen-units = 256
+
+[profile.bench]
 inherits = "release"
-opt-level = 'z'        # Optimize aggressively for smallest size (WASM)
-lto = true             # Link-time optimization
-codegen-units = 1      # Better optimization
-panic = 'abort'        # Smaller binary
-strip = true           # Strip symbols
+opt-level = 3
+debug = 0
+debug-assertions = false
+overflow-checks = false
+lto = "fat"
+codegen-units = 1
 
 [profile.release]
+opt-level = 3
+debug = 0
+debug-assertions = false
+overflow-checks = false
+lto = "fat"
+codegen-units = 1
 panic = 'abort'
+strip = "symbols"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
 lto = true
 codegen-units = 1
+panic = 'abort'
+strip = true

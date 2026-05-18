@@ -1,11 +1,28 @@
-# cargo-deny配置
-# 遵循 rust-systems-cloud-infra-guide v6.0.0 规范
+# cargo-deny configuration
+# 遵循 rust-architecture-guide P1 安全基线
+#
+# Usage:
+#   cargo deny check                    # 全部检查
+#   cargo deny check licenses           # 仅许可证
+#   cargo deny check advisories         # 仅安全公告
+#   cargo deny check bans               # 仅依赖禁令
 
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
+vulnerability = "deny"
+unmaintained = "warn"
+unsound = "deny"
+yanked = "warn"
+notice = "warn"
+ignore = []
+severity-threshold = "medium"
 
 [licenses]
+unlicensed = "deny"
+allow-osi-fsf-free = "neither"
+default = "deny"
+confidence-threshold = 0.8
 allow = [
     "MIT",
     "Apache-2.0",
@@ -18,11 +35,23 @@ allow = [
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
 ]
+exceptions = []
 
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+# Explicitly ban crates with known issues or preferred alternatives
+deny = []
+# Skip these crates when checking for duplicate versions
+skip = []
+# Ignore duplicate versions for hard-to-dedup crates
+skip-tree = []
 
 [sources]
 unknown-registry = "warn"
 unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

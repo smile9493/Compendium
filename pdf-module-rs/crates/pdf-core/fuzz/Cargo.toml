@@ -1,0 +1,17 @@
+[package]
+name = "pdf-core-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.pdf-core]
+path = ".."
+
+# Prevent this from being accidentally included in workspace-wide builds
+# Run fuzz with: cargo +nightly fuzz run <target> -- <max_len>

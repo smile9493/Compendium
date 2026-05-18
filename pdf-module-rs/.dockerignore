@@ -1,7 +1,56 @@
+# Rust build artifacts
 target/
+**/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
 .git/
 .gitignore
-.env
+.gitattributes
+
+# Docker
+.dockerignore
+docker/
+
+# Node (frontend)
+**/node_modules/
+**/dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
 *.md
-!README.md
-data/
+!Cargo.toml.orig
+
+# Test artifacts
+*.log
+*.profraw
+*.profdata
+lcov.info
+
+# Examples and benches (not needed for production build)
+examples/
+**/examples/
+**/benches/
+**/fuzz/
+
+# Dev tools config
+.pre-commit-config.yaml
+typos.toml
+deny.toml
+.editorconfig
+justfile
+Makefile

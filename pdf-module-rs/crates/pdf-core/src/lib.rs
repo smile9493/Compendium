@@ -24,8 +24,12 @@
 #![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
+// Harden to deny once all public items have documentation:
+// #![deny(missing_docs)]
 
 pub mod config;
+#[cfg(feature = "dhat-heap")]
+pub mod dhat_profiler;
 pub mod dto;
 pub mod engine;
 pub mod error;
@@ -36,6 +40,7 @@ pub mod management;
 pub mod mmap_loader;
 pub mod parallel;
 pub mod quality_probe;
+pub mod tracing_setup;
 pub mod validator;
 #[cfg(feature = "knowledge")]
 pub mod wiki;
@@ -44,4 +49,8 @@ pub use config::ServerConfig;
 pub use extractor::McpPdfPipeline;
 #[cfg(feature = "knowledge")]
 pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};
+pub use tracing_setup::{
+    init_compact, init_development, init_production, init_with_config,
+    request_span, LogFormat, TracingConfig,
+};
 pub use validator::{FileValidator, PathValidationConfig};

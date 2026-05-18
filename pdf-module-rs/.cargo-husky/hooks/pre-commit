@@ -1,0 +1,24 @@
+#!/bin/sh
+# cargo-husky pre-commit hook
+# Fast checks that run before every commit.
+#
+# This hook is auto-installed by cargo-husky when cargo test runs.
+# Script location: pdf-module-rs/.cargo-husky/hooks/pre-commit
+# Copied to:        .git/hooks/pre-commit
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/pdf-module-rs"
+
+echo "━━━ cargo fmt ━━━"
+cargo fmt --all -- --check
+
+echo "━━━ cargo check ━━━"
+cargo check --workspace --all-targets
+
+echo "━━━ typos ━━━"
+cd "$REPO_ROOT"
+typos --config typos.toml
+
+echo "✓ pre-commit checks passed"
