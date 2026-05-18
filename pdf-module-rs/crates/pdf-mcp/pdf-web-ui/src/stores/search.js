@@ -1,91 +1,120 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { api } from '@/api'
+import { useWikiStore } from '@/stores/wiki'
 
 export const useSearchStore = defineStore('search', () => {
   const query = ref('')
   const results = ref([])
-  const domainFacets = ref([])
-  const domainFilter = ref(null)
   const loading = ref(false)
-  const selectedIdx = ref(-1)
   const open = ref(false)
-  let abortController = null
-  let searchTimer = null
+  const selectedIdx = ref(-1)
+  const error = ref(null)
+  const domainFacets = ref([])
 
-  async function doSearch(q) {
-    if (abortController) abortController.abort()
-    abortController = new AbortController()
-    const signal = abortController.signal
+  let debounceTimer = null
+  let currentController = null
 
-    loading.value = true
-    open.value = true
+  const hasResults = computed(() => results.value.length > 0)
+
+  function close() {
+    open.value = false
     results.value = []
     selectedIdx.value = -1
-    query.value = q
+    error.value = null
+    domainFacets.value = []
+  }
 
-    try {
-      const params = new URLSearchParams({ q, limit: '30' })
-      if (domainFilter.value) params.set('domain', domainFilter.value)
-      const response = await fetch(`/api/wiki/search?${params}`, { signal })
-      if (!response.ok) throw new Error(String(response.status))
-      const data = await response.json()
-      results.value = data.results || []
-      domainFacets.value = data.domain_facets || []
-    } catch (e) {
-      if (e.name === 'AbortError') return
-      results.value = []
-      domainFacets.value = []
-    } finally {
-      loading.value = false
+  function setDomainFilter(domain) {
+    const wikiStore = useWikiStore()
+    wikiStore.domainFilter = domain
+    if (query.value.trim().length >= 2) {
+      triggerSearch(query.value)
     }
   }
 
   function triggerSearch(q) {
-    clearTimeout(searchTimer)
-    if (!q || !q.trim()) {
-      close()
+    if (currentController) {
+      currentController.abort()
+    }
+
+    query.value = q
+    clearTimeout(debounceTimer)
+
+    if (!q || q.trim().length < 2) {
+      results.value = []
+      open.value = false
+      error.value = null
+      domainFacets.value = []
       return
     }
-    searchTimer = setTimeout(() => doSearch(q.trim()), 250)
-  }
 
-  function setDomainFilter(domain) {
-    domainFilter.value = domain || null
-    if (query.value) doSearch(query.value)
-  }
-
-  function close() {
-    open.value = false
-    query.value = ''
-    results.value = []
-    domainFacets.value = []
-    domainFilter.value = null
+    loading.value = true
+    error.value = null
     selectedIdx.value = -1
+
+    debounceTimer = setTimeout(async () => {
+      currentController = new AbortController()
+      const wikiStore = useWikiStore()
+      try {
+        const data = await api.searchWiki(
+          q.trim(),
+          30,
+          wikiStore.activeDomain,
+          currentController.signal,
+        )
+        const entries = data.results || data.entries || data || []
+        results.value = entries
+        open.value = true
+        domainFacets.value = data.domain_facets?.length
+          ? data.domain_facets
+          : extractFacets(entries)
+      } catch (e) {
+        if (e.name === 'AbortError') return
+        error.value = e.message || 'Search failed'
+        results.value = []
+        open.value = true
+      } finally {
+        if (currentController?.signal.aborted) return
+        loading.value = false
+      }
+    }, 200)
+  }
+
+  function extractFacets(entries) {
+    const facetMap = {}
+    for (const entry of entries) {
+      const domain = entry.domain || '其他'
+      if (!facetMap[domain]) {
+        facetMap[domain] = { domain, count: 0 }
+      }
+      facetMap[domain].count++
+    }
+    return Object.values(facetMap).sort((a, b) => b.count - a.count)
   }
 
   function selectNext() {
-    if (results.value.length === 0) return
-    selectedIdx.value = Math.min(selectedIdx.value + 1, results.value.length - 1)
+    if (results.value.length > 0) {
+      selectedIdx.value = Math.min(selectedIdx.value + 1, results.value.length - 1)
+    }
   }
 
   function selectPrev() {
-    if (results.value.length === 0) return
-    selectedIdx.value = Math.max(selectedIdx.value - 1, 0)
+    selectedIdx.value = Math.max(selectedIdx.value - 1, -1)
   }
 
   return {
     query,
     results,
-    domainFacets,
-    domainFilter,
     loading,
-    selectedIdx,
     open,
-    triggerSearch,
-    doSearch,
-    setDomainFilter,
+    selectedIdx,
+    error,
+    domainFacets,
+    hasResults,
     close,
+    setDomainFilter,
+    triggerSearch,
     selectNext,
     selectPrev,
   }

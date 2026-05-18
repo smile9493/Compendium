@@ -1,25 +1,33 @@
 <template>
   <div class="content-inner">
     <div v-if="wikiStore.currentEntry">
-      <div v-if="wikiStore.currentEntry.error" class="empty-entry">
-        <div class="icon">⚠️</div>
-        <h2>加载失败</h2>
-        <p>{{ wikiStore.currentEntry.error }}</p>
-      </div>
+      <div class="reading-progress" :style="{ transform: `scaleX(${progress})` }"></div>
+
+      <ErrorState
+        v-if="wikiStore.currentEntry.error"
+        icon="⚠️"
+        :title="errorTitle"
+        :message="wikiStore.currentEntry.error"
+        retryable
+        @retry="retryLoad"
+      />
       <template v-else>
         <div class="breadcrumb">
-          <span @click="$router.push('/')">📚 首页</span>
+          <span @click="openHome">📚 首页</span>
           <template v-for="(part, i) in pathParts" :key="i">
             <span class="sep">/</span>
-            <span @click="navigateToBreadcrumb(i)" :style="{ cursor: isLast(i) ? 'default' : 'pointer' }">
+            <span
+              @click="navigateToBreadcrumb(i)"
+              :style="{ cursor: isLast(i) ? 'default' : 'pointer', color: isLast(i) ? 'var(--text)' : '' }"
+            >
               {{ part }}
             </span>
           </template>
         </div>
 
-        <div class="entry-card">
+        <div class="entry-header">
           <h1>{{ wikiStore.currentEntry.title || 'Untitled' }}</h1>
-          <div class="meta-row">
+          <div class="meta-inline">
             <span class="badge badge-domain">{{ wikiStore.currentEntry.domain || '?' }}</span>
             <span class="badge badge-level">{{ wikiStore.currentEntry.level || 'L1' }}</span>
             <span
@@ -35,64 +43,90 @@
           </div>
         </div>
 
-        <MarkdownRenderer :markdown="wikiStore.currentEntry.body_markdown || wikiStore.currentEntry.body || ''" />
+        <MarkdownRenderer v-if="entryMarkdown" :markdown="entryMarkdown" />
 
         <div v-if="hasRelations" class="relations">
-          <div v-if="wikiStore.currentEntry.related?.length" class="relation-panel">
+          <div v-if="wikiStore.currentEntry.related?.length" class="relation-section">
             <h3>🔗 相关条目</h3>
             <div class="link-grid">
               <span
                 v-for="r in wikiStore.currentEntry.related"
                 :key="r"
                 class="link-card"
-                @click="wikiStore.navigateTo(r)"
+                @click="openEntry(r)"
               >{{ r }}</span>
             </div>
           </div>
-          <div v-if="wikiStore.currentEntry.contradictions?.length" class="relation-panel">
+          <div v-if="wikiStore.currentEntry.contradictions?.length" class="relation-section">
             <h3>⚡ 矛盾条目</h3>
             <div class="link-grid">
               <span
                 v-for="r in wikiStore.currentEntry.contradictions"
                 :key="r"
                 class="link-card contradiction"
-                @click="wikiStore.navigateTo(r)"
+                @click="openEntry(r)"
               >{{ r }}</span>
             </div>
           </div>
-          <div v-if="wikiStore.currentEntry.backlinks?.length" class="relation-panel">
+          <div v-if="wikiStore.currentEntry.backlinks?.length" class="relation-section">
             <h3>↩️ 反向链接</h3>
             <div class="link-grid">
               <span
                 v-for="r in wikiStore.currentEntry.backlinks"
                 :key="r"
                 class="link-card"
-                @click="wikiStore.navigateTo(r)"
+                @click="openEntry(r)"
               >{{ r }}</span>
             </div>
           </div>
         </div>
       </template>
     </div>
-    <div v-else class="loading-placeholder">
-      <span class="spin-icon"></span>加载中…
+
+    <div v-else class="skeleton-entry">
+      <div class="skeleton skeleton-heading"></div>
+      <div class="skeleton-meta">
+        <span class="skeleton-chip"></span>
+        <span class="skeleton-chip"></span>
+        <span class="skeleton-chip"></span>
+      </div>
+      <div class="skeleton skeleton-text medium"></div>
+      <div class="skeleton skeleton-text medium"></div>
+      <div class="skeleton skeleton-text short"></div>
+      <div class="skeleton skeleton-block"></div>
+      <div class="skeleton skeleton-text"></div>
+      <div class="skeleton skeleton-text"></div>
+      <div class="skeleton skeleton-text medium"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useWikiStore } from '@/stores/wiki'
+import { useReadingProgress } from '@/composables/useReadingProgress'
+import { openEntry, openHome } from '@/composables/useWikiNavigation'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
+import ErrorState from '@/components/ErrorState.vue'
 
-const props = defineProps({ path: { type: String, default: '' } })
 const route = useRoute()
 const wikiStore = useWikiStore()
+
+const { progress, setup: setupProgress } = useReadingProgress()
+
+const SCROLL_KEY_PREFIX = 'scroll:'
 
 const pathParts = computed(() => {
   const p = wikiStore.currentPath || ''
   return p.replace('.md', '').split('/').filter(Boolean)
+})
+
+const entryMarkdown = computed(() => wikiStore.currentEntry?.body_markdown?.trim() || '')
+
+const errorTitle = computed(() => {
+  const err = wikiStore.currentEntry?.error || ''
+  return err.includes('Markdown') ? '正文不可用' : '加载失败'
 })
 
 function isLast(i) {
@@ -101,7 +135,13 @@ function isLast(i) {
 
 function navigateToBreadcrumb(i) {
   const p = pathParts.value.slice(0, i + 1).join('/') + '.md'
-  wikiStore.navigateTo(p)
+  openEntry(p)
+}
+
+function retryLoad() {
+  if (wikiStore.currentPath) {
+    wikiStore.loadEntry(wikiStore.currentPath, { force: true })
+  }
 }
 
 const qualityScore = computed(() => {
@@ -110,19 +150,53 @@ const qualityScore = computed(() => {
   return `${(q * 100).toFixed(0)}%`
 })
 
-const hasTags = computed(() => {
-  return wikiStore.currentEntry?.tags?.length > 0
-})
+const hasTags = computed(() => wikiStore.currentEntry?.tags?.length > 0)
 
 const hasRelations = computed(() => {
   const e = wikiStore.currentEntry
   return e && (e.related?.length || e.contradictions?.length || e.backlinks?.length)
 })
 
-// Load entry when route params change
-watch(() => props.path || route.params.path, async (newPath) => {
-  if (newPath) {
-    await wikiStore.navigateTo(newPath)
+function scrollStorageKey() {
+  return `${SCROLL_KEY_PREFIX}${wikiStore.currentPath || ''}`
+}
+
+function saveScroll() {
+  const main = document.querySelector('.app-main')
+  if (main && wikiStore.currentPath) {
+    sessionStorage.setItem(scrollStorageKey(), String(main.scrollTop))
   }
-}, { immediate: true })
+}
+
+function restoreScroll() {
+  const main = document.querySelector('.app-main')
+  const raw = sessionStorage.getItem(scrollStorageKey())
+  if (main && raw) {
+    const top = parseInt(raw, 10)
+    if (!Number.isNaN(top)) {
+      main.scrollTop = top
+    }
+  }
+}
+
+watch(
+  () => wikiStore.currentEntry,
+  async (entry) => {
+    if (!entry || entry.error) return
+    await nextTick()
+    setupProgress()
+    restoreScroll()
+  }
+)
+
+onBeforeUnmount(() => {
+  saveScroll()
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    saveScroll()
+  }
+)
 </script>

@@ -1,9 +1,21 @@
 <template>
   <Transition name="fade">
-    <div v-if="open" class="overlay open" @click.self="$emit('close')">
+    <div v-if="open" class="overlay open" @click.self="emit('close')">
       <div class="dialog settings-dialog">
-        <button class="dialog-close" @click="$emit('close')">&times;</button>
-        <h2>⚙️ 设置</h2>
+        <button class="dialog-close" @click="emit('close')">
+          <X :size="16" />
+        </button>
+
+        <div class="settings-header">
+          <div class="settings-icon">
+            <Settings :size="18" />
+          </div>
+          <div class="settings-title-wrap">
+            <div class="settings-title">设置</div>
+            <div class="settings-subtitle">系统配置与运行时管理</div>
+          </div>
+        </div>
+
         <div class="settings-tabs">
           <button
             v-for="tab in tabs"
@@ -11,11 +23,15 @@
             class="settings-tab"
             :class="{ active: activeTab === tab.id }"
             @click="activeTab = tab.id"
-          >{{ tab.label }}</button>
+          >
+            <component :is="tab.icon" :size="14" />
+            {{ tab.label }}
+          </button>
         </div>
-        <div class="settings-content">
+
+        <div class="settings-body">
           <!-- Server Config -->
-          <div v-if="activeTab === 'config'">
+          <div v-if="activeTab === 'config'" class="settings-section">
             <div class="form-group">
               <label>VLM 模型</label>
               <select v-model="vlmModel">
@@ -33,93 +49,143 @@
               <label>端点地址</label>
               <input type="text" v-model="vlmEndpoint" placeholder="https://api.openai.com/v1" />
             </div>
-            <button class="btn btn-primary" @click="saveVlmConfig" :disabled="configStore.saving">
-              {{ configStore.saving ? '保存中…' : '保存 VLM 配置' }}
-            </button>
-            <div style="margin-top:16px;">
-              <h3 style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:8px;">运行时配置</h3>
+            <div class="settings-actions">
+              <button class="btn btn-primary" @click="saveVlmConfig" :disabled="configStore.saving">
+                <Check :size="14" />
+                {{ configStore.saving ? '保存中…' : '保存配置' }}
+              </button>
+            </div>
+
+            <div class="settings-divider"></div>
+
+            <div class="settings-section-title">运行时配置</div>
+            <div class="config-table-wrap">
               <table class="config-table">
-                <thead><tr><th>键</th><th>值</th><th>操作</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>键</th>
+                    <th>值</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
                 <tbody>
                   <tr v-for="(v, k) in configStore.configData" :key="k">
-                    <td class="mono">{{ k }}</td>
-                    <td class="mono">{{ String(v).slice(0, 60) }}</td>
-                    <td><button class="btn btn-sm btn-danger" @click="configStore.deleteConfig(k)">删除</button></td>
+                    <td class="mono key-cell">{{ k }}</td>
+                    <td class="mono value-cell">{{ String(v).slice(0, 60) }}</td>
+                    <td>
+                      <button class="btn btn-sm btn-danger" @click="configStore.deleteConfig(k)">
+                        <Trash2 :size="12" />
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
-              <div class="form-row" style="margin-top:12px;">
-                <div class="form-group">
-                  <input type="text" v-model="newKey" placeholder="键名" />
-                </div>
-                <div class="form-group">
-                  <input type="text" v-model="newValue" placeholder="值" />
-                </div>
-                <button class="btn btn-primary btn-sm" @click="addConfig">添加</button>
+            </div>
+            <div class="config-add-row">
+              <div class="form-group">
+                <input type="text" v-model="newKey" placeholder="键名" />
               </div>
+              <div class="form-group">
+                <input type="text" v-model="newValue" placeholder="值" />
+              </div>
+              <button class="btn btn-primary btn-sm" @click="addConfig">
+                <Plus :size="14" /> 添加
+              </button>
             </div>
           </div>
 
           <!-- Health -->
-          <div v-if="activeTab === 'health'">
+          <div v-if="activeTab === 'health'" class="settings-section">
             <div v-if="configStore.healthData" class="health-grid">
-              <div class="health-item"><div class="hv">{{ configStore.healthData.total_entries || 0 }}</div><div class="hl">总条目</div></div>
-              <div class="health-item"><div class="hv">{{ configStore.healthData.orphan_count || 0 }}</div><div class="hl">孤立条目</div></div>
-              <div class="health-item"><div class="hv">{{ configStore.healthData.contradiction_count || 0 }}</div><div class="hl">矛盾对</div></div>
-              <div class="health-item"><div class="hv">{{ configStore.healthData.graph_nodes || 0 }}</div><div class="hl">图节点</div></div>
-              <div class="health-item"><div class="hv">{{ configStore.healthData.graph_edges || 0 }}</div><div class="hl">图边</div></div>
-              <div class="health-item"><div class="hv">{{ formatQuality(configStore.healthData.avg_quality_score) }}</div><div class="hl">质量分</div></div>
+              <div class="health-item">
+                <div class="hv">{{ configStore.healthData.total_entries || 0 }}</div>
+                <div class="hl">总条目</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ configStore.healthData.orphan_count || 0 }}</div>
+                <div class="hl">孤立条目</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ configStore.healthData.contradiction_count || 0 }}</div>
+                <div class="hl">矛盾对</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ configStore.healthData.graph_nodes || 0 }}</div>
+                <div class="hl">图节点</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ configStore.healthData.graph_edges || 0 }}</div>
+                <div class="hl">图边</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ formatQuality(configStore.healthData.avg_quality_score) }}</div>
+                <div class="hl">质量分</div>
+              </div>
             </div>
-            <div v-else class="loading-placeholder">加载中…</div>
-            <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+            <div v-else class="settings-loading">
+              <span class="dots-loading"></span>
+              <span>正在加载健康数据…</span>
+            </div>
+            <div class="settings-actions">
               <button class="btn btn-primary" :disabled="configStore.loading" @click="rebuildIndex">
+                <RefreshCw :size="14" />
                 {{ configStore.loading ? '重建中…' : '重建索引' }}
               </button>
-              <button class="btn" @click="configStore.loadHealth(); configStore.loadCompileStatus();">
-                刷新
+              <button class="btn" @click="refreshHealth">
+                <RotateCcw :size="14" /> 刷新
               </button>
             </div>
           </div>
 
           <!-- Compile Queue -->
-          <div v-if="activeTab === 'compile'">
-            <div v-if="configStore.compileStatus" class="compile-list">
-              <div class="compile-item">
-                <span class="ci-status">
-                  <span v-if="configStore.compileStatus.running" class="status-badge status-warn">运行中</span>
-                  <span v-else-if="configStore.compileStatus.last_outcome === 'success'" class="status-badge status-ok">成功</span>
-                  <span v-else class="status-badge status-err">{{ configStore.compileStatus.last_outcome || '未知' }}</span>
+          <div v-if="activeTab === 'compile'" class="settings-section">
+            <div v-if="configStore.compileStatus" class="compile-status-card">
+              <div class="compile-status-header">
+                <span class="compile-status-label">编译状态</span>
+                <span class="status-badge" :class="compileStatusClass">
+                  {{ compileStatusText }}
                 </span>
-                <span class="ci-name">最后编译</span>
-                <span class="ci-time">{{ configStore.compileStatus.last_finished || configStore.compileStatus.last_started || '从未' }}</span>
+              </div>
+              <div class="compile-status-time">
+                {{ configStore.compileStatus.last_finished || configStore.compileStatus.last_started || '从未运行' }}
               </div>
             </div>
-            <div v-else class="loading-placeholder">加载中…</div>
-            <div style="margin-top:16px;">
-              <h3 style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:8px;">上传 PDF 触发编译</h3>
-              <div class="form-row">
-                <input type="file" ref="fileInput" accept=".pdf" @change="uploadFile" />
-              </div>
+            <div v-else class="settings-loading">
+              <span class="dots-loading"></span>
+              <span>正在加载编译状态…</span>
+            </div>
+            <div class="settings-divider"></div>
+            <div class="settings-section-title">上传 PDF</div>
+            <div class="upload-area">
+              <input type="file" ref="fileInput" accept=".pdf" @change="uploadFile" class="upload-input" />
+              <div class="upload-hint">拖拽或点击上传 PDF 文件以触发编译</div>
             </div>
           </div>
 
           <!-- About -->
-          <div v-if="activeTab === 'about'">
-            <div class="form-group">
-              <label>项目</label>
-              <p style="color:var(--text);">rsut-pdf-mcp — 知识编译引擎</p>
+          <div v-if="activeTab === 'about'" class="settings-section">
+            <div class="about-card">
+              <div class="about-logo">
+                <BookOpen :size="24" />
+              </div>
+              <div class="about-info">
+                <div class="about-name">rsut-pdf-mcp</div>
+                <div class="about-desc">知识编译引擎 — 将 PDF 转化为结构化知识图谱</div>
+              </div>
             </div>
-            <div class="form-group">
-              <label>架构模式</label>
-              <p style="color:var(--text);font-family:var(--mono);font-size:0.75rem;">Breakwater Architecture</p>
-            </div>
-            <div class="form-group">
-              <label>许可证</label>
-              <p style="color:var(--text);">MIT</p>
-            </div>
-            <div class="form-group">
-              <label>技术栈</label>
-              <p style="color:var(--text-secondary);font-size:0.75rem;">Rust + Axum + Vue3 + Pinia</p>
+            <div class="about-grid">
+              <div class="about-item">
+                <div class="about-item-label">架构模式</div>
+                <div class="about-item-value mono">Breakwater Architecture</div>
+              </div>
+              <div class="about-item">
+                <div class="about-item-label">技术栈</div>
+                <div class="about-item-value mono">Rust + Axum + Vue3 + Pinia</div>
+              </div>
+              <div class="about-item">
+                <div class="about-item-label">许可证</div>
+                <div class="about-item-value">MIT</div>
+              </div>
             </div>
           </div>
         </div>
@@ -129,21 +195,24 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useConfigStore } from '@/stores/config'
+import { useWikiStore } from '@/stores/wiki'
 import { api } from '@/api'
+import { formatQuality } from '@/utils/format'
+import { X, Settings, Server, Activity, Upload, Info, Check, Trash2, Plus, RefreshCw, RotateCcw, BookOpen } from 'lucide-vue-next'
 
-defineProps({ open: Boolean })
-defineEmits(['close'])
+const props = defineProps({ open: Boolean })
+const emit = defineEmits(['close'])
 
 const configStore = useConfigStore()
 
 const activeTab = ref('config')
 const tabs = [
-  { id: 'config', label: '服务器配置' },
-  { id: 'health', label: '知识库健康' },
-  { id: 'compile', label: '编译队列' },
-  { id: 'about', label: '关于' },
+  { id: 'config', label: '服务器配置', icon: Server },
+  { id: 'health', label: '知识库健康', icon: Activity },
+  { id: 'compile', label: '编译队列', icon: Upload },
+  { id: 'about', label: '关于', icon: Info },
 ]
 
 const vlmModel = ref('')
@@ -153,15 +222,34 @@ const newKey = ref('')
 const newValue = ref('')
 const fileInput = ref(null)
 
-watch(() => open, async (val) => {
+const compileStatusClass = computed(() => {
+  if (configStore.compileStatus?.running) return 'status-warn'
+  if (configStore.compileStatus?.last_outcome === 'success') return 'status-ok'
+  return 'status-err'
+})
+
+const compileStatusText = computed(() => {
+  if (configStore.compileStatus?.running) return '运行中'
+  if (configStore.compileStatus?.last_outcome === 'success') return '成功'
+  return configStore.compileStatus?.last_outcome || '未知'
+})
+
+watch(() => props.open, async (val) => {
   if (val) {
+    activeTab.value = 'config'
+    vlmModel.value = ''
+    vlmApiKey.value = ''
+    vlmEndpoint.value = ''
     await configStore.loadConfig()
-    await configStore.loadHealth()
-    await configStore.loadCompileStatus()
     vlmModel.value = configStore.configData.vlm_model || ''
     vlmApiKey.value = configStore.configData.vlm_api_key || ''
     vlmEndpoint.value = configStore.configData.vlm_endpoint || ''
   }
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'health' && !configStore.healthData) configStore.loadHealth()
+  if (tab === 'compile' && !configStore.compileStatus) configStore.loadCompileStatus()
 })
 
 async function saveVlmConfig() {
@@ -181,10 +269,16 @@ async function addConfig() {
 }
 
 async function rebuildIndex() {
+  const wikiStore = useWikiStore()
   const result = await configStore.triggerRebuild()
-  if (result) {
-    configStore.loadHealth()
-  }
+  wikiStore.clearEntryCache()
+  await wikiStore.loadTree()
+  if (result) configStore.loadHealth()
+}
+
+async function refreshHealth() {
+  await configStore.loadHealth()
+  await configStore.loadCompileStatus()
 }
 
 async function uploadFile(e) {
@@ -196,11 +290,5 @@ async function uploadFile(e) {
   } catch (err) {
     console.error('Upload failed', err)
   }
-}
-
-function formatQuality(score) {
-  if (score == null) return '-'
-  if (typeof score === 'string') return score
-  return `${(score * 100).toFixed(0)}%`
 }
 </script>

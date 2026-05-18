@@ -1,80 +1,141 @@
 <template>
-  <div class="search-overlay" :class="{ open: searchStore.open }" @click.self="searchStore.close()">
-    <div class="search-header">
-      <span>
-        <span class="sh-count">{{ resultSummary }}</span>
-        <span class="sh-hint">↑↓ 导航 · Enter 打开 · Esc 关闭</span>
-      </span>
-      <button class="search-close-btn" @click="searchStore.close()">&times;</button>
-    </div>
-    <div v-if="searchStore.domainFacets.length > 1" class="search-domain-chips">
-      <span class="sd-label">领域筛选</span>
-      <span
-        class="search-domain-chip"
-        :class="{ active: !searchStore.domainFilter }"
-        @click="searchStore.setDomainFilter(null)"
-      >全部 ({{ totalFacetCount }})</span>
-      <span
-        v-for="f in searchStore.domainFacets"
-        :key="f.domain"
-        class="search-domain-chip"
-        :class="{ active: searchStore.domainFilter === f.domain }"
-        @click="searchStore.setDomainFilter(f.domain)"
-      >{{ f.domain }}<span class="sdc-count">{{ f.count }}</span></span>
-    </div>
-    <div class="search-results-inner">
-      <div v-if="searchStore.loading" class="search-spinner">
-        <span class="spin-icon"></span>正在检索…
-      </div>
-      <template v-else-if="searchStore.results.length > 0">
-        <div
-          v-for="(r, i) in searchStore.results"
-          :key="r.path"
-          class="search-hit"
-          :class="{ active: searchStore.selectedIdx === i }"
-          @click="openResult(r)"
-        >
-          <div class="hit-header">
-            <span class="hit-title">{{ r.title }}</span>
-            <span class="score-badge" :class="scoreTier(r.score).cls">{{ scoreTier(r.score).label }} · {{ r.score.toFixed(1) }}</span>
-          </div>
-          <div class="hit-meta">
-            <span class="badge badge-domain" style="font-size:0.625rem;padding:1px 6px;">{{ r.domain }}</span>
-            <span v-if="r.match_count" style="color:var(--text-muted);">×{{ r.match_count }} 处匹配</span>
-          </div>
-          <div class="hit-snippet" v-html="r.snippet || '...'"></div>
+  <Transition name="search-slide">
+    <div class="search-overlay" :class="{ open: searchStore.open }" @click.self="searchStore.close()">
+      <div class="search-header">
+        <div class="search-header-left">
+          <Search :size="16" class="search-icon" />
+          <input
+            type="text"
+            v-model="searchStore.query"
+            class="search-input"
+            placeholder="搜索知识库…"
+            @input="onSearch"
+            ref="searchInputRef"
+          />
+          <button v-if="searchStore.query" class="search-clear-btn" @click="clearSearch">
+            <X :size="14" />
+          </button>
         </div>
-      </template>
-      <div v-else-if="!searchStore.loading && searchStore.query" class="search-empty">
-        <div class="icon">🔍</div>
-        <h3>无匹配结果</h3>
-        <p>尝试使用更短或更通用的关键词</p>
+        <div class="search-header-right">
+          <span class="sh-hint">
+            <span class="kbd">↑↓</span> 导航
+            <span class="kbd">Enter</span> 打开
+            <span class="kbd">Esc</span> 关闭
+          </span>
+          <button class="search-close-btn" @click="searchStore.close()">
+            <X :size="16" />
+          </button>
+        </div>
+      </div>
+
+      <div v-if="searchStore.domainFacets.length > 1" class="search-domain-bar">
+        <span class="search-facet-label">结果筛选</span>
+        <button
+          class="search-facet-btn"
+          :class="{ active: !wikiStore.activeDomain }"
+          @click="searchStore.setDomainFilter(null)"
+        >
+          全部 <span class="facet-count">{{ totalFacetCount }}</span>
+        </button>
+        <button
+          v-for="f in searchStore.domainFacets"
+          :key="f.domain"
+          class="search-facet-btn"
+          :class="{ active: wikiStore.activeDomain === f.domain }"
+          @click="searchStore.setDomainFilter(f.domain)"
+        >
+          {{ f.domain }} <span class="facet-count">{{ f.count }}</span>
+        </button>
+      </div>
+
+      <div class="search-results-inner">
+        <div v-if="searchStore.loading" class="search-loading">
+          <span class="dots-loading"></span>
+          <span>正在检索…</span>
+        </div>
+
+        <template v-else-if="searchStore.results.length > 0">
+          <div class="search-results-header">
+            <span class="results-count">{{ searchStore.results.length }} 个结果</span>
+          </div>
+          <div
+            v-for="(r, i) in searchStore.results"
+            :key="r.path"
+            class="search-hit"
+            :class="{ active: searchStore.selectedIdx === i }"
+            @click="openResult(r)"
+          >
+            <div class="hit-top">
+              <div class="hit-title-row">
+                <FileText :size="14" class="hit-icon" />
+                <span class="hit-title">{{ r.title }}</span>
+                <span class="score-badge" :class="scoreTier(r.score).cls">
+                  {{ scoreTier(r.score).label }}
+                </span>
+              </div>
+              <div class="hit-meta">
+                <span class="hit-domain">
+                  <FolderOpen :size="11" />
+                  {{ r.domain }}
+                </span>
+                <span v-if="r.match_count" class="hit-matches">
+                  <Highlighter :size="11" />
+                  {{ r.match_count }} 处匹配
+                </span>
+              </div>
+            </div>
+            <div class="hit-snippet" v-html="r.snippet || '...'"></div>
+          </div>
+        </template>
+
+        <div v-else-if="searchStore.query && !searchStore.loading" class="search-empty">
+          <div class="search-empty-icon">
+            <SearchX :size="48" />
+          </div>
+          <div class="search-empty-title">无匹配结果</div>
+          <div class="search-empty-desc">尝试使用更短或更通用的关键词</div>
+        </div>
+
+        <div v-else-if="!searchStore.query" class="search-hint-state">
+          <div class="search-hint-icon">
+            <Search :size="32" />
+          </div>
+          <div class="search-hint-text">输入关键词开始搜索</div>
+        </div>
       </div>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useSearchStore } from '@/stores/search'
 import { useWikiStore } from '@/stores/wiki'
+import { openEntry } from '@/composables/useWikiNavigation'
+import { Search, X, FileText, FolderOpen, Highlighter, SearchX } from 'lucide-vue-next'
 
 const searchStore = useSearchStore()
 const wikiStore = useWikiStore()
+const searchInputRef = ref(null)
 
 const totalFacetCount = computed(() => {
   return searchStore.domainFacets.reduce((s, f) => s + f.count, 0)
 })
 
-const resultSummary = computed(() => {
-  const total = searchStore.results.length
-  if (searchStore.loading) return '搜索中…'
-  if (!total) return ''
-  let s = `找到 ${total} 条结果`
-  if (searchStore.domainFacets.length > 1) {
-    s += ' (' + searchStore.domainFacets.map(f => `${f.domain}: ${f.count}`).join(', ') + ')'
+function onSearch() {
+  searchStore.triggerSearch(searchStore.query)
+}
+
+function clearSearch() {
+  searchStore.query = ''
+  searchStore.triggerSearch('')
+}
+
+watch(() => searchStore.open, async (val) => {
+  if (val) {
+    await nextTick()
+    searchInputRef.value?.focus()
   }
-  return s
 })
 
 function scoreTier(score) {
@@ -86,6 +147,6 @@ function scoreTier(score) {
 
 function openResult(r) {
   searchStore.close()
-  wikiStore.navigateTo(r.path)
+  openEntry(r.path)
 }
 </script>

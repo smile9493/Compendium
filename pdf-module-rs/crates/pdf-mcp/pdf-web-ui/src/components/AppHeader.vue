@@ -1,38 +1,75 @@
 <template>
   <div class="app-header">
-    <button class="header-btn" @click="$emit('toggleSidebar')" :title="sidebarCollapsed ? '展开目录栏' : '折叠目录栏'">
-      {{ sidebarCollapsed ? '▶' : '◀' }}
-    </button>
-    <span class="logo">📚 rsut-pdf-mcp</span>
+    <div class="header-left">
+      <button class="header-btn icon-btn" @click="$emit('toggleSidebar')" v-tooltip="sidebarCollapsed ? '展开目录栏' : '折叠目录栏'">
+        <Menu v-if="!sidebarCollapsed" :size="16" />
+        <PanelLeft v-else :size="16" />
+      </button>
+      <span class="logo">
+        <BookOpen :size="15" />
+        rsut-pdf-mcp
+      </span>
+    </div>
+
     <div class="search-bar-wrap">
       <input
-        ref="searchInput"
+        ref="searchInputRef"
         type="text"
         class="search-bar"
-        :value="searchQuery"
+        v-model="searchStore.query"
         @input="onSearchInput"
         @keydown="onSearchKeydown"
-        placeholder="搜索知识库… (按 / 聚焦)"
+        placeholder="搜索知识库…"
         autocomplete="off"
       />
-      <span class="search-shortcut">/</span>
+      <span class="search-shortcut"><span class="kbd">/</span></span>
     </div>
+
     <span class="header-spacer"></span>
-    <button class="header-btn" @click="$emit('openDomains')" title="所有领域">🏷️ 领域</button>
-    <button class="header-btn" @click="$emit('openStats')" title="知识库统计">📊 统计</button>
-    <button class="header-btn" @click="$emit('openGraph')" title="知识图谱">🔗 图谱</button>
-    <button class="header-btn" @click="wikiStore.toggleTheme()" title="切换主题">🌓</button>
-    <button class="header-btn" @click="$emit('openSettings')" title="设置">⚙️</button>
-    <button class="header-btn" @click="$emit('toggleRightbar')" :title="rightbarCollapsed ? '展开信息栏' : '折叠信息栏'">
-      {{ rightbarCollapsed ? '◀' : '▶' }}
-    </button>
+
+    <div class="header-right">
+      <button class="header-btn icon-btn" @click="$emit('openDomains')" v-tooltip="'所有领域'">
+        <Tag :size="15" />
+      </button>
+      <button class="header-btn icon-btn" @click="$emit('openStats')" v-tooltip="'知识库统计'">
+        <BarChart2 :size="15" />
+      </button>
+      <button class="header-btn icon-btn" @click="$emit('openGraph')" v-tooltip="'知识图谱'">
+        <GitBranch :size="15" />
+      </button>
+      <span class="header-divider"></span>
+      <button
+        class="header-btn icon-btn"
+        :class="{ active: wikiStore.readingMode }"
+        @click="wikiStore.toggleReadingMode()"
+        v-tooltip="'阅读模式'"
+      >
+        <BookMarked :size="15" />
+      </button>
+      <button class="header-btn icon-btn" @click="wikiStore.toggleTheme()" v-tooltip="'切换主题'">
+        <Sun v-if="wikiStore.darkTheme" :size="15" />
+        <Moon v-else :size="15" />
+      </button>
+      <button class="header-btn icon-btn" @click="$emit('openSettings')" v-tooltip="'设置'">
+        <Settings :size="15" />
+      </button>
+      <button class="header-btn icon-btn" @click="$emit('toggleRightbar')" v-tooltip="rightbarCollapsed ? '展开信息栏' : '折叠信息栏'">
+        <PanelRight v-if="!rightbarCollapsed" :size="16" />
+        <PanelRightClose v-else :size="16" />
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useSearchStore } from '@/stores/search'
+import { openEntry } from '@/composables/useWikiNavigation'
+import {
+  Menu, PanelLeft, PanelRight, PanelRightClose, BookOpen, BookMarked,
+  Tag, BarChart2, GitBranch, Sun, Moon, Settings,
+} from 'lucide-vue-next'
 
 defineProps({
   sidebarCollapsed: Boolean,
@@ -43,23 +80,25 @@ defineEmits(['toggleSidebar', 'toggleRightbar', 'openDomains', 'openStats', 'ope
 
 const wikiStore = useWikiStore()
 const searchStore = useSearchStore()
-const searchQuery = ref('')
-const searchInput = ref(null)
+const searchInputRef = ref(null)
 
-function onSearchInput(e) {
-  searchQuery.value = e.target.value
-  searchStore.triggerSearch(e.target.value)
+defineExpose({ searchInputRef })
+
+function onSearchInput() {
+  searchStore.triggerSearch(searchStore.query)
 }
 
 function onSearchKeydown(e) {
   if (e.key === 'Escape') {
-    searchQuery.value = ''
     searchStore.close()
-    searchInput.value?.blur()
+    searchInputRef.value?.blur()
     return
   }
   if (e.key === 'ArrowDown') {
     e.preventDefault()
+    if (!searchStore.open && searchStore.query.trim().length >= 2) {
+      searchStore.triggerSearch(searchStore.query)
+    }
     searchStore.selectNext()
   }
   if (e.key === 'ArrowUp') {
@@ -70,26 +109,9 @@ function onSearchKeydown(e) {
     e.preventDefault()
     const r = searchStore.results[searchStore.selectedIdx]
     if (r) {
-      searchQuery.value = ''
       searchStore.close()
-      wikiStore.navigateTo(r.path)
+      openEntry(r.path)
     }
   }
 }
-
-function onGlobalKeydown(e) {
-  if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement !== searchInput.value) {
-    e.preventDefault()
-    searchInput.value?.focus()
-    searchInput.value?.select()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', onGlobalKeydown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onGlobalKeydown)
-})
 </script>

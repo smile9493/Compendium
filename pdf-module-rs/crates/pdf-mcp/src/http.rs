@@ -47,12 +47,14 @@ use pdf_core::knowledge::renderer::WikiRenderer;
 use pdf_core::management::{ConfigManager, HealthReporter};
 
 use crate::embed::Assets;
+use crate::metrics::{self, HttpMetrics, MetricsLayer};
 use crate::upload::UploadStore;
 
 #[derive(Clone)]
 pub struct HttpState {
     pub kb_path: Option<PathBuf>,
     pub upload_store: Option<Arc<UploadStore>>,
+    pub http_metrics: Option<Arc<HttpMetrics>>,
 }
 
 #[instrument(skip(state))]
@@ -78,7 +80,7 @@ pub async fn run_http_server(
 }
 
 fn build_router(state: HttpState) -> Router {
-    Router::new()
+    let mut router = Router::new()
         // ── Wiki API ──
         .route("/api/wiki/tree", get(api_wiki_tree))
         .route("/api/wiki/entries/*path", get(api_wiki_entry))
@@ -96,8 +98,16 @@ fn build_router(state: HttpState) -> Router {
         .route("/", get(|| async { Redirect::permanent("/app/") }))
         .route("/settings", get(|| async { Redirect::permanent("/app/") }))
         // ── SPA fallback (catches /app/* and serves SPA) ──
-        .fallback(serve_spa)
-        .with_state(Arc::new(state))
+        .fallback(serve_spa);
+
+    if let Some(ref metrics) = state.http_metrics {
+        router = router
+            .route("/metrics", get(metrics::metrics_endpoint))
+            .layer(axum::extract::Extension(Arc::clone(metrics)))
+            .layer(MetricsLayer::new(Arc::clone(metrics)));
+    }
+
+    router.with_state(Arc::new(state))
 }
 
 // ── SPA serving ──
@@ -292,10 +302,12 @@ async fn api_wiki_graph(
         return Json(serde_json::json!({"error": "Wiki directory not found"}));
     }
 
-    let mut graph = GraphIndex::new();
-    if let Err(e) = graph.rebuild(&wiki_dir) {
-        return Json(serde_json::json!({"error": format!("Graph rebuild failed: {}", e)}));
-    }
+    let (graph, _) = match GraphIndex::load_from_disk_or_rebuild(&kb, &wiki_dir) {
+        Ok(g) => g,
+        Err(e) => {
+            return Json(serde_json::json!({"error": format!("Graph load failed: {}", e)}));
+        }
+    };
 
     let mermaid = graph.export_concept_map(&path, 2);
     Json(serde_json::json!({"mermaid": mermaid, "entry": path}))

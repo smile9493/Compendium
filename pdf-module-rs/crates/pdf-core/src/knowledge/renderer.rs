@@ -22,6 +22,8 @@ pub struct RenderedEntry {
     pub quality_score: f32,
     pub status: String,
     pub version: u32,
+    /// Markdown body without YAML front matter (for client-side rendering).
+    pub body_markdown: String,
     pub body_html: String,
     pub related: Vec<String>,
     pub contradictions: Vec<String>,
@@ -169,6 +171,7 @@ impl WikiRenderer {
         })?;
 
         let body_md = split_front_matter(&content);
+        let body_markdown = body_md.to_string();
         let body_html = markdown_to_html(body_md);
 
         let light = parse_light_meta(&content);
@@ -240,6 +243,7 @@ impl WikiRenderer {
             quality_score,
             status,
             version: entry.as_ref().map(|e| e.version).unwrap_or(0),
+            body_markdown,
             body_html,
             related,
             contradictions,
@@ -517,4 +521,44 @@ fn extract_title_from_path(path: &str) -> String {
     }
 
     file_name.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn render_entry_includes_non_empty_body_markdown() {
+        let tmp = TempDir::new().unwrap();
+        let wiki = tmp.path().join("wiki");
+        fs::create_dir_all(&wiki).unwrap();
+        let path = wiki.join("test-entry.md");
+        fs::write(
+            &path,
+            r#"---
+title: Test Entry
+domain: rust
+level: L1
+quality_score: 0.9
+status: active
+---
+# Hello
+
+Paragraph with **bold** text.
+"#,
+        )
+        .unwrap();
+
+        let renderer = WikiRenderer::new(&wiki);
+        let entry = renderer.render_entry("test-entry.md").unwrap();
+        assert!(!entry.body_markdown.is_empty());
+        assert!(entry.body_markdown.contains("# Hello"));
+        assert!(!entry.body_html.is_empty());
+
+        let json = serde_json::to_value(&entry).unwrap();
+        let md = json.get("body_markdown").and_then(|v| v.as_str());
+        assert!(md.is_some_and(|s| !s.is_empty()));
+    }
 }

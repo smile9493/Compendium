@@ -1,11 +1,12 @@
 <template>
-  <div class="prose" v-html="html"></div>
+  <div class="prose" v-html="html" @click="handleWikilinkClick"></div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { useWikiStore } from '@/stores/wiki'
 import { marked } from 'marked'
+import { openEntry } from '@/composables/useWikiNavigation'
+import { normalizeWikiPath } from '@/utils/path'
 import hljs from 'highlight.js/lib/core'
 
 // Register common languages
@@ -28,7 +29,7 @@ hljs.registerLanguage('shell', bash)
 hljs.registerLanguage('xml', xml)
 hljs.registerLanguage('css', css)
 
-// Configure marked
+// Configure marked — disable raw HTML to prevent XSS
 marked.setOptions({
   breaks: true,
   gfm: true,
@@ -44,20 +45,33 @@ marked.setOptions({
   },
 })
 
+// Block raw HTML to prevent XSS — wiki content from PDF compilation is pure markdown
+marked.use({
+  renderer: {
+    html(token) {
+      return ''
+    }
+  }
+})
+
 const props = defineProps({
   markdown: { type: String, default: '' },
 })
 
-const wikiStore = useWikiStore()
+const WIKILINK_PATH = /^[\w\u4e00-\u9fff./_-]+$/
 
 const html = computed(() => {
   if (!props.markdown) return ''
   let rendered = marked.parse(props.markdown)
 
-  // Convert wiki links [[path]] to clickable links
-  rendered = rendered.replace(/\[\[([^\]]+)\]\]/g, (match, path) => {
-    const title = path.split('/').pop()?.replace('.md', '') || path
-    return `<a class="wikilink" data-path="${path}">${title}</a>`
+  rendered = rendered.replace(/\[\[([^\]]+)\]\]/g, (_match, rawPath) => {
+    const normalized = normalizeWikiPath(rawPath)
+    if (!normalized || !WIKILINK_PATH.test(rawPath.trim())) {
+      return rawPath
+    }
+    const title = normalized.split('/').pop()?.replace('.md', '') || normalized
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+    return `<a class="wikilink" href="#" data-path="${esc(normalized)}">${esc(title)}</a>`
   })
 
   return rendered
@@ -69,18 +83,8 @@ function handleWikilinkClick(e) {
     e.preventDefault()
     const path = link.dataset.path
     if (path) {
-      wikiStore.navigateTo(path)
+      openEntry(path)
     }
   }
 }
-
-// Use event delegation on the component root
-import { onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
-const instance = getCurrentInstance()
-onMounted(() => {
-  instance?.vnode.el?.addEventListener('click', handleWikilinkClick)
-})
-onBeforeUnmount(() => {
-  instance?.vnode.el?.removeEventListener('click', handleWikilinkClick)
-})
 </script>

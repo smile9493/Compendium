@@ -1,9 +1,21 @@
 <template>
   <Transition name="fade">
-    <div v-if="open" class="overlay open" @click.self="$emit('close')">
+    <div v-if="open" class="overlay open" @click.self="emit('close')">
       <div class="dialog domain-dialog">
-        <button class="dialog-close" @click="$emit('close')">&times;</button>
-        <h2>🏷️ 领域总览</h2>
+        <button class="dialog-close" @click="emit('close')">
+          <X :size="16" />
+        </button>
+
+        <div class="domain-header">
+          <div class="domain-icon">
+            <Tag :size="18" />
+          </div>
+          <div class="domain-title-wrap">
+            <div class="domain-title">领域总览</div>
+            <div class="domain-subtitle">{{ wikiStore.domainsFromTree.length }} 个领域分类</div>
+          </div>
+        </div>
+
         <div v-if="wikiStore.domainsFromTree.length" class="domain-cards">
           <div
             v-for="d in wikiStore.domainsFromTree"
@@ -12,17 +24,33 @@
             :class="{ selected: wikiStore.domainFilter === d.domain }"
             @click="selectDomain(d.domain)"
           >
-            <div class="domain-card-header">
-              <span class="dc-name">📁 {{ d.domain }}</span>
-              <span class="dc-count">{{ d.count }} 个条目</span>
+            <div class="domain-card-body">
+              <div class="domain-card-left">
+                <div class="domain-folder-icon">
+                  <FolderOpen :size="14" />
+                </div>
+                <div class="domain-info">
+                  <span class="dc-name">{{ d.domain }}</span>
+                  <span class="dc-paths">{{ d.count }} 个条目</span>
+                </div>
+              </div>
+              <div class="domain-card-actions">
+                <span v-if="wikiStore.domainFilter === d.domain" class="domain-selected-badge">
+                  <Check :size="11" />
+                </span>
+              </div>
             </div>
-            <div class="dc-paths">
-              <span v-for="(p, i) in d.paths.slice(0, 10)" :key="i" class="dc-path">{{ p }}</span>
-              <span v-if="d.paths.length > 10" class="dc-path">+{{ d.paths.length - 10 }} 更多</span>
+            <div class="domain-paths-preview">
+              <span v-for="(p, i) in d.paths.slice(0, 5)" :key="i" class="dc-path-item">{{ p }}</span>
+              <span v-if="d.paths.length > 5" class="dc-path-item more">+{{ d.paths.length - 5 }} 更多</span>
             </div>
           </div>
         </div>
-        <div v-else class="domain-empty">暂无领域数据</div>
+
+        <div v-else class="domain-loading">
+          <span class="dots-loading"></span>
+          <span>正在加载领域数据…</span>
+        </div>
       </div>
     </div>
   </Transition>
@@ -30,14 +58,14 @@
 
 <script setup>
 import { useWikiStore } from '@/stores/wiki'
+import { X, Tag, FolderOpen, Check } from 'lucide-vue-next'
 
-defineProps({ open: Boolean })
-defineEmits(['close'])
+const props = defineProps({ open: Boolean })
+const emit = defineEmits(['close'])
 
 const wikiStore = useWikiStore()
 
 function selectDomain(domain) {
-  const newFilter = wikiStore.domainFilter === domain ? null : domain
-  wikiStore.domainFilter = newFilter
+  wikiStore.setDomainFilter(domain)
 }
 </script>

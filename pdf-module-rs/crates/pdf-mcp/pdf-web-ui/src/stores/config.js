@@ -4,17 +4,19 @@ import { api } from '@/api'
 
 export const useConfigStore = defineStore('config', () => {
   const configData = ref({})
-  const healthData = ref(null)
-  const compileStatus = ref(null)
   const loading = ref(false)
   const saving = ref(false)
+  const healthData = ref(null)
+  const compileStatus = ref(null)
 
   async function loadConfig() {
+    loading.value = true
     try {
-      const data = await api.getConfig()
-      configData.value = data.config || {}
+      configData.value = await api.getConfig()
     } catch (e) {
-      configData.value = {}
+      console.error('Failed to load config:', e)
+    } finally {
+      loading.value = false
     }
   }
 
@@ -22,7 +24,7 @@ export const useConfigStore = defineStore('config', () => {
     try {
       healthData.value = await api.getHealth()
     } catch (e) {
-      healthData.value = null
+      console.error('Failed to load health:', e)
     }
   }
 
@@ -30,44 +32,56 @@ export const useConfigStore = defineStore('config', () => {
     try {
       compileStatus.value = await api.getCompileStatus()
     } catch (e) {
-      compileStatus.value = null
+      console.error('Failed to load compile status:', e)
     }
   }
 
   async function updateConfig(key, value) {
     saving.value = true
+    const prev = configData.value[key]
+    configData.value = { ...configData.value, [key]: value }
     try {
       await api.setConfig(key, value)
-      await loadConfig()
+    } catch (e) {
+      configData.value = { ...configData.value, [key]: prev }
+      throw e
     } finally {
       saving.value = false
     }
   }
 
   async function deleteConfig(key) {
+    saving.value = true
+    const prev = { ...configData.value }
+    const newData = { ...configData.value }
+    delete newData[key]
+    configData.value = newData
     try {
       await api.removeConfig(key)
-      await loadConfig()
     } catch (e) {
-      console.error('Failed to delete config', e)
+      configData.value = prev
+      throw e
+    } finally {
+      saving.value = false
     }
   }
 
   async function triggerRebuild() {
-    loading.value = true
+    saving.value = true
     try {
-      return await api.rebuildIndex()
+      const result = await api.rebuildIndex()
+      return result
     } finally {
-      loading.value = false
+      saving.value = false
     }
   }
 
   return {
     configData,
-    healthData,
-    compileStatus,
     loading,
     saving,
+    healthData,
+    compileStatus,
     loadConfig,
     loadHealth,
     loadCompileStatus,

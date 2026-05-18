@@ -1,31 +1,31 @@
+let mermaidModule = null
 let mermaidPromise = null
 
-export function loadMermaid() {
+export function getMermaid() {
+  return mermaidModule
+}
+
+export async function loadMermaid() {
+  if (mermaidModule) return mermaidModule
   if (mermaidPromise) return mermaidPromise
 
-  mermaidPromise = new Promise((resolve, reject) => {
-    // If already loaded (e.g., in MCP iframe context)
+  mermaidPromise = (async () => {
     if (window.mermaid && typeof window.mermaid.initialize === 'function') {
-      resolve(window.mermaid)
-      return
+      mermaidModule = window.mermaid
+    } else {
+      const mod = await import('mermaid')
+      mermaidModule = mod.default
     }
 
-    const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'
-    script.onload = () => {
-      window.mermaid.initialize({
-        startOnLoad: false,
-        theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
-        securityLevel: 'loose',
-      })
-      resolve(window.mermaid)
-    }
-    script.onerror = () => {
-      mermaidPromise = null
-      reject(new Error('Failed to load Mermaid.js'))
-    }
-    document.head.appendChild(script)
-  })
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default'
+    mermaidModule.initialize({
+      startOnLoad: false,
+      theme,
+      securityLevel: 'strict',
+    })
+
+    return mermaidModule
+  })()
 
   return mermaidPromise
 }
