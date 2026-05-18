@@ -14,6 +14,7 @@ use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
+use crate::knowledge::publish_gate::{is_searchable, GateConfig};
 use crate::knowledge::index::fulltext::SearchHit;
 use crate::knowledge::index::vector::{VectorHit, VectorIndex};
 use crate::knowledge::index::{FulltextIndex, GraphIndex};
@@ -76,11 +77,33 @@ pub fn search_with_mode(
         return Ok(Vec::new());
     }
 
-    match mode {
+    let hits = match mode {
         SearchMode::Keyword => search_keyword(knowledge_base, &wd, query, limit),
         SearchMode::Semantic => search_semantic(knowledge_base, query, limit),
         SearchMode::Hybrid => search_hybrid(knowledge_base, &wd, query, limit),
-    }
+    }?;
+    Ok(filter_searchable(knowledge_base, &wd, hits, limit))
+}
+
+fn filter_searchable(
+    knowledge_base: &Path,
+    wiki_dir: &Path,
+    hits: Vec<SearchHit>,
+    limit: usize,
+) -> Vec<SearchHit> {
+    let config = GateConfig::load(knowledge_base).unwrap_or_default();
+    hits.into_iter()
+        .filter(|h| {
+            let full = wiki_dir.join(&h.path);
+            if let Ok(content) = fs::read_to_string(&full) {
+                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                    return is_searchable(&entry, config.quality_min_score);
+                }
+            }
+            false
+        })
+        .take(limit)
+        .collect()
 }
 
 fn search_keyword(
@@ -283,8 +306,9 @@ pub fn rebuild_vectors(knowledge_base: &Path) -> PdfResult<usize> {
         return Ok(0);
     }
 
+    let config = GateConfig::load(knowledge_base).unwrap_or_default();
     let mut entries_data: Vec<(String, String, String, String)> = Vec::new();
-    scan_wiki_for_embedding(&wd, &wd, &mut entries_data)?;
+    scan_wiki_for_embedding(&wd, &wd, knowledge_base, &config, &mut entries_data)?;
 
     if entries_data.is_empty() {
         return Ok(0);
@@ -374,8 +398,11 @@ fn load_vector_index(knowledge_base: &Path) -> PdfResult<VectorIndex> {
 fn scan_wiki_for_embedding(
     base: &Path,
     dir: &Path,
+    knowledge_base: &Path,
+    config: &GateConfig,
     out: &mut Vec<(String, String, String, String)>,
 ) -> PdfResult<()> {
+    let _ = knowledge_base;
     if !dir.exists() {
         return Ok(());
     }
@@ -383,7 +410,7 @@ fn scan_wiki_for_embedding(
         let entry = entry.map_err(|e| PdfModuleError::Storage(e.to_string()))?;
         let path = entry.path();
         if path.is_dir() {
-            scan_wiki_for_embedding(base, &path, out)?;
+            scan_wiki_for_embedding(base, &path, knowledge_base, config, out)?;
         } else if path.extension().is_none_or(|e| e == "md") {
             let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if filename == "index.md" || filename == "log.md" {
@@ -391,6 +418,9 @@ fn scan_wiki_for_embedding(
             }
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                    if !is_searchable(&entry, config.quality_min_score) {
+                        continue;
+                    }
                     let rel = path
                         .strip_prefix(base)
                         .unwrap_or(&path)
@@ -537,7 +567,7 @@ mod tests {
         let dir = kb.join("wiki").join(domain);
         fs::create_dir_all(&dir).unwrap();
         let content = format!(
-            "---\ntitle: \"{name}\"\ndomain: \"{domain}\"\ntags: [test]\nlevel: L1\nstatus: compiled\nquality_score: 0.9\n---\n\n{body}"
+            "---\ntitle: \"{name}\"\ndomain: \"{domain}\"\ntags: [test]\nlevel: L1\nstatus: compiled\npublish_status: published\nquality_score: 0.9\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\n{body}"
         );
         fs::write(dir.join(format!("{name}.md")), content).unwrap();
     }

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::error::{PdfModuleError, PdfResult};
+use crate::knowledge::publish_gate::{apply_publish_gate, GateResult};
 use crate::knowledge::quality::{analyze_wiki, QualityReport};
 
 /// Summary issue for agents and UI.
@@ -28,6 +29,9 @@ pub struct QualitySnapshot {
     pub contradiction_pairs: usize,
     pub drift_pairs: usize,
     pub broken_links_count: usize,
+    pub published_count: usize,
+    pub blocked_count: usize,
+    pub draft_count: usize,
     pub top_issues: Vec<QualityIssueBrief>,
 }
 
@@ -91,12 +95,17 @@ pub fn refresh_quality_snapshot(knowledge_base: &Path) -> PdfResult<QualitySnaps
     }
 
     let report = analyze_wiki(&wiki_dir)?;
-    let snapshot = snapshot_from_report(&report, &wiki_dir);
+    let gate = apply_publish_gate(knowledge_base).unwrap_or_default();
+    let snapshot = snapshot_from_report(&report, &wiki_dir, &gate);
     QualitySnapshotStore::new(knowledge_base).write(&snapshot)?;
     Ok(snapshot)
 }
 
-pub fn snapshot_from_report(report: &QualityReport, wiki_dir: &Path) -> QualitySnapshot {
+pub fn snapshot_from_report(
+    report: &QualityReport,
+    wiki_dir: &Path,
+    gate: &GateResult,
+) -> QualitySnapshot {
     let mut top_issues: Vec<QualityIssueBrief> = report
         .issues
         .iter()
@@ -117,6 +126,9 @@ pub fn snapshot_from_report(report: &QualityReport, wiki_dir: &Path) -> QualityS
         contradiction_pairs: count_contradiction_pairs(wiki_dir),
         drift_pairs: report.drift_pairs.len(),
         broken_links_count: report.broken_links.len(),
+        published_count: gate.published_count,
+        blocked_count: gate.blocked_count,
+        draft_count: gate.draft_count,
         top_issues,
     }
 }

@@ -91,6 +91,27 @@ impl std::fmt::Display for EntryLevel {
     }
 }
 
+/// Publication visibility (orthogonal to compilation lifecycle).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PublishStatus {
+    #[default]
+    Draft,
+    Published,
+    Blocked,
+}
+
+impl std::fmt::Display for PublishStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Draft => write!(f, "draft"),
+            Self::Published => write!(f, "published"),
+            Self::Blocked => write!(f, "blocked"),
+        }
+    }
+}
+
 /// Compilation status tracking.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -166,6 +187,9 @@ pub struct KnowledgeEntry {
     /// Current compilation status.
     #[serde(default)]
     pub status: CompileStatus,
+    /// Search/index visibility after quality gate.
+    #[serde(default)]
+    pub publish_status: PublishStatus,
     /// Version counter, incremented on each recompilation.
     #[serde(default)]
     pub version: u32,
@@ -205,6 +229,7 @@ impl KnowledgeEntry {
             aggregated_from: Vec::new(),
             quality_score: 0.0,
             status: CompileStatus::Pending,
+            publish_status: PublishStatus::Draft,
             version: 1,
             created: now,
             updated: now,
@@ -292,6 +317,7 @@ mod tests {
             aggregated_from: vec![],
             quality_score: 0.85,
             status: CompileStatus::Compiled,
+            publish_status: PublishStatus::Published,
             version: 1,
             created: Utc::now(),
             updated: Utc::now(),

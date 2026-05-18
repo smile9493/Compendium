@@ -337,12 +337,14 @@ pub async fn handle_check_quality(
     let report = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir)?;
     let kb_str = kb_path.to_string_lossy();
     let next_actions = build_next_actions(&report, &kb_str);
+    let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, None, 50)?;
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
         "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
         "domains": report.domains.iter().collect::<Vec<_>>(),
         "issues_count": report.issues.len(),
+        "issues": issues,
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),
         "drift_pairs_count": report.drift_pairs.len(),

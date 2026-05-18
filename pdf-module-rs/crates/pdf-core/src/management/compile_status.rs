@@ -75,6 +75,11 @@ impl CompileStatusStore {
         })
     }
 
+    /// Write the full status record (used by compile job store).
+    pub fn write_record(&self, record: &CompileStatusRecord) -> PdfResult<()> {
+        self.write_atomic(record)
+    }
+
     fn write_atomic(&self, record: &CompileStatusRecord) -> PdfResult<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
@@ -140,6 +145,7 @@ impl CompileGuard {
             outcome: outcome.to_string(),
             entries_compiled: stats.entries_compiled,
             entries_skipped: stats.entries_skipped,
+            job_id: record.active_job_id.clone(),
         };
         record.history.insert(0, history_entry);
         record.history.truncate(MAX_HISTORY);
@@ -157,6 +163,8 @@ fn default_record() -> CompileStatusRecord {
         last_outcome: None,
         message: "No compile has been performed yet.".to_string(),
         history: Vec::new(),
+        active_job_id: None,
+        pipeline_status: None,
     }
 }
 

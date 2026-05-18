@@ -89,7 +89,19 @@
             </div>
             <div v-if="compileStore.isRunning" class="compile-progress-hint">
               <span class="dots-loading"></span>
-              编译进行中，每 2 秒自动刷新…
+              {{ compileStore.pipelineStatus === 'awaiting_agent' ? '等待 Agent 写入 wiki…' : '编译进行中，每 2 秒自动刷新…' }}
+            </div>
+            <div v-if="pipelineStages.length" class="compile-stages">
+              <div
+                v-for="stage in pipelineStages"
+                :key="stage.stage"
+                class="compile-stage-row"
+                :class="'stage-' + stage.status"
+              >
+                <span class="stage-name">{{ stageLabel(stage.stage) }}</span>
+                <span class="stage-status">{{ stage.status }}</span>
+                <span v-if="stage.duration_ms" class="stage-dur">{{ stage.duration_ms }}ms</span>
+              </div>
             </div>
           </div>
         </div>
@@ -108,6 +120,10 @@
               <div class="health-item">
                 <div class="hv">{{ compileStore.qualitySnapshot.contradiction_pairs }}</div>
                 <div class="hl">矛盾对</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ compileStore.qualitySnapshot.blocked_count ?? 0 }}</div>
+                <div class="hl">已阻止</div>
               </div>
             </div>
             <div class="quality-issues-list">
@@ -161,11 +177,32 @@ const tabs = [
 
 const history = computed(() => compileStore.compileStatus?.history || [])
 
+const pipelineStages = computed(
+  () => compileStore.compileStatus?.job?.stages || []
+)
+
 const statusClass = computed(() => {
+  if (compileStore.pipelineStatus === 'awaiting_agent') return 'status-warn'
   if (compileStore.isRunning) return 'status-warn'
-  if (compileStore.compileStatus?.last_outcome === 'success') return 'status-ok'
+  if (
+    compileStore.pipelineStatus === 'completed' ||
+    compileStore.compileStatus?.last_outcome === 'success'
+  )
+    return 'status-ok'
+  if (compileStore.pipelineStatus === 'partial') return 'status-warn'
   return 'status-error'
 })
+
+function stageLabel(stage) {
+  const labels = {
+    extract: '提取',
+    prompt_gen: 'Prompt',
+    agent_wiki: 'Agent 写 wiki',
+    index_rebuild: '索引重建',
+    quality_gate: '质量门禁',
+  }
+  return labels[stage] || stage
+}
 
 function onFile(e) {
   const f = e.target.files?.[0]

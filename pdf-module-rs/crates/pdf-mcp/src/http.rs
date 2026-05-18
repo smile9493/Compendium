@@ -45,8 +45,9 @@ use pdf_core::knowledge::index::MetadataStore;
 use pdf_core::knowledge::renderer::WikiRenderer;
 use pdf_core::knowledge::quality::analyze_wiki;
 use pdf_core::knowledge::{graph, rebuild_all, search_with_mode, KnowledgeEngine, SearchMode};
+use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract};
 use pdf_core::management::{
-    CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter, QualitySnapshotStore,
+    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter, QualitySnapshotStore,
     WorkspaceRegistry,
 };
 use pdf_core::McpPdfPipeline;
@@ -682,22 +683,9 @@ async fn api_compile_upload(
         }
     };
 
-    let store = CompileStatusStore::new(&kb);
-    let guard = match store.begin_compile() {
-        Ok(g) => g,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
-
     let engine = match KnowledgeEngine::new(pipeline, &kb) {
         Ok(e) => e,
         Err(e) => {
-            let _ = guard.finish_error(e.to_string());
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": e.to_string()})),
@@ -706,36 +694,26 @@ async fn api_compile_upload(
         }
     };
 
-    let result = match engine
-        .compile_to_wiki(&uploaded.temp_path, body.domain.as_deref())
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response();
+    let job_store = CompileJobStore::new(&kb);
+    let compile_result =
+        run_single_pdf_extract(&engine, &job_store, &uploaded.temp_path, body.domain.as_deref())
+            .await;
+    match compile_result {
+        Ok((job_id, result)) => {
+            upload_store.remove(&body.file_id);
+            Json(serde_json::json!({
+                "job_id": job_id,
+                "pipeline_status": "awaiting_agent",
+                "compile_result": result,
+            }))
+            .into_response()
         }
-    };
-
-    if let Err(e) = guard.finish_success(CompileFinishStats {
-        entries_compiled: result.entries.len(),
-        entries_skipped: 0,
-    }) {
-        return (
+        Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
-            .into_response();
+            .into_response(),
     }
-
-    upload_store.remove(&body.file_id);
-    post_compile_success(&kb);
-
-    Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
 }
 
 #[instrument(skip(state))]
@@ -758,22 +736,9 @@ async fn api_compile_incremental(
         }
     };
 
-    let store = CompileStatusStore::new(&kb);
-    let guard = match store.begin_compile() {
-        Ok(g) => g,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
-
     let engine = match KnowledgeEngine::new(pipeline, &kb) {
         Ok(e) => e,
         Err(e) => {
-            let _ = guard.finish_error(e.to_string());
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": e.to_string()})),
@@ -782,32 +747,20 @@ async fn api_compile_incremental(
         }
     };
 
-    let raw_dir = engine.raw_dir();
-    let result = match engine.incremental_compile(&raw_dir).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
-
-    if let Err(e) = guard.finish_success(CompileFinishStats {
-        entries_compiled: result.compiled,
-        entries_skipped: result.skipped,
-    }) {
-        return (
+    let job_store = CompileJobStore::new(&kb);
+    match run_incremental_extract(&engine, &job_store).await {
+        Ok((job_id, result)) => Json(serde_json::json!({
+            "job_id": job_id,
+            "pipeline_status": "awaiting_agent",
+            "incremental_result": result,
+        }))
+        .into_response(),
+        Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
-            .into_response();
+            .into_response(),
     }
-
-    post_compile_success(&kb);
-    Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
 }
 
 fn kb_or_error(
@@ -833,28 +786,8 @@ async fn api_compile_status(
         None => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No KB"}))).into_response(),
     };
 
-    match CompileStatusStore::new(&kb).read() {
-        Ok(record) => {
-            let quality_snapshot = QualitySnapshotStore::new(&kb)
-                .read()
-                .unwrap_or_default();
-            match serde_json::to_value(&record) {
-            Ok(mut v) => {
-                if let Some(obj) = v.as_object_mut() {
-                    obj.insert(
-                        "quality_snapshot".to_string(),
-                        serde_json::to_value(&quality_snapshot).unwrap_or(serde_json::json!({})),
-                    );
-                }
-                Json(v).into_response()
-            }
-            Err(e) => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Serialize error: {}", e)})),
-            )
-                .into_response(),
-            }
-        }
+    match build_compile_status_json(&kb) {
+        Ok(v) => Json(v).into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),

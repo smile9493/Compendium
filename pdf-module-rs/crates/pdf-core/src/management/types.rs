@@ -82,12 +82,18 @@ pub struct CompileStatusRecord {
     pub last_finished: Option<DateTime<Utc>>,
     /// Duration of the last compile in milliseconds.
     pub last_duration_ms: Option<u64>,
-    /// Outcome: "success", "partial", or "error".
+    /// Outcome: "success", "partial", "error", or "awaiting_agent".
     pub last_outcome: Option<String>,
     /// Human-readable status message.
     pub message: String,
     /// Recent compile history (most recent first, max 10).
     pub history: Vec<CompileHistoryEntry>,
+    /// Active compile job id, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_job_id: Option<String>,
+    /// Pipeline status string for the active or last job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline_status: Option<String>,
 }
 
 /// A single entry in compile history.
@@ -99,6 +105,8 @@ pub struct CompileHistoryEntry {
     pub outcome: String,
     pub entries_compiled: usize,
     pub entries_skipped: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 impl fmt::Display for CompileStatusRecord {

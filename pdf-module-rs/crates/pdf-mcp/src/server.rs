@@ -341,7 +341,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
                 "messageTypes": ["text", "image"]
             }
         },
-        "instructions": "Knowledge engine with 30 tools. PDF extraction: extract_text, extract_structured, get_page_count, search_keywords, extrude_to_server_wiki, extrude_to_agent_payload. Compilation: compile_to_wiki, compile_uploaded_pdf, incremental_compile, recompile_entry, aggregate_entries, check_quality, save_wiki_entry. Indexing: search_knowledge (hybrid/keyword/semantic), rebuild_index, get_entry_context, get_agent_context, find_orphans, suggest_links, export_concept_map, preview_wiki_patch, patch_wiki_entry. Reasoning: micro_compile, hypothesis_test. Management: get_config, set_config, get_health_report, trigger_incremental_compile, get_compile_status, show_wiki_browser.",
+        "instructions": "Knowledge engine. Compile loop: compile_to_wiki/incremental_compile → job_id + awaiting_agent → save_wiki_entry(job_id) → complete_compile_job → searchable index. Quality: list_quality_issues, fix_suggest, apply_quality_gate. Plan: generate_compile_plan, get_compile_plan, mark_plan_task_done, aggregate_entries. PDF: extract_*, compile_uploaded_pdf. Wiki: save_wiki_entry, patch_wiki_entry, search_knowledge, rebuild_index, check_quality, hypothesis_test, recompile_entry. Management: get_compile_status (stages + quality_snapshot), get_health_report, get/set_config.",
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)

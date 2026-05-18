@@ -6,6 +6,8 @@
 //! All entry points call into these modules to ensure data consistency.
 
 pub mod compile_status;
+#[cfg(feature = "knowledge")]
+pub mod compile_job;
 pub mod config_manager;
 #[cfg(feature = "knowledge")]
 pub mod health_reporter;
@@ -17,6 +19,11 @@ pub mod sync;
 pub mod workspace;
 
 pub use compile_status::{CompileFinishStats, CompileGuard, CompileStatusStore};
+#[cfg(feature = "knowledge")]
+pub use compile_job::{
+    build_compile_status_json, CompileArtifacts, CompileJob, CompileJobStats, CompileJobStore,
+    CompileJobView, CompileStage, CompileStageRecord, CompileTrigger, PipelineStatus, StageStatus,
+};
 pub use config_manager::ConfigManager;
 #[cfg(feature = "knowledge")]
 pub use health_reporter::HealthReporter;

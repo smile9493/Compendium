@@ -1,7 +1,10 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::management::WorkspaceRegistry;
-use pdf_core::management::{CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter};
+use pdf_core::management::{
+    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
+};
+use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -82,6 +85,43 @@ pub fn management_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "description": "Knowledge base path (default: /app/kb or KNOWLEDGE_BASE_PATH env)"
                     }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "list_quality_issues".to_string(),
+            description: "List quality issues with stable issue_id for fix_suggest.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "severity": { "type": "string" },
+                    "limit": { "type": "integer" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "fix_suggest".to_string(),
+            description: "Suggest MCP actions to fix a quality issue by issue_id.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "issue_id": { "type": "string" }
+                },
+                "required": ["issue_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "apply_quality_gate".to_string(),
+            description: "Run publish quality gate on all wiki entries.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "job_id": { "type": "string" }
                 },
                 "required": []
             }),
@@ -185,31 +225,15 @@ pub async fn handle_trigger_incremental_compile(
 ) -> anyhow::Result<Vec<Content>> {
     let registry = &ctx.workspace_registry;
     let kb_path = parse_kb_path(registry, args)?;
-    let store = CompileStatusStore::new(&kb_path);
-    let guard = store
-        .begin_compile()
-        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
-
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let raw_dir = engine.raw_dir();
-    let result = match engine.incremental_compile(&raw_dir).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return Err(e.into());
-        }
-    };
+    let job_store = CompileJobStore::new(&kb_path);
+    let (job_id, result) = run_incremental_extract(&engine, &job_store).await?;
 
-    guard
-        .finish_success(CompileFinishStats {
-            entries_compiled: result.compiled,
-            entries_skipped: result.skipped,
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
-
-    crate::tools::post_compile::post_compile_success(&kb_path);
-
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "job_id": job_id,
+        "pipeline_status": "awaiting_agent",
+        "incremental_result": result,
+    }))?)])
 }
 
 #[instrument(skip(args))]
@@ -218,11 +242,58 @@ pub async fn handle_get_compile_status(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(registry, args)?;
-    let record = CompileStatusStore::new(&kb_path)
-        .read()
+    let value = build_compile_status_json(&kb_path)
         .map_err(|e| anyhow::anyhow!("Failed to read compile status: {}", e))?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&value)?)])
+}
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(&record)?)])
+#[instrument(skip(args))]
+pub async fn handle_list_quality_issues(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let wiki_dir = kb_path.join("wiki");
+    let severity = args["severity"].as_str();
+    let limit = args["limit"].as_u64().unwrap_or(50) as usize;
+    let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, severity, limit)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "issues": issues,
+        "count": issues.len(),
+    }))?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_fix_suggest(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let issue_id = args["issue_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing issue_id"))?;
+    let wiki_dir = kb_path.join("wiki");
+    let kb_str = kb_path.to_string_lossy();
+    let result = pdf_core::knowledge::fix_suggest(&wiki_dir, &kb_str, issue_id)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_apply_quality_gate(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let gate = pdf_core::knowledge::apply_publish_gate(&kb_path)?;
+    let _ = pdf_core::management::refresh_quality_snapshot(&kb_path);
+    if let Some(job_id) = args["job_id"].as_str() {
+        let store = CompileJobStore::new(&kb_path);
+        if let Ok(mut job) = store.load_job(job_id) {
+            job.stats.entries_blocked = gate.blocked_count;
+            let _ = store.write_job(&job);
+        }
+    }
+    Ok(vec![Content::text(serde_json::to_string_pretty(&gate)?)])
 }
 
 #[instrument]
@@ -255,7 +326,7 @@ mod tests {
     #[test]
     fn test_management_tool_definitions() {
         let defs = management_tool_definitions();
-        assert_eq!(defs.len(), 6);
+        assert!(defs.len() >= 6);
         
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"get_config"));

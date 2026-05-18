@@ -14,12 +14,26 @@ export const useCompileStore = defineStore('compile', () => {
 
   let pollTimer = null
 
-  const isRunning = computed(() => compileStatus.value?.running === true)
+  const pipelineStatus = computed(
+    () => compileStatus.value?.pipeline_status || compileStatus.value?.job?.pipeline_status
+  )
+
+  const isRunning = computed(
+    () =>
+      compileStatus.value?.running === true ||
+      pipelineStatus.value === 'running' ||
+      pipelineStatus.value === 'awaiting_agent'
+  )
 
   const statusText = computed(() => {
-    if (isRunning.value) return '编译中'
-    if (compileStatus.value?.last_outcome === 'success') return '已完成'
-    if (compileStatus.value?.last_outcome === 'error') return '失败'
+    if (pipelineStatus.value === 'awaiting_agent') return '等待 Agent'
+    if (isRunning.value && pipelineStatus.value === 'running') return '编译中'
+    if (pipelineStatus.value === 'completed' || compileStatus.value?.last_outcome === 'success')
+      return '已完成'
+    if (pipelineStatus.value === 'partial' || compileStatus.value?.last_outcome === 'partial')
+      return '部分完成'
+    if (pipelineStatus.value === 'failed' || compileStatus.value?.last_outcome === 'error')
+      return '失败'
     return '空闲'
   })
 
@@ -54,7 +68,12 @@ export const useCompileStore = defineStore('compile', () => {
       compileStatus.value = data
       qualitySnapshot.value = data.quality_snapshot || null
       const finished = data.last_finished || null
-      if (finished && finished !== prevFinished && data.last_outcome === 'success' && !data.running) {
+      const done =
+        data.pipeline_status === 'completed' ||
+        data.pipeline_status === 'partial' ||
+        data.last_outcome === 'success' ||
+        data.last_outcome === 'partial'
+      if (finished && finished !== prevFinished && done && !data.running) {
         const wikiStore = useWikiStore()
         await wikiStore.loadTree()
       }
@@ -105,6 +124,7 @@ export const useCompileStore = defineStore('compile', () => {
     loading,
     error,
     isRunning,
+    pipelineStatus,
     statusText,
     openDrawer,
     closeDrawer,

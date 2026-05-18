@@ -33,9 +33,7 @@ use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
 
 use pdf_core::knowledge::rebuild_all;
-use pdf_core::management::{
-    CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter,
-};
+use pdf_core::management::{ConfigManager, HealthReporter};
 
 #[derive(Clone)]
 struct AppState {
@@ -211,15 +209,8 @@ async fn api_config_remove(
 }
 
 async fn api_compile_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match CompileStatusStore::new(&state.kb_path).read() {
-        Ok(record) => match serde_json::to_value(&record) {
-            Ok(v) => Json(v).into_response(),
-            Err(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Serialize error: {}", e)})),
-            )
-                .into_response(),
-        },
+    match pdf_core::management::build_compile_status_json(&state.kb_path) {
+        Ok(v) => Json(v).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
@@ -250,41 +241,19 @@ async fn api_compile_trigger(State(state): State<Arc<AppState>>) -> impl IntoRes
                 .into_response()
         }
     };
-    let store = CompileStatusStore::new(&state.kb_path);
-    let guard = match store.begin_compile() {
-        Ok(g) => g,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
-
-    let raw_dir = engine.raw_dir();
-    match engine.incremental_compile(&raw_dir).await {
-        Ok(result) => {
-            if let Err(e) = guard.finish_success(CompileFinishStats {
-                entries_compiled: result.compiled,
-                entries_skipped: result.skipped,
-            }) {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": e.to_string()})),
-                )
-                    .into_response();
-            }
-            Json(serde_json::to_value(&result).unwrap_or_default()).into_response()
-        }
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
+    let job_store = pdf_core::management::CompileJobStore::new(&state.kb_path);
+    match pdf_core::knowledge::run_incremental_extract(&engine, &job_store).await {
+        Ok((job_id, result)) => Json(serde_json::json!({
+            "job_id": job_id,
+            "pipeline_status": "awaiting_agent",
+            "incremental_result": result,
+        }))
+        .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 

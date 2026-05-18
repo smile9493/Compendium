@@ -14,16 +14,30 @@
 //! - **VectorIndex**: TF-IDF vector embeddings with cosine similarity search
 
 pub mod collab;
+pub mod compile_pipeline;
+pub mod compile_plan;
 pub mod engine;
 pub mod entry;
+pub mod publish_gate;
 pub mod hash_cache;
 pub mod index;
 pub mod patch;
 pub mod quality;
+pub mod quality_issues;
 pub mod renderer;
 
 pub use engine::KnowledgeEngine;
-pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry};
+pub use compile_pipeline::{
+    complete_compile_job, run_incremental_extract, run_single_pdf_extract, CompleteCompileJobResult,
+};
+pub use compile_plan::{
+    CompilePlan, CompilePlanStore, PlanTask, PlanTaskKind, PlanTaskStatus,
+};
+pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry, PublishStatus};
+pub use publish_gate::{
+    apply_publish_gate, is_searchable, GateConfig, GateResult, KEY_AUTO_PUBLISH,
+    KEY_GATE_BLOCK_ON_ERRORS, KEY_QUALITY_MIN_SCORE,
+};
 pub use hash_cache::HashCache;
 pub use index::{
     detect_communities, graph, rebuild_all, rebuild_vectors, reindex_entry, search,
@@ -36,4 +50,5 @@ pub use collab::{
 };
 pub use patch::{apply_patch, preview_patch, resolve_wiki_path, WikiPatchRequest, WikiPatchResult};
 pub use quality::{build_next_actions, analyze_wiki, QualityReport};
+pub use quality_issues::{fix_suggest, list_quality_issues, ListedQualityIssue};
 pub use renderer::{RenderedEntry, TreeNode, WikiRenderer};

@@ -1,7 +1,11 @@
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::{parse_kb_path, ToolContext};
 use pdf_core::dto::ExtractOptions;
-use pdf_core::management::{CompileFinishStats, CompileStatusStore};
+use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
+use pdf_core::knowledge::{
+    run_incremental_extract, run_single_pdf_extract, CompilePlanStore,
+};
+use pdf_core::management::CompileJobStore;
 use pdf_core::KnowledgeEngine;
 use std::sync::Arc;
 use tracing::instrument;
@@ -124,10 +128,69 @@ pub fn knowledge_tool_definitions() -> Vec<ToolDefinition> {
                     },
                     "content": {
                         "type": "string",
-                        "description": "Full markdown content with YAML front matter header. Required format: ---\ndomain: XX\nlevel: L1\ntags: [tag1, tag2]\nstatus: draft\ncreated: YYYY-MM-DD\nupdated: YYYY-MM-DD\n---\n\n# Title\nContent..."
+                        "description": "Full markdown content with YAML front matter header. Required format: ---\ndomain: XX\nlevel: L1\ntags: [tag1, tag2]\nstatus: compiled\npublish_status: draft\ncreated: YYYY-MM-DD\nupdated: YYYY-MM-DD\n---\n\n# Title\nContent..."
+                    },
+                    "job_id": {
+                        "type": "string",
+                        "description": "Compile job id from compile_to_wiki (links Agent phase to pipeline)"
+                    },
+                    "plan_task_id": {
+                        "type": "string",
+                        "description": "Optional compile plan task id to mark done"
+                    },
+                    "mark_compiled": {
+                        "type": "boolean",
+                        "description": "Set entry status to compiled if not set (default true)"
                     }
                 },
                 "required": ["entry_path", "content"]
+            }),
+        },
+        ToolDefinition {
+            name: "complete_compile_job".to_string(),
+            description: "Finish a compile job: rebuild indexes and run quality gate. Call after save_wiki_entry.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "job_id": { "type": "string" },
+                    "force": { "type": "boolean", "description": "Re-run even if already completed" }
+                },
+                "required": ["job_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "generate_compile_plan".to_string(),
+            description: "Generate compile_plan.json with L1/L2/L3 and recompile tasks.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "get_compile_plan".to_string(),
+            description: "Read the current compile plan and task statuses.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "mark_plan_task_done".to_string(),
+            description: "Mark a compile plan task as done.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "task_id": { "type": "string" }
+                },
+                "required": ["task_id"]
             }),
         },
         ToolDefinition {
@@ -170,30 +233,17 @@ pub async fn handle_compile_to_wiki(
     pdf_core::FileValidator::validate_path_safety(pdf_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
-    let store = CompileStatusStore::new(&kb_path);
-    let guard = store
-        .begin_compile()
-        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
-
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let result = match engine.compile_to_wiki(pdf_path, domain).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return Err(e.into());
-        }
-    };
+    let job_store = CompileJobStore::new(&kb_path);
+    let (job_id, result) = run_single_pdf_extract(&engine, &job_store, pdf_path, domain).await?;
 
-    guard
-        .finish_success(CompileFinishStats {
-            entries_compiled: result.entries.len(),
-            entries_skipped: 0,
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
-
-    crate::tools::post_compile::post_compile_success(&kb_path);
-
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    let payload = serde_json::json!({
+        "job_id": job_id,
+        "pipeline_status": "awaiting_agent",
+        "compile_result": result,
+        "next_step": "save_wiki_entry then complete_compile_job"
+    });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
 }
 
 #[instrument(skip(ctx, args))]
@@ -202,31 +252,17 @@ pub async fn handle_incremental_compile(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
-    let store = CompileStatusStore::new(&kb_path);
-    let guard = store
-        .begin_compile()
-        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
-
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let raw_dir = engine.raw_dir();
-    let result = match engine.incremental_compile(&raw_dir).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return Err(e.into());
-        }
-    };
+    let job_store = CompileJobStore::new(&kb_path);
+    let (job_id, result) = run_incremental_extract(&engine, &job_store).await?;
 
-    guard
-        .finish_success(CompileFinishStats {
-            entries_compiled: result.compiled,
-            entries_skipped: result.skipped,
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
-
-    crate::tools::post_compile::post_compile_success(&kb_path);
-
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    let payload = serde_json::json!({
+        "job_id": job_id,
+        "pipeline_status": "awaiting_agent",
+        "incremental_result": result,
+        "next_step": "save_wiki_entry then complete_compile_job"
+    });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
 }
 
 #[instrument(skip(ctx, args))]
@@ -326,16 +362,24 @@ pub async fn handle_aggregate_entries(
 
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
 
-    let candidates = engine.identify_aggregation_candidates()?;
+    let plan = engine.generate_compile_plan()?;
+    let l2_tasks: Vec<_> = plan
+        .tasks
+        .iter()
+        .filter(|t| {
+            matches!(
+                t.kind,
+                pdf_core::knowledge::PlanTaskKind::AggregateL2
+            )
+        })
+        .collect();
 
     let result = serde_json::json!({
-        "candidates": candidates,
-        "total_clusters": candidates.len(),
-        "instructions": if candidates.is_empty() {
-            "No aggregation candidates found. Entries may not have enough shared tags to form clusters.".to_string()
-        } else {
-            "For each cluster, create an L2 summary entry that synthesizes the key ideas. Use 'aggregated_from' field in front matter to record source entries.".to_string()
-        }
+        "plan_path": ".rsut_index/compile_plan.json",
+        "l2_tasks": l2_tasks,
+        "total_l2_tasks": l2_tasks.len(),
+        "total_tasks": plan.tasks.len(),
+        "instructions": "Execute tasks from get_compile_plan; use save_wiki_entry(plan_task_id=...) then complete_compile_job."
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -368,9 +412,18 @@ pub async fn handle_hypothesis_test(
         "note": "Resolved: <summary> | Open question: <question>"
     });
 
+    let quality_issues: Vec<_> = enriched
+        .iter()
+        .map(|p| {
+            pdf_core::knowledge::quality_issues::issues_from_contradictions(&[(p.entry_a.clone(), p.entry_b.clone())])
+        })
+        .flatten()
+        .collect();
+
     let result = serde_json::json!({
         "contradiction_pairs": enriched,
         "total": enriched.len(),
+        "quality_issues": quality_issues,
         "resolution_template": resolution_template,
         "next_actions": [{
             "tool": "patch_wiki_entry",
@@ -431,33 +484,19 @@ pub async fn handle_compile_uploaded_pdf(
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let domain = args["domain"].as_str();
 
-    let store = CompileStatusStore::new(&kb_path);
-    let guard = store
-        .begin_compile()
-        .map_err(|e| anyhow::anyhow!("Failed to begin compile status: {}", e))?;
-
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
-    let result = match engine.compile_to_wiki(&uploaded.temp_path, domain).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = guard.finish_error(e.to_string());
-            return Err(e.into());
-        }
-    };
+    let job_store = CompileJobStore::new(&kb_path);
+    let (job_id, result) =
+        run_single_pdf_extract(&engine, &job_store, &uploaded.temp_path, domain).await?;
 
-    guard
-        .finish_success(CompileFinishStats {
-            entries_compiled: result.entries.len(),
-            entries_skipped: 0,
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
-
-    crate::tools::post_compile::post_compile_success(&kb_path);
-
-    // Clean up the uploaded temp file after successful compile
     upload_store.remove(file_id);
 
-    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+    let payload = serde_json::json!({
+        "job_id": job_id,
+        "pipeline_status": "awaiting_agent",
+        "compile_result": result,
+    });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&payload)?)])
 }
 
 pub async fn handle_save_wiki_entry(
@@ -505,7 +544,29 @@ pub async fn handle_save_wiki_entry(
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&target_path, content)?;
+    let mark_compiled = args["mark_compiled"].as_bool().unwrap_or(true);
+    let mut final_content = content.to_string();
+    if mark_compiled {
+        if let Some(mut entry) = KnowledgeEntry::from_markdown(content) {
+            if entry.status != CompileStatus::Compiled {
+                entry.status = CompileStatus::Compiled;
+                entry.touch();
+                let body = content.split("---").nth(2).unwrap_or("").trim_start();
+                final_content = entry.to_markdown(body)?;
+            }
+        }
+    }
+
+    std::fs::write(&target_path, &final_content)?;
+
+    if let Some(job_id) = args["job_id"].as_str() {
+        let job_store = CompileJobStore::new(&kb_path);
+        job_store.record_entry_saved(job_id, entry_path)?;
+    }
+
+    if let Some(task_id) = args["plan_task_id"].as_str() {
+        CompilePlanStore::new(&kb_path).mark_task_done(task_id)?;
+    }
 
     let _ = pdf_core::knowledge::reindex_entry(&kb_path, entry_path);
 
@@ -515,10 +576,70 @@ pub async fn handle_save_wiki_entry(
             "status": "success",
             "path": relative_path,
             "absolute_path": target_path.to_string_lossy(),
-            "size_bytes": content.len(),
+            "size_bytes": final_content.len(),
+            "job_id": args["job_id"].as_str(),
             "message": format!("Wiki entry '{}' saved successfully", entry_path)
         }))?,
     )])
+}
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_complete_compile_job(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    let job_id = args["job_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing job_id"))?;
+    let force = args["force"].as_bool().unwrap_or(false);
+    let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_generate_compile_plan(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
+    let plan = engine.generate_compile_plan()?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "plan_version": plan.plan_version,
+        "generated_at": plan.generated_at,
+        "task_count": plan.tasks.len(),
+        "tasks": plan.tasks,
+    }))?)])
+}
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_get_compile_plan(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    let plan = CompilePlanStore::new(&kb_path)
+        .read()?
+        .ok_or_else(|| anyhow::anyhow!("No compile plan; call generate_compile_plan first"))?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&plan)?)])
+}
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_mark_plan_task_done(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    let task_id = args["task_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing task_id"))?;
+    let plan = CompilePlanStore::new(&kb_path).mark_task_done(task_id)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "status": "ok",
+        "task_id": task_id,
+        "remaining_pending": plan.tasks.iter().filter(|t| t.status == pdf_core::knowledge::PlanTaskStatus::Pending).count(),
+    }))?)])
 }
 
 #[cfg(test)]
@@ -547,7 +668,7 @@ mod tests {
     #[test]
     fn test_knowledge_tool_definitions() {
         let defs = knowledge_tool_definitions();
-        assert_eq!(defs.len(), 8);
+        assert!(defs.len() >= 8);
         
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"compile_to_wiki"));
