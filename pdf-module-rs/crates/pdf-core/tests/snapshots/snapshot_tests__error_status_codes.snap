@@ -1,0 +1,17 @@
+---
+source: crates/pdf-core/tests/snapshot_tests.rs
+assertion_line: 90
+expression: "&status_codes"
+---
+- - FileNotFound
+  - 404
+- - InvalidFileType
+  - 400
+- - FileTooLarge
+  - 413
+- - CorruptedFile
+  - 422
+- - Timeout
+  - 408
+- - Extraction
+  - 500

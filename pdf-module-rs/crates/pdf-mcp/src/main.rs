@@ -26,6 +26,8 @@
 #![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
+// HTTP/OpenAPI modules are wired when `HTTP_PORT` is set; utoipa types are not always referenced in stdio-only builds.
+#![allow(dead_code)]
 #![recursion_limit = "256"]
 
 use pdf_core::management::WorkspaceRegistry;

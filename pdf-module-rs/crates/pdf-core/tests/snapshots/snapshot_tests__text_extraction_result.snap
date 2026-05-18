@@ -1,0 +1,8 @@
+---
+source: crates/pdf-core/tests/snapshot_tests.rs
+assertion_line: 55
+expression: "&result"
+---
+{
+  "extracted_text": "Hello World\nThis is page 1 content."
+}

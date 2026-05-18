@@ -13,21 +13,6 @@ use pprof::criterion::{Output, PProfProfiler};
 use std::fs;
 use std::path::PathBuf;
 
-/// Helper: get a test PDF path for benchmarking.
-fn test_pdf_path() -> PathBuf {
-    let candidates = [
-        "../test_fixtures/sample.pdf",
-        "../../test_fixtures/sample.pdf",
-        "test_fixtures/sample.pdf",
-    ];
-    for p in &candidates {
-        if PathBuf::from(p).exists() {
-            return PathBuf::from(p);
-        }
-    }
-    panic!("No test PDF found. Place one at test_fixtures/sample.pdf");
-}
-
 /// Ensure the test file exists, creating a minimal valid PDF if needed.
 fn ensure_test_pdf() -> PathBuf {
     let path = PathBuf::from("test_fixtures");
@@ -71,29 +56,6 @@ fn ensure_test_pdf() -> PathBuf {
     pdf_path
 }
 
-fn bench_pdf_extraction(c: &mut Criterion) {
-    let pdf_path = ensure_test_pdf();
-
-    let mut group = c.benchmark_group("pdf_extraction");
-    group.sampling_mode(SamplingMode::Flat);
-    group.sample_size(20);
-
-    group.bench_function("extract_text", |b| {
-        b.iter(|| {
-            let _ = pdf_extract::extract_text(&pdf_path);
-        });
-    });
-
-    group.bench_function("extract_text_from_bytes", |b| {
-        let data = fs::read(&pdf_path).unwrap();
-        b.iter(|| {
-            let _ = pdf_extract::extract_text_from_mem(&data);
-        });
-    });
-
-    group.finish();
-}
-
 fn bench_mmap_loading(c: &mut Criterion) {
     let pdf_path = ensure_test_pdf();
 
@@ -125,7 +87,7 @@ criterion_group! {
     config = Criterion::default()
         .with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)))
         .sample_size(20);
-    targets = bench_pdf_extraction, bench_mmap_loading
+    targets = bench_mmap_loading
 }
 
 criterion_main!(pdf_profiling);
