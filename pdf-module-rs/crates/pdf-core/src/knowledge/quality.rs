@@ -433,3 +433,51 @@ fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<D
 
     drift_pairs
 }
+
+/// Suggested MCP tool calls for an agent to resolve quality findings.
+pub fn build_next_actions(report: &QualityReport, knowledge_base: &str) -> Vec<serde_json::Value> {
+    let mut actions = Vec::new();
+    let kb = knowledge_base;
+
+    for orphan in report.orphan_entries.iter().take(5) {
+        actions.push(serde_json::json!({
+            "tool": "suggest_links",
+            "args": { "knowledge_base": kb, "entry_path": orphan, "top_k": 5 },
+            "reason": "Orphan entry — discover links to integrate into the graph"
+        }));
+    }
+
+    if !report.broken_links.is_empty() {
+        actions.push(serde_json::json!({
+            "tool": "patch_wiki_entry",
+            "args": {
+                "knowledge_base": kb,
+                "entry_path": "<entry_with_broken_related>",
+                "operations": [{ "type": "replace_front_matter", "related": [] }]
+            },
+            "reason": "Fix broken related/contradiction paths in front matter"
+        }));
+    }
+
+    actions.push(serde_json::json!({
+        "tool": "hypothesis_test",
+        "args": { "knowledge_base": kb },
+        "reason": "Review explicit contradiction pairs and resolve or document open questions"
+    }));
+
+    if report.drift_pairs.len() > 2 {
+        actions.push(serde_json::json!({
+            "tool": "recompile_entry",
+            "args": { "knowledge_base": kb, "entry_path": report.drift_pairs[0].entry_a },
+            "reason": "Style/cognitive drift detected — recompile or harmonize wording"
+        }));
+    }
+
+    actions.push(serde_json::json!({
+        "tool": "rebuild_index",
+        "args": { "knowledge_base": kb },
+        "reason": "Refresh Tantivy, vector, and graph indexes after quality fixes"
+    }));
+
+    actions
+}

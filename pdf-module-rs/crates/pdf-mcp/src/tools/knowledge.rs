@@ -191,6 +191,8 @@ pub async fn handle_compile_to_wiki(
         })
         .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
+    crate::tools::post_compile::post_compile_success(&kb_path);
+
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
@@ -221,6 +223,8 @@ pub async fn handle_incremental_compile(
             entries_skipped: result.skipped,
         })
         .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
+
+    crate::tools::post_compile::post_compile_success(&kb_path);
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -359,13 +363,31 @@ pub async fn handle_hypothesis_test(
         enriched.push(pair);
     }
 
+    let resolution_template = serde_json::json!({
+        "contradictions": ["wiki/other/entry.md"],
+        "note": "Resolved: <summary> | Open question: <question>"
+    });
+
     let result = serde_json::json!({
         "contradiction_pairs": enriched,
         "total": enriched.len(),
+        "resolution_template": resolution_template,
+        "next_actions": [{
+            "tool": "patch_wiki_entry",
+            "args": {
+                "knowledge_base": kb_path.to_string_lossy(),
+                "entry_path": "<entry_a>",
+                "operations": [{
+                    "type": "replace_front_matter",
+                    "contradictions": []
+                }]
+            },
+            "reason": "Update front matter after resolving a contradiction pair"
+        }],
         "instructions": if enriched.is_empty() {
             "No explicit contradictions found. Use 'suggest_links' to discover implicit tensions between entries.".to_string()
         } else {
-            "For each pair, read both entries and conduct a structured debate: 1) State the core claim of each entry, 2) Identify the precise point of disagreement, 3) Evaluate supporting evidence, 4) Propose a resolution or mark as 'open question'. Write the resolution into both entries' 'contradictions' field with a note.".to_string()
+            "For each pair, read both entries and conduct a structured debate: 1) State the core claim of each entry, 2) Identify the precise point of disagreement, 3) Evaluate supporting evidence, 4) Propose a resolution or mark as 'open question'. Use patch_wiki_entry with resolution_template fields.".to_string()
         }
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
@@ -430,6 +452,8 @@ pub async fn handle_compile_uploaded_pdf(
         })
         .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
 
+    crate::tools::post_compile::post_compile_success(&kb_path);
+
     // Clean up the uploaded temp file after successful compile
     upload_store.remove(file_id);
 
@@ -482,6 +506,8 @@ pub async fn handle_save_wiki_entry(
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&target_path, content)?;
+
+    let _ = pdf_core::knowledge::reindex_entry(&kb_path, entry_path);
 
     let relative_path = entry_path.to_string();
     Ok(vec![Content::text(

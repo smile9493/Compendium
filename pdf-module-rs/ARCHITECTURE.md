@@ -182,9 +182,12 @@ knowledge_base/
 ### Indexing (6)
 | Tool | Description |
 |------|-------------|
-| `search_knowledge` | Tantivy 全文搜索 (CJK n-gram) |
+| `search_knowledge` | 混合检索 (Tantivy CJK + TF-IDF RRF)，`mode`: keyword/semantic/hybrid |
 | `rebuild_index` | 完全重建 Tantivy + petgraph + vector |
 | `get_entry_context` | N 跳邻居发现 |
+| `get_agent_context` | Agent 上下文包 (body + neighbors + related) |
+| `preview_wiki_patch` | 补丁预览 (unified diff) |
+| `patch_wiki_entry` | 结构化补丁 + 单条 reindex |
 | `find_orphans` | 孤立条目检测 |
 | `suggest_links` | Jaccard 相似度链接建议 |
 | `export_concept_map` | Mermaid.js 概念图导出 |

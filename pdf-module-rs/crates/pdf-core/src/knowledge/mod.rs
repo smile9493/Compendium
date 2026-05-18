@@ -17,6 +17,7 @@ pub mod engine;
 pub mod entry;
 pub mod hash_cache;
 pub mod index;
+pub mod patch;
 pub mod quality;
 pub mod renderer;
 
@@ -24,8 +25,10 @@ pub use engine::KnowledgeEngine;
 pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry};
 pub use hash_cache::HashCache;
 pub use index::{
-    detect_communities, graph, rebuild_all, search, wiki_dir, Community, FulltextIndex,
-    GraphIndex, RebuildStats, VectorIndex,
+    detect_communities, graph, rebuild_all, rebuild_vectors, reindex_entry, search,
+    search_with_mode, wiki_dir, Community, FulltextIndex, GraphIndex, RebuildStats, SearchMode,
+    VectorIndex,
 };
-pub use quality::QualityReport;
+pub use patch::{apply_patch, preview_patch, resolve_wiki_path, WikiPatchRequest, WikiPatchResult};
+pub use quality::{build_next_actions, analyze_wiki, QualityReport};
 pub use renderer::{RenderedEntry, TreeNode, WikiRenderer};

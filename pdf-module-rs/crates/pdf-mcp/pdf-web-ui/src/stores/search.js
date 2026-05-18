@@ -11,6 +11,7 @@ export const useSearchStore = defineStore('search', () => {
   const selectedIdx = ref(-1)
   const error = ref(null)
   const domainFacets = ref([])
+  const searchMode = ref('hybrid')
 
   let debounceTimer = null
   let currentController = null
@@ -61,6 +62,7 @@ export const useSearchStore = defineStore('search', () => {
           q.trim(),
           30,
           wikiStore.activeDomain,
+          searchMode.value,
           currentController.signal,
         )
         const entries = data.results || data.entries || data || []
@@ -111,6 +113,7 @@ export const useSearchStore = defineStore('search', () => {
     selectedIdx,
     error,
     domainFacets,
+    searchMode,
     hasResults,
     close,
     setDomainFilter,

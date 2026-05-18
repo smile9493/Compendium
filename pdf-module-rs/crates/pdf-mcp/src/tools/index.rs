@@ -1,13 +1,19 @@
+use std::fs;
+
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::parse_kb_path;
-use pdf_core::knowledge::{graph, rebuild_all, search};
+use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
+use pdf_core::knowledge::quality::build_next_actions;
+use pdf_core::knowledge::{
+    graph, rebuild_all, reindex_entry, search_with_mode, wiki_dir, KnowledgeEntry, SearchMode,
+};
 use tracing::instrument;
 
 pub fn index_tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
             name: "search_knowledge".to_string(),
-            description: "Full-text search across all wiki entries using Tantivy. Returns ranked results with snippets.".to_string(),
+            description: "Search wiki entries. Default mode `hybrid` fuses Tantivy CJK (jieba) full-text with TF-IDF vector similarity via RRF — not ONNX.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -17,11 +23,16 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                     },
                     "query": {
                         "type": "string",
-                        "description": "Search query (supports keywords, phrases, boolean)"
+                        "description": "Search query"
                     },
                     "limit": {
                         "type": "number",
                         "description": "Maximum number of results (default: 10)"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["keyword", "semantic", "hybrid"],
+                        "description": "keyword=Tantivy only, semantic=TF-IDF vectors, hybrid=RRF merge (default)"
                     }
                 },
                 "required": ["query"]
@@ -29,7 +40,7 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
         },
         ToolDefinition {
             name: "rebuild_index".to_string(),
-            description: "Rebuild all indexes (Tantivy fulltext + petgraph link graph) from wiki Markdown files. Use after bulk changes or for recovery.".to_string(),
+            description: "Rebuild all indexes (Tantivy + petgraph + TF-IDF vectors) from wiki Markdown files.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -135,6 +146,50 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
                 "required": []
             }),
         },
+        ToolDefinition {
+            name: "get_agent_context".to_string(),
+            description: "Token-efficient context bundle for an entry: center body, graph neighbors, and hybrid-related snippets.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "entry_path": { "type": "string", "description": "Relative path within wiki/ (e.g. IT/concept.md)" },
+                    "hops": { "type": "number", "description": "Graph neighbor hops (default: 2)" },
+                    "max_body_chars": { "type": "number", "description": "Max chars for center body (default: 4000)" },
+                    "related_limit": { "type": "number", "description": "Hybrid search hits for related snippets (default: 3)" }
+                },
+                "required": ["entry_path"]
+            }),
+        },
+        ToolDefinition {
+            name: "preview_wiki_patch".to_string(),
+            description: "Preview a structured patch on a wiki entry (unified diff, no write).".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "entry_path": { "type": "string" },
+                    "operations": {
+                        "type": "array",
+                        "description": "replace_section | replace_front_matter | search_replace ops"
+                    }
+                },
+                "required": ["entry_path", "operations"]
+            }),
+        },
+        ToolDefinition {
+            name: "patch_wiki_entry".to_string(),
+            description: "Apply a structured patch to a wiki entry, then reindex. Prefer over save_wiki_entry for small edits.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "knowledge_base": { "type": "string" },
+                    "entry_path": { "type": "string" },
+                    "operations": { "type": "array" }
+                },
+                "required": ["entry_path", "operations"]
+            }),
+        },
     ]
 }
 
@@ -145,9 +200,17 @@ pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
+    let mode = args["mode"]
+        .as_str()
+        .map(SearchMode::parse)
+        .unwrap_or(SearchMode::Hybrid);
 
-    let hits = search(&kb_path, query, limit)?;
-    Ok(vec![Content::text(serde_json::to_string_pretty(&hits)?)])
+    let hits = search_with_mode(&kb_path, query, limit, mode)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+        "mode": format!("{:?}", mode).to_lowercase(),
+        "results": hits,
+        "total": hits.len()
+    }))?])
 }
 
 #[instrument(skip(args))]
@@ -160,6 +223,7 @@ pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Ve
         "fulltext_entries_indexed": stats.fulltext_entries_indexed,
         "graph_nodes": stats.graph_nodes,
         "graph_edges": stats.graph_edges,
+        "vector_entries_indexed": stats.vector_entries_indexed,
         "message": "All indexes rebuilt from wiki/ files."
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
@@ -249,6 +313,8 @@ pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Ve
     let wiki_dir = kb_path.join("wiki");
 
     let report = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir)?;
+    let kb_str = kb_path.to_string_lossy();
+    let next_actions = build_next_actions(&report, &kb_str);
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
@@ -257,10 +323,111 @@ pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Ve
         "issues_count": report.issues.len(),
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),
+        "drift_pairs_count": report.drift_pairs.len(),
         "report_markdown": report.to_markdown(),
         "has_errors": report.has_errors(),
-        "has_warnings": report.has_warnings()
+        "has_warnings": report.has_warnings(),
+        "next_actions": next_actions
     });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_get_agent_context(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(args)?;
+    let entry_path = args["entry_path"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let hops = args["hops"].as_u64().unwrap_or(2) as u32;
+    let max_body_chars = args["max_body_chars"].as_u64().unwrap_or(4000) as usize;
+    let related_limit = args["related_limit"].as_u64().unwrap_or(3) as usize;
+
+    let rel = entry_path.trim_start_matches("wiki/").trim_start_matches('/');
+    let full_path = wiki_dir(&kb_path).join(rel);
+    let content = fs::read_to_string(&full_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read entry: {}", e))?;
+
+    let entry = KnowledgeEntry::from_markdown(&content)
+        .ok_or_else(|| anyhow::anyhow!("Invalid front matter in {}", rel))?;
+    let body = content.split("---").nth(2).unwrap_or("");
+    let body_truncated = truncate_chars(body, max_body_chars);
+
+    let graph = graph(&kb_path)?;
+    let neighbors = graph.get_neighbors(rel, hops);
+
+    let related_query = format!("{} {}", entry.title, entry.tags.join(" "));
+    let related_hits = search_with_mode(&kb_path, &related_query, related_limit, SearchMode::Hybrid)?
+        .into_iter()
+        .filter(|h| h.path != rel)
+        .map(|h| serde_json::json!({
+            "path": h.path,
+            "title": h.title,
+            "score": h.score,
+            "snippet": h.snippet
+        }))
+        .collect::<Vec<_>>();
+
+    let char_count = body_truncated.chars().count()
+        + neighbors.len() * 200
+        + related_hits.len() * 150;
+    let token_estimate = char_count / 4;
+
+    let result = serde_json::json!({
+        "entry_path": rel,
+        "center": {
+            "title": entry.title,
+            "domain": entry.domain,
+            "tags": entry.tags,
+            "front_matter": {
+                "related": entry.related,
+                "contradictions": entry.contradictions,
+                "quality_score": entry.quality_score
+            },
+            "body": body_truncated
+        },
+        "neighbors": neighbors,
+        "related_snippets": related_hits,
+        "token_estimate": token_estimate
+    });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+fn truncate_chars(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", s.chars().take(max).collect::<String>())
+    }
+}
+
+fn parse_patch_request(args: &serde_json::Value) -> anyhow::Result<WikiPatchRequest> {
+    let entry_path = args["entry_path"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?
+        .to_string();
+    let ops = args.get("operations").ok_or_else(|| anyhow::anyhow!("Missing operations"))?;
+    let operations: Vec<pdf_core::knowledge::patch::PatchOp> =
+        serde_json::from_value(ops.clone()).map_err(|e| anyhow::anyhow!("Invalid operations: {}", e))?;
+    Ok(WikiPatchRequest {
+        entry_path,
+        operations,
+    })
+}
+
+#[instrument(skip(args))]
+pub async fn handle_preview_wiki_patch(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(args)?;
+    let request = parse_patch_request(args)?;
+    let result = preview_patch(&kb_path, &request)?;
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
+#[instrument(skip(args))]
+pub async fn handle_patch_wiki_entry(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(args)?;
+    let request = parse_patch_request(args)?;
+    let result = apply_patch(&kb_path, &request)?;
+    reindex_entry(&kb_path, &request.entry_path)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
@@ -271,7 +438,7 @@ mod tests {
     #[test]
     fn test_index_tool_definitions() {
         let defs = index_tool_definitions();
-        assert_eq!(defs.len(), 7);
+        assert_eq!(defs.len(), 10);
         
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"search_knowledge"));
@@ -281,6 +448,9 @@ mod tests {
         assert!(names.contains(&"suggest_links"));
         assert!(names.contains(&"export_concept_map"));
         assert!(names.contains(&"check_quality"));
+        assert!(names.contains(&"get_agent_context"));
+        assert!(names.contains(&"preview_wiki_patch"));
+        assert!(names.contains(&"patch_wiki_entry"));
     }
 
     #[tokio::test]

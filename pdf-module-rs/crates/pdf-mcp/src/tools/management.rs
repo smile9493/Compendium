@@ -146,6 +146,10 @@ pub async fn handle_get_health_report(args: &serde_json::Value) -> anyhow::Resul
         .report()
         .map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
 
+    let quality_snapshot = pdf_core::management::QualitySnapshotStore::new(&kb_path)
+        .read()
+        .unwrap_or_default();
+
     let result = serde_json::json!({
         "total_entries": report.total_entries,
         "orphan_count": report.orphan_count,
@@ -159,6 +163,7 @@ pub async fn handle_get_health_report(args: &serde_json::Value) -> anyhow::Resul
         "last_compile": report.last_compile.map(|t| t.to_rfc3339()),
         "generated_at": report.generated_at.to_rfc3339(),
         "report_text": report.to_string(),
+        "quality_snapshot": quality_snapshot,
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
@@ -190,6 +195,8 @@ pub async fn handle_trigger_incremental_compile(
             entries_skipped: result.skipped,
         })
         .map_err(|e| anyhow::anyhow!("Failed to record compile status: {}", e))?;
+
+    crate::tools::post_compile::post_compile_success(&kb_path);
 
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }

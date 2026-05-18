@@ -37,6 +37,9 @@
       <button class="header-btn icon-btn" @click="$emit('openGraph')" v-tooltip="'知识图谱'">
         <GitBranch :size="15" />
       </button>
+      <button class="header-btn icon-btn" @click="$emit('openCompile')" v-tooltip="'编译控制台'">
+        <Hammer :size="15" />
+      </button>
       <span class="header-divider"></span>
       <button
         class="header-btn icon-btn"
@@ -68,7 +71,7 @@ import { useSearchStore } from '@/stores/search'
 import { openEntry } from '@/composables/useWikiNavigation'
 import {
   Menu, PanelLeft, PanelRight, PanelRightClose, BookOpen, BookMarked,
-  Tag, BarChart2, GitBranch, Sun, Moon, Settings,
+  Tag, BarChart2, GitBranch, Hammer, Sun, Moon, Settings,
 } from 'lucide-vue-next'
 
 defineProps({
@@ -76,7 +79,7 @@ defineProps({
   rightbarCollapsed: Boolean,
 })
 
-defineEmits(['toggleSidebar', 'toggleRightbar', 'openDomains', 'openStats', 'openGraph', 'openSettings'])
+defineEmits(['toggleSidebar', 'toggleRightbar', 'openDomains', 'openStats', 'openGraph', 'openCompile', 'openSettings'])
 
 const wikiStore = useWikiStore()
 const searchStore = useSearchStore()

@@ -1,0 +1,311 @@
+<template>
+  <Transition name="drawer-slide">
+    <aside v-if="compileStore.open" class="compile-drawer">
+      <div class="compile-drawer-header">
+        <div class="compile-drawer-title">
+          <Hammer :size="18" />
+          <span>编译控制台</span>
+        </div>
+        <button class="header-btn icon-btn" @click="compileStore.closeDrawer()" v-tooltip="'关闭'">
+          <X :size="16" />
+        </button>
+      </div>
+
+      <div class="compile-tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="compile-tab"
+          :class="{ active: compileStore.activeTab === tab.id }"
+          @click="compileStore.activeTab = tab.id"
+        >
+          <component :is="tab.icon" :size="14" />
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div class="compile-drawer-body">
+        <div v-if="compileStore.activeTab === 'trigger'" class="compile-section">
+          <div class="compile-mode-row">
+            <label class="compile-mode-label">
+              <input type="radio" v-model="compileMode" value="single" />
+              单文件编译
+            </label>
+            <label class="compile-mode-label">
+              <input type="radio" v-model="compileMode" value="incremental" />
+              增量编译
+            </label>
+          </div>
+          <div
+            v-if="compileMode === 'single'"
+            class="upload-area"
+            @dragover.prevent
+            @drop.prevent="onDrop"
+          >
+            <input type="file" ref="fileInput" accept=".pdf" class="upload-input" @change="onFile" />
+            <div class="upload-hint">拖拽或点击上传 PDF</div>
+          </div>
+          <p v-else class="compile-hint">扫描 raw/ 目录中变更的 PDF 并重新编译。</p>
+          <button
+            class="btn btn-primary compile-start-btn"
+            :disabled="compileStore.loading || compileStore.isRunning"
+            @click="startCompile"
+          >
+            <Loader2 v-if="compileStore.loading" :size="14" class="spin" />
+            <Play v-else :size="14" />
+            {{ compileStore.loading ? '处理中…' : compileMode === 'incremental' ? '开始增量编译' : '上传并编译' }}
+          </button>
+          <p v-if="compileStore.error" class="compile-error">{{ compileStore.error }}</p>
+        </div>
+
+        <div v-if="compileStore.activeTab === 'history'" class="compile-section">
+          <div v-if="history.length" class="compile-list">
+            <button
+              v-for="(h, i) in history"
+              :key="i"
+              type="button"
+              class="compile-item"
+              @click="selectedHistory = h"
+            >
+              <span class="ci-status status-badge" :class="outcomeClass(h.outcome)">{{ h.outcome }}</span>
+              <span class="ci-name">{{ h.entries_compiled }} 条目 / {{ h.entries_skipped }} 跳过</span>
+              <span class="ci-time">{{ formatTime(h.finished_at) }}</span>
+            </button>
+          </div>
+          <p v-else class="compile-hint">暂无编译历史</p>
+          <div v-if="selectedHistory" class="compile-detail">
+            <div class="mono">{{ selectedHistory.message || compileStore.compileStatus?.message }}</div>
+          </div>
+        </div>
+
+        <div v-if="compileStore.activeTab === 'status'" class="compile-section">
+          <div class="compile-status-card">
+            <div class="compile-status-header">
+              <span class="compile-status-label">当前状态</span>
+              <span class="status-badge" :class="statusClass">{{ compileStore.statusText }}</span>
+            </div>
+            <div class="compile-status-time">
+              {{ compileStore.compileStatus?.last_finished || compileStore.compileStatus?.last_started || '从未运行' }}
+            </div>
+            <div v-if="compileStore.isRunning" class="compile-progress-hint">
+              <span class="dots-loading"></span>
+              编译进行中，每 2 秒自动刷新…
+            </div>
+          </div>
+        </div>
+
+        <div v-if="compileStore.activeTab === 'quality'" class="compile-section">
+          <template v-if="compileStore.qualitySnapshot?.scanned_at">
+            <div class="quality-summary-grid">
+              <div class="health-item">
+                <div class="hv">{{ compileStore.qualitySnapshot.issues_count }}</div>
+                <div class="hl">问题</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ compileStore.qualitySnapshot.orphan_count }}</div>
+                <div class="hl">孤立</div>
+              </div>
+              <div class="health-item">
+                <div class="hv">{{ compileStore.qualitySnapshot.contradiction_pairs }}</div>
+                <div class="hl">矛盾对</div>
+              </div>
+            </div>
+            <div class="quality-issues-list">
+              <button
+                v-for="(issue, i) in compileStore.qualitySnapshot.top_issues"
+                :key="i"
+                type="button"
+                class="quality-issue-row"
+                @click="openIssue(issue.entry_path)"
+              >
+                <span class="issue-sev">{{ issue.severity }}</span>
+                <span class="issue-path">{{ issue.entry_path }}</span>
+              </button>
+            </div>
+          </template>
+          <p v-else class="compile-hint">编译完成后将自动生成质量快照</p>
+        </div>
+      </div>
+
+      <div
+        v-if="compileStore.qualitySnapshot?.issues_count != null && compileStore.activeTab !== 'quality'"
+        class="compile-quality-footer"
+      >
+        <button type="button" class="btn btn-sm" @click="compileStore.activeTab = 'quality'">
+          质量：{{ compileStore.qualitySnapshot.issues_count }} 个问题 ·
+          {{ compileStore.qualitySnapshot.contradiction_pairs }} 矛盾对
+        </button>
+      </div>
+    </aside>
+  </Transition>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useCompileStore } from '@/stores/compile'
+import { openEntry } from '@/composables/useWikiNavigation'
+import { Hammer, X, Upload, History, Activity, ShieldAlert, Play, Loader2 } from 'lucide-vue-next'
+
+const compileStore = useCompileStore()
+const compileMode = ref('single')
+const fileInput = ref(null)
+const pendingFile = ref(null)
+const selectedHistory = ref(null)
+
+const tabs = [
+  { id: 'trigger', label: '编译', icon: Upload },
+  { id: 'history', label: '历史', icon: History },
+  { id: 'status', label: '状态', icon: Activity },
+  { id: 'quality', label: '质量', icon: ShieldAlert },
+]
+
+const history = computed(() => compileStore.compileStatus?.history || [])
+
+const statusClass = computed(() => {
+  if (compileStore.isRunning) return 'status-warn'
+  if (compileStore.compileStatus?.last_outcome === 'success') return 'status-ok'
+  return 'status-error'
+})
+
+function onFile(e) {
+  const f = e.target.files?.[0]
+  if (f) pendingFile.value = f
+}
+
+function onDrop(e) {
+  const f = e.dataTransfer.files?.[0]
+  if (f?.name?.toLowerCase().endsWith('.pdf')) pendingFile.value = f
+}
+
+async function startCompile() {
+  if (compileMode.value === 'incremental') {
+    await compileStore.triggerIncremental()
+    return
+  }
+  const file = pendingFile.value || fileInput.value?.files?.[0]
+  if (!file) {
+    compileStore.error = '请选择 PDF 文件'
+    return
+  }
+  await compileStore.uploadAndCompile(file, 'single')
+  pendingFile.value = null
+}
+
+function formatTime(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+function outcomeClass(outcome) {
+  if (outcome === 'success') return 'status-ok'
+  if (outcome === 'error') return 'status-error'
+  return ''
+}
+
+function openIssue(path) {
+  if (path) {
+    compileStore.closeDrawer()
+    openEntry(path)
+  }
+}
+</script>
+
+<style scoped>
+.compile-drawer {
+  position: fixed;
+  top: var(--header-height, 48px);
+  right: 0;
+  bottom: 0;
+  width: min(460px, 92vw);
+  z-index: 200;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px color-mix(in oklch, var(--text) 8%, transparent);
+}
+.compile-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.compile-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.compile-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.compile-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.compile-tab.active {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+.compile-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.compile-section { display: flex; flex-direction: column; gap: 12px; }
+.compile-mode-row { display: flex; flex-direction: column; gap: 8px; }
+.compile-mode-label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
+.compile-hint { font-size: 0.8125rem; color: var(--text-muted); margin: 0; }
+.compile-start-btn { width: 100%; justify-content: center; }
+.compile-error { color: var(--error); font-size: 0.8125rem; margin: 0; }
+.compile-progress-hint { display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--text-muted); margin-top: 8px; }
+.compile-detail { margin-top: 12px; padding: 10px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 0.75rem; }
+.compile-quality-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.quality-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.quality-issues-list { display: flex; flex-direction: column; gap: 4px; }
+.quality-issue-row {
+  display: flex;
+  gap: 8px;
+  text-align: left;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.quality-issue-row:hover { border-color: var(--primary); }
+.issue-sev { color: var(--text-muted); flex-shrink: 0; }
+.issue-path { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.drawer-slide-enter-active,
+.drawer-slide-leave-active { transition: transform 0.22s ease; }
+.drawer-slide-enter-from,
+.drawer-slide-leave-to { transform: translateX(100%); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>

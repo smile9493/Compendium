@@ -14,6 +14,7 @@
       @open-stats="uiStore.statsOpen = true"
       @open-graph="uiStore.graphOpen = true"
       @open-settings="uiStore.settingsOpen = true"
+      @open-compile="compileStore.openDrawer()"
     />
 
     <AppSidebar :collapsed="uiStore.sidebarCollapsed" />
@@ -37,6 +38,7 @@
     <DomainDialog :open="uiStore.domainOpen" @close="uiStore.domainOpen = false" />
     <GraphDialog v-if="uiStore.graphOpen" :open="uiStore.graphOpen" @close="uiStore.graphOpen = false" />
     <SettingsModal :open="uiStore.settingsOpen" @close="uiStore.settingsOpen = false" />
+    <CompileDrawer />
 
     <button v-if="isMcpMode && wikiStore.currentEntry && !wikiStore.currentEntry.error" class="mcp-ask-btn" @click="askAi">
       向 AI 提问此条目
@@ -48,6 +50,7 @@
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useUiStore } from '@/stores/ui'
+import { useCompileStore } from '@/stores/compile'
 import { useKeyboard } from '@/composables/useKeyboard'
 import { markdownExcerpt } from '@/utils/path'
 import AppHeader from '@/components/AppHeader.vue'
@@ -57,11 +60,13 @@ import SearchOverlay from '@/components/SearchOverlay.vue'
 import StatsDialog from '@/components/StatsDialog.vue'
 import DomainDialog from '@/components/DomainDialog.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
+import CompileDrawer from '@/components/CompileDrawer.vue'
 
 const GraphDialog = defineAsyncComponent(() => import('@/components/GraphDialog.vue'))
 
 const wikiStore = useWikiStore()
 const uiStore = useUiStore()
+const compileStore = useCompileStore()
 
 const isMcpMode = ref(false)
 const mainRef = ref(null)

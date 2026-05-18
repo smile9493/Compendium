@@ -80,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         let http_state = http::HttpState {
             kb_path,
             upload_store: Some(Arc::clone(&upload_store)),
+            pipeline: Some(Arc::clone(&pipeline)),
             http_metrics: Some(Arc::clone(&http_metrics)),
         };
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
