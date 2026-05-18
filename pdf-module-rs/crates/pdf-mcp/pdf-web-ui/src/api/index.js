@@ -1,5 +1,17 @@
 const API_BASE = '/api'
 
+let activeKbId = null
+
+export function setActiveKbId(kbId) {
+  activeKbId = kbId || null
+}
+
+function withKb(path) {
+  if (!activeKbId) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}kb_id=${encodeURIComponent(activeKbId)}`
+}
+
 export class ApiError extends Error {
   constructor(status, message) {
     super(message)
@@ -67,30 +79,41 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  listWorkspaces() {
+    return request('/v1/workspaces')
+  },
+
+  setActiveWorkspace(kbId) {
+    return request('/v1/workspaces/active', {
+      method: 'POST',
+      body: JSON.stringify({ kb_id: kbId }),
+    })
+  },
+
   getWikiTree() {
-    return request('/wiki/tree')
+    return request(withKb('/wiki/tree'))
   },
 
   getWikiEntry(path) {
-    return request(`/wiki/entries/${encodeURIComponent(path)}`)
+    return request(withKb(`/wiki/entries/${encodeURIComponent(path)}`))
   },
 
   searchWiki(query, limit = 30, domain = null, mode = 'hybrid', signal = null) {
     const params = new URLSearchParams({ q: query, limit: String(limit), mode })
     if (domain) params.set('domain', domain)
-    return request(`/wiki/search?${params}`, { signal })
+    return request(withKb(`/wiki/search?${params}`), { signal })
   },
 
   getWikiGraph(path) {
-    return request(`/wiki/graph/${encodeURIComponent(path)}`)
+    return request(withKb(`/wiki/graph/${encodeURIComponent(path)}`))
   },
 
   getWikiStats() {
-    return request('/wiki/stats')
+    return request(withKb('/wiki/stats'))
   },
 
   getWikiDomains() {
-    return request('/wiki/domains')
+    return request(withKb('/wiki/domains'))
   },
 
   getConfig() {

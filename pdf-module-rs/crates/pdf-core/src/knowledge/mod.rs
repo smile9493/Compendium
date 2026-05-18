@@ -13,6 +13,7 @@
 //! - **Community Detection**: Label Propagation algorithm for clustering
 //! - **VectorIndex**: TF-IDF vector embeddings with cosine similarity search
 
+pub mod collab;
 pub mod engine;
 pub mod entry;
 pub mod hash_cache;
@@ -28,6 +29,10 @@ pub use index::{
     detect_communities, graph, rebuild_all, rebuild_vectors, reindex_entry, search,
     search_with_mode, wiki_dir, Community, FulltextIndex, GraphIndex, RebuildStats, SearchMode,
     VectorIndex,
+};
+pub use collab::{
+    acquire_lock, apply_patch_proposal, append_audit, release_lock, submit_patch_proposal,
+    AuditAction, AuditEvent, EntryLock, PatchProposal,
 };
 pub use patch::{apply_patch, preview_patch, resolve_wiki_path, WikiPatchRequest, WikiPatchResult};
 pub use quality::{build_next_actions, analyze_wiki, QualityReport};

@@ -33,6 +33,7 @@ pub mod dhat_profiler;
 pub mod dto;
 pub mod engine;
 pub mod error;
+pub mod extraction;
 pub mod extractor;
 #[cfg(feature = "knowledge")]
 pub mod knowledge;
@@ -46,6 +47,7 @@ pub mod validator;
 pub mod wiki;
 
 pub use config::ServerConfig;
+pub use extraction::{ExtractionRouter, ExtractionBackend, RemoteExtractionConfig};
 pub use extractor::McpPdfPipeline;
 #[cfg(feature = "knowledge")]
 pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};

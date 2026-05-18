@@ -33,3 +33,5 @@ uuid = { version = "1", features = ["v4"] }
 prometheus = { workspace = true, features = ["process"] }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+toml = { workspace = true }
+parking_lot = { workspace = true }

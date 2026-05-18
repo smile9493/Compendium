@@ -9,6 +9,17 @@
         <BookOpen :size="15" />
         rsut-pdf-mcp
       </span>
+      <select
+        v-if="workspaceStore.workspaces.length"
+        class="kb-select"
+        :value="workspaceStore.activeKbId ?? ''"
+        @change="onKbChange"
+        v-tooltip="'知识库工作区'"
+      >
+        <option v-for="w in workspaceStore.workspaces" :key="w.id" :value="w.id">
+          {{ w.name }}
+        </option>
+      </select>
     </div>
 
     <div class="search-bar-wrap">
@@ -68,6 +79,8 @@
 import { ref } from 'vue'
 import { useWikiStore } from '@/stores/wiki'
 import { useSearchStore } from '@/stores/search'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { setActiveKbId } from '@/api'
 import { openEntry } from '@/composables/useWikiNavigation'
 import {
   Menu, PanelLeft, PanelRight, PanelRightClose, BookOpen, BookMarked,
@@ -83,7 +96,15 @@ defineEmits(['toggleSidebar', 'toggleRightbar', 'openDomains', 'openStats', 'ope
 
 const wikiStore = useWikiStore()
 const searchStore = useSearchStore()
+const workspaceStore = useWorkspaceStore()
 const searchInputRef = ref(null)
+
+async function onKbChange(e) {
+  const kbId = e.target.value
+  await workspaceStore.setActive(kbId)
+  setActiveKbId(kbId)
+  await wikiStore.loadTree()
+}
 
 defineExpose({ searchInputRef })
 

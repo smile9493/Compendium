@@ -47,6 +47,7 @@ use pdf_core::knowledge::quality::analyze_wiki;
 use pdf_core::knowledge::{graph, rebuild_all, search_with_mode, KnowledgeEngine, SearchMode};
 use pdf_core::management::{
     CompileFinishStats, CompileStatusStore, ConfigManager, HealthReporter, QualitySnapshotStore,
+    WorkspaceRegistry,
 };
 use pdf_core::McpPdfPipeline;
 
@@ -58,9 +59,23 @@ use crate::upload::UploadStore;
 #[derive(Clone)]
 pub struct HttpState {
     pub kb_path: Option<PathBuf>,
+    pub workspace_registry: Arc<WorkspaceRegistry>,
     pub upload_store: Option<Arc<UploadStore>>,
     pub pipeline: Option<Arc<McpPdfPipeline>>,
     pub http_metrics: Option<Arc<HttpMetrics>>,
+}
+
+fn resolve_kb_from_request(
+    state: &HttpState,
+    kb_id: Option<&str>,
+) -> Option<PathBuf> {
+    if let Some(id) = kb_id {
+        return state.workspace_registry.path_for_id(id).ok();
+    }
+    if let Some(ref p) = state.kb_path {
+        return Some(p.clone());
+    }
+    state.workspace_registry.resolve_kb(None, None).ok()
 }
 
 #[instrument(skip(state))]
@@ -105,6 +120,8 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/quality/summary", get(api_quality_summary))
         .route("/api/quality/issues", get(api_quality_issues))
         .route("/api/index/rebuild", post(api_index_rebuild))
+        .route("/api/v1/workspaces", get(api_workspaces_list).post(api_workspaces_upsert))
+        .route("/api/v1/workspaces/active", post(api_workspaces_set_active))
         // ── SPA (legacy redirects) ──
         .route("/", get(|| async { Redirect::permanent("/app/") }))
         .route("/settings", get(|| async { Redirect::permanent("/app/") }))
@@ -189,9 +206,12 @@ fn mime_from_path(path: &str) -> &'static str {
 // ── Wiki API handlers ──
 
 #[instrument(skip(state))]
-async fn api_wiki_tree(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+async fn api_wiki_tree(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> Json<serde_json::Value> {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"tree": {"name": "", "children": []}, "total": 0})),
     };
 
@@ -235,6 +255,14 @@ struct SearchQuery {
     domain: Option<String>,
     #[serde(default)]
     mode: Option<String>,
+    #[serde(default)]
+    kb_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct KbQuery {
+    #[serde(default)]
+    kb_id: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -246,8 +274,8 @@ async fn api_wiki_search(
     State(state): State<Arc<HttpState>>,
     Query(query): Query<SearchQuery>,
 ) -> Json<serde_json::Value> {
-    let kb = match &state.kb_path {
-        Some(p) => p.clone(),
+    let kb = match resolve_kb_from_request(&state, query.kb_id.as_deref()) {
+        Some(p) => p,
         None => return Json(serde_json::json!({"results": [], "total": 0})),
     };
 
@@ -1003,4 +1031,56 @@ fn highlight_snippet(snippet: &str, query: &str) -> String {
     }
     result.push_str(&orig_chars[last_end..].iter().map(|&c| esc_char(c)).collect::<String>());
     result
+}
+
+// ── Workspace API ──
+
+async fn api_workspaces_list(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
+    match state.workspace_registry.list() {
+        Ok(workspaces) => {
+            let active = state.workspace_registry.active_id().ok().flatten();
+            Json(serde_json::json!({ "workspaces": workspaces, "active_kb_id": active }))
+        }
+        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceUpsertBody {
+    kb_id: String,
+    name: String,
+    path: String,
+    #[serde(default)]
+    active: bool,
+}
+
+async fn api_workspaces_upsert(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<WorkspaceUpsertBody>,
+) -> Json<serde_json::Value> {
+    let entry = pdf_core::management::WorkspaceEntry {
+        id: body.kb_id,
+        name: body.name,
+        path: PathBuf::from(body.path),
+        active: body.active,
+    };
+    match state.workspace_registry.upsert(entry) {
+        Ok(()) => Json(serde_json::json!({ "ok": true })),
+        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SetActiveBody {
+    kb_id: String,
+}
+
+async fn api_workspaces_set_active(
+    State(state): State<Arc<HttpState>>,
+    Json(body): Json<SetActiveBody>,
+) -> Json<serde_json::Value> {
+    match state.workspace_registry.set_active(&body.kb_id) {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "active_kb_id": body.kb_id })),
+        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
 }

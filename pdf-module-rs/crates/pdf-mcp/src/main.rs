@@ -28,7 +28,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![recursion_limit = "256"]
 
-use pdf_core::{McpPdfPipeline, ServerConfig};
+use pdf_core::management::WorkspaceRegistry;
+use pdf_core::ServerConfig;
 use std::sync::Arc;
 use tracing::info;
 use vlm_visual_gateway::MetricsCollector;
@@ -40,6 +41,7 @@ mod metrics;
 mod protocol;
 mod sampling;
 mod server;
+mod plugins;
 mod tools;
 mod upload;
 
@@ -53,15 +55,21 @@ async fn main() -> anyhow::Result<()> {
     // Facade owns the shared MetricsCollector so metrics from all components
     // (VLM gateway, pipeline, tools) are collected into a single registry.
     let metrics = Arc::new(MetricsCollector::with_default_registry());
-    let pipeline = Arc::new(McpPdfPipeline::new_with_metrics(&config, metrics)?);
+    let workspace_registry = Arc::new(WorkspaceRegistry::load_default()?);
+    let pipeline = plugins::build_pipeline_with_plugins(&config, Arc::clone(&metrics), None)?;
 
     let http_port = std::env::var("HTTP_PORT")
         .ok()
         .and_then(|s| s.parse::<u16>().ok());
 
-    let kb_path = std::env::var("KNOWLEDGE_BASE")
+    let kb_path = workspace_registry
+        .resolve_kb(None, None)
         .ok()
-        .map(std::path::PathBuf::from);
+        .or_else(|| {
+            std::env::var("KNOWLEDGE_BASE")
+                .ok()
+                .map(std::path::PathBuf::from)
+        });
 
     // Create shared upload store (used by both HTTP and MCP tools)
     let upload_store = Arc::new(upload::UploadStore::new()?);
@@ -70,6 +78,7 @@ async fn main() -> anyhow::Result<()> {
     let tool_ctx = tools::ToolContext::new_with_upload_store(
         Arc::clone(&pipeline),
         Some(Arc::clone(&upload_store)),
+        Arc::clone(&workspace_registry),
     );
 
     if let Some(port) = http_port {
@@ -79,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
         let http_state = http::HttpState {
             kb_path,
+            workspace_registry: Arc::clone(&workspace_registry),
             upload_store: Some(Arc::clone(&upload_store)),
             pipeline: Some(Arc::clone(&pipeline)),
             http_metrics: Some(Arc::clone(&http_metrics)),

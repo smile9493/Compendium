@@ -1,0 +1,16 @@
+{
+  "name": "@rsut/pdf-wasm",
+  "version": "0.3.0",
+  "description": "PDF preview WASM embed for rsut-pdf-mcp",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "pkg/"
+  ],
+  "scripts": {
+    "build": "cd ../../ && just build-wasm"
+  }
+}

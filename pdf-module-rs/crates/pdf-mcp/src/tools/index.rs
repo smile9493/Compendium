@@ -2,6 +2,7 @@ use std::fs;
 
 use crate::protocol::{Content, ToolDefinition};
 use crate::tools::parse_kb_path;
+use pdf_core::management::WorkspaceRegistry;
 use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
@@ -194,8 +195,11 @@ pub fn index_tool_definitions() -> Vec<ToolDefinition> {
 }
 
 #[instrument(skip(args))]
-pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_search_knowledge(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let query = args["query"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
@@ -214,8 +218,11 @@ pub async fn handle_search_knowledge(args: &serde_json::Value) -> anyhow::Result
 }
 
 #[instrument(skip(args))]
-pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_rebuild_index(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let stats = rebuild_all(&kb_path)?;
 
     let result = serde_json::json!({
@@ -230,8 +237,11 @@ pub async fn handle_rebuild_index(args: &serde_json::Value) -> anyhow::Result<Ve
 }
 
 #[instrument(skip(args))]
-pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_get_entry_context(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let entry_path = args["entry_path"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -250,8 +260,11 @@ pub async fn handle_get_entry_context(args: &serde_json::Value) -> anyhow::Resul
 }
 
 #[instrument(skip(args))]
-pub async fn handle_find_orphans(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_find_orphans(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
 
     let graph = graph(&kb_path)?;
     let orphans = graph.find_orphans();
@@ -269,8 +282,11 @@ pub async fn handle_find_orphans(args: &serde_json::Value) -> anyhow::Result<Vec
 }
 
 #[instrument(skip(args))]
-pub async fn handle_suggest_links(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_suggest_links(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let entry_path = args["entry_path"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -288,8 +304,11 @@ pub async fn handle_suggest_links(args: &serde_json::Value) -> anyhow::Result<Ve
 }
 
 #[instrument(skip(args))]
-pub async fn handle_export_concept_map(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_export_concept_map(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let entry_path = args["entry_path"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -308,8 +327,11 @@ pub async fn handle_export_concept_map(args: &serde_json::Value) -> anyhow::Resu
 }
 
 #[instrument(skip(args))]
-pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_check_quality(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let wiki_dir = kb_path.join("wiki");
 
     let report = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir)?;
@@ -333,8 +355,11 @@ pub async fn handle_check_quality(args: &serde_json::Value) -> anyhow::Result<Ve
 }
 
 #[instrument(skip(args))]
-pub async fn handle_get_agent_context(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_get_agent_context(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let entry_path = args["entry_path"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
@@ -415,16 +440,22 @@ fn parse_patch_request(args: &serde_json::Value) -> anyhow::Result<WikiPatchRequ
 }
 
 #[instrument(skip(args))]
-pub async fn handle_preview_wiki_patch(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_preview_wiki_patch(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let request = parse_patch_request(args)?;
     let result = preview_patch(&kb_path, &request)?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
 #[instrument(skip(args))]
-pub async fn handle_patch_wiki_entry(args: &serde_json::Value) -> anyhow::Result<Vec<Content>> {
-    let kb_path = parse_kb_path(args)?;
+pub async fn handle_patch_wiki_entry(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
     let request = parse_patch_request(args)?;
     let result = apply_patch(&kb_path, &request)?;
     reindex_entry(&kb_path, &request.entry_path)?;

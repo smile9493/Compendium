@@ -45,6 +45,9 @@ serde_yaml = { workspace = true }
 infer = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+base64 = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
 
 # Always-required: I/O and parallelism
 memmap2 = { workspace = true }

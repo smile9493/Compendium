@@ -347,7 +347,13 @@ mod tests {
     fn create_test_context() -> ToolContext {
         let config = ServerConfig::from_env().unwrap_or_default();
         let pipeline = Arc::new(McpPdfPipeline::new(&config).expect("Failed to create pipeline"));
-        ToolContext::new(pipeline)
+        let registry = Arc::new(
+            pdf_core::management::WorkspaceRegistry::load(
+                std::env::temp_dir().join("rsut_test_workspaces.toml"),
+            )
+            .expect("registry"),
+        );
+        ToolContext::new(pipeline, registry)
     }
 
     #[tokio::test]

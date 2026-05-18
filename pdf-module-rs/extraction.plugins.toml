@@ -1,0 +1,10 @@
+# Remote extraction plugins (Phase 3.2)
+# Loaded by pdf-mcp when EXTRACTION_PLUGINS_FILE points here (default: ./extraction.plugins.toml)
+
+# [[plugin]]
+# id = "custom-ocr"
+# type = "remote"
+# endpoint = "https://ocr.internal/v1/extract"
+# priority = 10
+# timeout_ms = 30000
+# capabilities = ["ocr"]

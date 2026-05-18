@@ -26,6 +26,9 @@ pub enum WasmError {
 
     #[error("Invalid slice: {0}")]
     InvalidSlice(String),
+
+    #[error("Invalid PDF: {0}")]
+    InvalidPdf(String),
 }
 
 #[cfg(feature = "wasm")]

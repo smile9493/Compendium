@@ -137,6 +137,18 @@ enum Commands {
 
     /// Stdio proxy: forward stdio MCP to remote HTTP server
     Proxy,
+
+    /// Workspace registry (multi knowledge base)
+    Workspace {
+        #[command(subcommand)]
+        action: commands::platform::WorkspaceAction,
+    },
+
+    /// Git-like sync (local-first)
+    Sync {
+        #[command(subcommand)]
+        action: commands::platform::SyncAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -262,6 +274,10 @@ async fn main() -> Result<()> {
         Commands::Index { action } => cmd_index(&cfg, mode, action),
         Commands::Server { action } => cmd_server(action),
         Commands::Proxy => cmd_proxy(&cfg).await,
+        Commands::Workspace { action } => {
+            commands::platform::run_workspace(&cfg, action, format)?
+        }
+        Commands::Sync { action } => commands::platform::run_sync(&cfg, mode, action, format)?,
     }?;
 
     result.print(format);

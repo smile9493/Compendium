@@ -5,6 +5,8 @@
 //! buffers and avoiding WASM linear memory fragmentation.
 
 use crate::error::WasmError;
+use crate::preview;
+use crate::slice::OwnedSlice;
 use bumpalo::Bump;
 
 /// WASM PDF engine with Arena allocator for efficient memory management.
@@ -15,13 +17,19 @@ use bumpalo::Bump;
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct WasmPdfEngine {
     arena: Bump,
+    pdf_data: Vec<u8>,
+    page_count: u32,
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 impl WasmPdfEngine {
     /// Create a new WASM PDF engine with a fresh arena.
     pub fn new() -> Self {
-        Self { arena: Bump::new() }
+        Self {
+            arena: Bump::new(),
+            pdf_data: Vec::new(),
+            page_count: 0,
+        }
     }
 
     /// Create an engine with a pre-allocated arena capacity hint.
@@ -30,7 +38,44 @@ impl WasmPdfEngine {
     pub fn with_capacity(bytes: usize) -> Self {
         Self {
             arena: Bump::with_capacity(bytes),
+            pdf_data: Vec::new(),
+            page_count: 0,
         }
+    }
+
+    /// Load PDF bytes into the engine.
+    pub fn open(&mut self, pdf_data: &[u8]) -> Result<(), WasmError> {
+        if pdf_data.len() < 4 || &pdf_data[0..4] != b"%PDF" {
+            return Err(WasmError::InvalidPdf("missing %PDF header".into()));
+        }
+        self.pdf_data = pdf_data.to_vec();
+        self.page_count = preview::count_pages(&self.pdf_data) as u32;
+        self.reset_arena();
+        Ok(())
+    }
+
+    pub fn get_page_count(&self) -> u32 {
+        self.page_count
+    }
+
+    /// Render page thumbnail as RGBA bytes wrapped in [`OwnedSlice`].
+    pub fn render_page_thumbnail(&mut self, page: u32, max_px: u32) -> Result<OwnedSlice, WasmError> {
+        if page >= self.page_count {
+            return Err(WasmError::InvalidPdf(format!("page {page} out of range")));
+        }
+        let rgba = preview::render_page_thumbnail_rgba(page, max_px);
+        self.reset_arena();
+        Ok(OwnedSlice::from_vec(rgba))
+    }
+
+    /// Extract single-page text preview.
+    pub fn extract_page_text(&mut self, page: u32) -> Result<OwnedSlice, WasmError> {
+        if page >= self.page_count {
+            return Err(WasmError::InvalidPdf(format!("page {page} out of range")));
+        }
+        let text = preview::extract_page_text(&self.pdf_data, page);
+        self.reset_arena();
+        Ok(OwnedSlice::from_vec(text.into_bytes()))
     }
 
     /// Reset arena to free all temporary allocations.

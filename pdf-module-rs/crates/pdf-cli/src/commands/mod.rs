@@ -4,6 +4,7 @@
 //! Every function takes `mode: Mode` and dispatches accordingly.
 
 pub mod compile;
+pub mod platform;
 pub mod query;
 
 use crate::config::CliConfig;
