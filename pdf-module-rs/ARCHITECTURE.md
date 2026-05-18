@@ -95,8 +95,7 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 ├──────────────────────────────────────────────────────┤
 │  Facade Layer (Web UI)                                │
 │  pdf-web (Embedded web panel, axum)                   │
-│  pdf-mcp embed.rs (embedded HTML via rust_embed)      │
-│  pdf-frontend (WASM frontend assets)                  │
+│  pdf-mcp embed.rs (embedded Vue3 SPA via rust_embed)  │
 ├──────────────────────────────────────────────────────┤
 │  Core Layer                                           │
 │  pdf-core (extraction, knowledge, parallel)           │
@@ -137,7 +136,6 @@ knowledge_base/
 | `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 23 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
 | `pdf-cli` | 统一 CLI (双模式: local/remote) | `clap` derive, `reqwest` for remote, file upload, knowledge management |
 | `pdf-web` | 轻量嵌入式 Web 面板 (`axum`) | HTTP wiki browsing, knowledge base management |
-| `pdf-frontend` | 前端资源仓库 | WASM 编译目标，UI 资源 |
 | `pdf-wasm` | WASM 引擎 | `WasmSlice` zero-copy, `bumpalo` arena, `talc` allocator |
 | `vlm-visual-gateway` | VLM 条件升级网关 | `catch_unwind` FFI levee, Semaphore rate-limiting, exponential backoff |
 

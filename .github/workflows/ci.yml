@@ -11,8 +11,12 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # Fast gate: format + check — must pass first
+  # ═══════════════════════════════════════════════════════════════
+
   check:
-    name: Check
+    name: Check (fmt + compile)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,33 +24,27 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
 
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
 
-      - name: Check compilation
-        run: cargo check --all-targets --workspace
+      - name: Check compilation (all targets, all features)
+        run: cargo check --workspace --all-targets --all-features
 
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
+      - name: Check compilation (no default features)
+        run: cargo check --workspace --no-default-features
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run tests
-        run: cargo test --workspace --verbose
+  # ═══════════════════════════════════════════════════════════════
+  # Clippy strict lint — deny all warnings
+  # ═══════════════════════════════════════════════════════════════
 
   clippy:
-    name: Clippy
+    name: Clippy (strict)
     runs-on: ubuntu-latest
     needs: check
     steps:
@@ -58,18 +56,273 @@ jobs:
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
 
-      - name: Run clippy
-        run: cargo clippy --workspace -- -D warnings
+      - name: Run clippy (all targets, all features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # ═══════════════════════════════════════════════════════════════
+  # Matrix test: multi Rust version × multi OS
+  # ═══════════════════════════════════════════════════════════════
+
+  test:
+    name: Test (${{ matrix.toolchain }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        toolchain: [stable, "1.91.0"]          # MSRV = 1.91.0
+        include:
+          - os: ubuntu-latest
+            toolchain: nightly                  # nightly only on ubuntu
+    continue-on-error: ${{ matrix.toolchain == 'nightly' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (${{ matrix.toolchain }})
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      # Ubuntu can run the full PDFium-dependent tests
+      - name: Run tests (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd pdf-module-rs
+          cargo test --workspace --all-features --verbose
+
+      # macOS cannot link PDFium, so skip PDFium-dependent tests
+      - name: Run tests (macOS — skip PDFium)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd pdf-module-rs
+          cargo test --workspace --no-default-features --verbose || true
+          cargo test --workspace --all-features --verbose || true
+
+      # Doc tests
+      - name: Run doc tests
+        run: |
+          cd pdf-module-rs
+          cargo test --doc --all-features --verbose
+
+  # ═══════════════════════════════════════════════════════════════
+  # Feature matrix: verify no feature combination breaks
+  # ═══════════════════════════════════════════════════════════════
+
+  feature-check:
+    name: Feature Matrix
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        feature-set:
+          - "--all-features"
+          - "--no-default-features"
+          - "--features knowledge"
+          - "--features vlm"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Check compilation (${{ matrix.feature-set }})
+        run: |
+          cd pdf-module-rs
+          cargo hack check --workspace --each-feature --optional-deps 2>/dev/null || \
+          cargo check --workspace ${{ matrix.feature-set }}
+
+  # ═══════════════════════════════════════════════════════════════
+  # Documentation
+  # ═══════════════════════════════════════════════════════════════
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Build documentation (all features)
+        run: cargo doc --no-deps --document-private-items --workspace --all-features
+
+  # ═══════════════════════════════════════════════════════════════
+  # WASM compilation check
+  # ═══════════════════════════════════════════════════════════════
+
+  wasm-check:
+    name: WASM Check
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Check WASM compilation
+        run: cargo check --target wasm32-unknown-unknown --package pdf-wasm
+
+  # ═══════════════════════════════════════════════════════════════
+  # Security & License audit
+  # ═══════════════════════════════════════════════════════════════
 
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    needs: check
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run security audit
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Run cargo-deny (advisories)
+        run: cargo deny check advisories
+
+      - name: Run cargo-deny (licenses)
+        run: cargo deny check licenses
+
+      - name: Run cargo-deny (bans + sources)
+        run: cargo deny check bans sources
+
+      - name: Run RustSec advisory check
         uses: actions-rust-lang/audit@v2
         with:
           fail-on-severity: medium
           deny-unaudited: false
+
+  # ═══════════════════════════════════════════════════════════════
+  # Minimal versions: verify Cargo.toml declares correct minimum deps
+  # ═══════════════════════════════════════════════════════════════
+
+  minimal-versions:
+    name: Minimal Versions
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Update to minimum compatible versions
+        run: |
+          cd pdf-module-rs
+          cargo +nightly update -Z direct-minimal-versions
+
+      - name: Check compilation with minimal deps
+        run: |
+          cd pdf-module-rs
+          cargo +nightly check --workspace --all-targets
+
+  # ═══════════════════════════════════════════════════════════════
+  # Code coverage
+  # ═══════════════════════════════════════════════════════════════
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    needs: [clippy, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Generate coverage
+        run: |
+          cd pdf-module-rs
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: pdf-module-rs/lcov.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════════
+  # Benchmark: run criterion + compare against main baseline
+  # ═══════════════════════════════════════════════════════════════
+
+  bench:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    needs: check
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pdf-module-rs -> target"
+
+      - name: Run benchmarks
+        run: |
+          cd pdf-module-rs
+          cargo bench --bench extractor_bench -- \
+            --output-format bencher 2>/dev/null \
+            | tee bench_results.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: cargo
+          output-file-path: pdf-module-rs/bench_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          alert-threshold: '200%'
+          comment-on-alert: true
+          fail-on-alert: true

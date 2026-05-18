@@ -260,24 +260,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_config_missing_kb() {
+    async fn test_get_config_default_kb() {
         let args = serde_json::json!({});
         
         let result = handle_get_config(&args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_set_config_missing_kb() {
+    async fn test_set_config_default_kb() {
         let args = serde_json::json!({
             "key": "test_key",
             "value": "test_value"
         });
         
         let result = handle_set_config(&args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -305,31 +303,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_health_report_missing_kb() {
+    async fn test_get_health_report_default_kb() {
         let args = serde_json::json!({});
         
         let result = handle_get_health_report(&args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_trigger_incremental_compile_missing_kb() {
+    async fn test_trigger_incremental_compile_default_kb() {
         let ctx = create_test_context();
         let args = serde_json::json!({});
         
         let result = handle_trigger_incremental_compile(&ctx, &args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_get_compile_status_missing_kb() {
+    async fn test_get_compile_status_default_kb() {
         let args = serde_json::json!({});
         
         let result = handle_get_compile_status(&args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing knowledge_base"));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]

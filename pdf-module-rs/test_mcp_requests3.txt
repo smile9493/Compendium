@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+{"jsonrpc":"2.0","id":29,"method":"tools/call","params":{"name":"extrude_to_server_wiki","arguments":{"file_path":"/app/test_kb/raw/test.pdf"}}}
+{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"recompile_entry","arguments":{"entry_path":"IT/test_entry","knowledge_base":"/app/test_kb"}}}

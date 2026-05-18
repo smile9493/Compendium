@@ -1,0 +1,26 @@
+include = [
+    "**/Cargo.toml",
+    "**/deny.toml",
+    "**/rust-toolchain.toml",
+    "**/rustfmt.toml",
+]
+
+[formatting]
+align_entries = false
+align_comments = true
+array_auto_collapse = true
+array_auto_expand = true
+compact_arrays = true
+compact_inline_tables = false
+column_width = 100
+indent_string = "    "
+reorder_keys = true
+trailing_newline = true
+
+[[rule]]
+keys = ["dependencies", "dev-dependencies", "build-dependencies", "workspace.dependencies", "workspace.dev-dependencies"]
+formatting = { reorder_keys = true }
+
+[[rule]]
+keys = ["features", "workspace.members", "targets"]
+formatting = { reorder_keys = false, compact_arrays = true }

@@ -33,8 +33,10 @@ use std::sync::Arc;
 use tracing::info;
 use vlm_visual_gateway::MetricsCollector;
 
+mod api_doc;
 mod embed;
 mod http;
+mod metrics;
 mod protocol;
 mod sampling;
 mod server;
@@ -73,9 +75,12 @@ async fn main() -> anyhow::Result<()> {
     if let Some(port) = http_port {
         info!("Starting MCP server (stdio + HTTP on port {})", port);
 
+        let http_metrics = Arc::new(metrics::HttpMetrics::new());
+
         let http_state = http::HttpState {
             kb_path,
             upload_store: Some(Arc::clone(&upload_store)),
+            http_metrics: Some(Arc::clone(&http_metrics)),
         };
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 

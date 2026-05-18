@@ -1,0 +1,27 @@
+#!/bin/sh
+# cargo-husky pre-push hook
+# Thorough checks that run before every push.
+#
+# This hook is auto-installed by cargo-husky when cargo test runs.
+# Script location: pdf-module-rs/.cargo-husky/hooks/pre-push
+# Copied to:        .git/hooks/pre-push
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/pdf-module-rs"
+
+echo "━━━ cargo fmt ━━━"
+cargo fmt --all -- --check
+
+echo "━━━ cargo clippy ━━━"
+cargo clippy --workspace --all-targets -- -D warnings
+
+echo "━━━ cargo test ━━━"
+cargo test --workspace
+
+echo "━━━ typos ━━━"
+cd "$REPO_ROOT"
+typos --config typos.toml
+
+echo "✓ pre-push checks passed"

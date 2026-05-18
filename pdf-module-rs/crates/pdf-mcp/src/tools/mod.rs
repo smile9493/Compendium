@@ -51,7 +51,7 @@ impl ToolContext {
 }
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(26);
+    let mut tools = Vec::with_capacity(27);
     tools.extend(extract_tool_definitions());
     tools.extend(knowledge_tool_definitions());
     tools.extend(index_tool_definitions());
@@ -86,6 +86,7 @@ pub async fn dispatch_tool(
         "aggregate_entries" => handle_aggregate_entries(ctx, args).await,
         "hypothesis_test" => handle_hypothesis_test(ctx, args).await,
         "recompile_entry" => handle_recompile_entry(ctx, args).await,
+        "save_wiki_entry" => handle_save_wiki_entry(ctx, args).await,
         "get_config" => handle_get_config(args).await,
         "set_config" => handle_set_config(args).await,
         "get_health_report" => handle_get_health_report(args).await,
@@ -122,14 +123,14 @@ mod tests {
     #[test]
     fn test_all_tool_definitions_count() {
         let tools = all_tool_definitions();
-        assert_eq!(tools.len(), 26, "Expected 26 tools total");
+        assert_eq!(tools.len(), 27, "Expected 27 tools total");
     }
 
     #[test]
     fn test_all_tool_definitions_unique_names() {
         let tools = all_tool_definitions();
         let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names.len(), 26, "All tool names should be unique");
+        assert_eq!(names.len(), 27, "All tool names should be unique");
     }
 
     #[test]

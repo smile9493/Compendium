@@ -1,0 +1,80 @@
+# pre-commit hooks for the PDF Module workspace
+#
+# Install:
+#   pip install pre-commit        # Install pre-commit framework
+#   pre-commit install            # Install git hooks
+#   pre-commit install --hook-type pre-push  # Install pre-push hooks
+#
+# Run manually:
+#   pre-commit run --all-files    # Run all hooks on all files
+#   pre-commit run cargo-fmt      # Run a specific hook
+#
+# Skip hooks temporarily:
+#   SKIP=cargo-test git commit -m "WIP"
+
+repos:
+  # ─── General file checks ────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+
+  # ─── Rust: cargo fmt ───────────────────────────────────────
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: cargo fmt
+        entry: bash -c 'cd pdf-module-rs && cargo fmt --all -- --check'
+        files: \.rs$
+        language: system
+
+  # ─── Rust: cargo check (fast compile-only) ──────────────────
+  - repo: local
+    hooks:
+      - id: cargo-check
+        name: cargo check
+        entry: bash -c 'cd pdf-module-rs && cargo check --workspace --all-targets'
+        files: \.rs$
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # ─── Spell checking ────────────────────────────────────────
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.29.0
+    hooks:
+      - id: typos
+        args: [--config, typos.toml]
+
+  # ═══════════════════════════════════════════════════════════
+  # pre-push only (slower but thorough)
+  # Install: pre-commit install --hook-type pre-push
+  # ═══════════════════════════════════════════════════════════
+
+  - repo: local
+    hooks:
+      - id: cargo-test
+        name: cargo test
+        entry: bash -c 'cd pdf-module-rs && cargo test --workspace'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: bash -c 'cd pdf-module-rs && cargo clippy --workspace --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

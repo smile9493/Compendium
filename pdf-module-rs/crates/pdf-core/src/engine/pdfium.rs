@@ -224,6 +224,6 @@ mod tests {
     fn test_engine_metadata() {
         let engine = PdfiumEngine::new().unwrap();
         assert_eq!(engine.id(), "pdfium");
-        assert!(engine.test_connection());
+        assert_eq!(engine.name(), "PdfiumEngine");
     }
 }

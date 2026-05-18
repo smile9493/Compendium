@@ -1,0 +1,7 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"save_wiki_entry","arguments":{"knowledge_base":"/kb","entry_path":"IT/saved_by_mcp.md","content":"---\ndomain: IT\nlevel: L1\ntags: [mcp, test, save]\nstatus: draft\ncreated: 2026-05-13\nupdated: 2026-05-13\n---\n\n# MCP Save Test\n\nThis wiki entry was created directly by the `save_wiki_entry` MCP tool.\n\n## Key Points\n\n- Written via MCP JSON-RPC\n- No filesystem sharing needed\n- Path safety validated\n- Parent directories auto-created"}}}
+{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"save_wiki_entry","arguments":{"knowledge_base":"/kb","entry_path":"IT/../etc/passwd","content":"hacked"}}}
+{"jsonrpc":"2.0","id":102,"method":"tools/call","params":{"name":"save_wiki_entry","arguments":{"knowledge_base":"/kb","entry_path":"no_ext","content":"no .md extension"}}}
+{"jsonrpc":"2.0","id":103,"method":"tools/call","params":{"name":"save_wiki_entry","arguments":{"knowledge_base":"/kb","entry_path":"IT/empty.md","content":""}}}
+{"jsonrpc":"2.0","id":104,"method":"tools/call","params":{"name":"search_knowledge","arguments":{"query":"save_wiki_entry","knowledge_base":"/kb","limit":5}}}
