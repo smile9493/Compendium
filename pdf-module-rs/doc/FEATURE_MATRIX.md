@@ -47,6 +47,27 @@ All entry points use:
 | Local collab (audit, patch proposals, locks) | **stable** |
 | Git-like sync (`file://` remote, Merkle manifest) | **stable** |
 
+## HTTP / Web UI capabilities
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| Compile SSE `GET /api/compile/events` | **stable** | Same JSON shape as compile status; MCP `mcp-compile-status` in [MCP_UI_EXTENSION.md](MCP_UI_EXTENSION.md) |
+| `IndexCache` (in-process indexes) | **stable** | `pdf-mcp` HTTP + `pdf_core::knowledge::IndexCache` |
+| Ops console (Settings + OpsBanner + index rebuild) | **stable** / **partial** | Health/rebuild **stable**; some header tooltips still Chinese-only |
+| `body_markdown` SSOT | **stable** | Server does not emit `body_html`; UI errors when body missing |
+| MCP UI v1 (postMessage) | **stable** | `mcp-ask-ai`, `mcp-compile-status` |
+| Share read-only links | **stable** | `POST /api/v1/shares`, `#/share/:token/:path` |
+| Collaboration proposal UI | **MCP-only** | `submit` / `apply` / `list_patch_proposals`; no Web UI approval panel |
+| OpenAPI → TypeScript types | **partial** | CI checks management paths; wiki types in `types.d.ts` |
+| UI i18n | **partial** | Settings, OpsBanner, compile status keys covered; drawer/rightbar progressive |
+
+### Wiki write paths (collaboration)
+
+| Path | Mechanism |
+|------|-----------|
+| Direct write | MCP `patch_wiki_entry`, `save_wiki_entry` |
+| Proposal write | MCP `submit_patch_proposal` → `apply_patch_proposal`; discover via `list_patch_proposals` |
+
 ## Web UI
 
 | Component | Status |

@@ -104,6 +104,53 @@ pub fn submit_patch_proposal(
     Ok(proposal)
 }
 
+/// Summary of a patch proposal for listing (no full diff payload).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PatchProposalSummary {
+    pub id: String,
+    pub created_at: String,
+    pub entry_path: String,
+    pub status: String,
+}
+
+/// List patch proposals under `wiki/.rsut/proposals/`, newest first.
+///
+/// When `status_filter` is set, only proposals with matching `status` are returned.
+pub fn list_patch_proposals(
+    knowledge_base: &Path,
+    status_filter: Option<&str>,
+) -> PdfResult<Vec<PatchProposalSummary>> {
+    let dir = proposals_dir(knowledge_base);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut summaries = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(storage_err)? {
+        let entry = entry.map_err(storage_err)?;
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path).map_err(storage_err)?;
+        let proposal: PatchProposal =
+            serde_json::from_str(&raw).map_err(|e| storage_err(&e.to_string()))?;
+        if let Some(filter) = status_filter {
+            if proposal.status != filter {
+                continue;
+            }
+        }
+        summaries.push(PatchProposalSummary {
+            id: proposal.id,
+            created_at: proposal.created_at,
+            entry_path: proposal.request.entry_path,
+            status: proposal.status,
+        });
+    }
+    summaries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(summaries)
+}
+
 /// Apply a previously submitted proposal.
 pub fn apply_patch_proposal(
     knowledge_base: &Path,
@@ -221,4 +268,51 @@ fn now_secs() -> u64 {
 
 fn storage_err(e: impl std::fmt::Display) -> PdfModuleError {
     PdfModuleError::Storage(e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_list_patch_proposals_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("wiki")).unwrap();
+        let list = list_patch_proposals(dir.path(), None).unwrap();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_list_patch_proposals_status_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let kb = dir.path();
+        let pdir = proposals_dir(kb);
+        fs::create_dir_all(&pdir).unwrap();
+
+        let pending = r#"{
+            "id": "p1",
+            "created_at": "2026-01-02T00:00:00Z",
+            "status": "pending",
+            "request": { "entry_path": "IT/a.md", "operations": [] },
+            "preview": { "entry_path": "IT/a.md", "diff": "", "applied": false, "new_size_bytes": 0 }
+        }"#;
+        let applied = r#"{
+            "id": "p2",
+            "created_at": "2026-01-01T00:00:00Z",
+            "status": "applied",
+            "request": { "entry_path": "IT/b.md", "operations": [] },
+            "preview": { "entry_path": "IT/b.md", "diff": "", "applied": true, "new_size_bytes": 0 }
+        }"#;
+        fs::write(pdir.join("p1.json"), pending).unwrap();
+        fs::write(pdir.join("p2.json"), applied).unwrap();
+
+        let all = list_patch_proposals(kb, None).unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].id, "p1");
+
+        let pending_only = list_patch_proposals(kb, Some("pending")).unwrap();
+        assert_eq!(pending_only.len(), 1);
+        assert_eq!(pending_only[0].id, "p1");
+    }
 }

@@ -4,9 +4,9 @@
       <div class="compile-drawer-header">
         <div class="compile-drawer-title">
           <Hammer :size="18" />
-          <span>编译控制台</span>
+          <span>{{ t('compile.console') }}</span>
         </div>
-        <button class="header-btn icon-btn" @click="compileStore.closeDrawer()" v-tooltip="'关闭'">
+        <button class="header-btn icon-btn" @click="compileStore.closeDrawer()" v-tooltip="t('compile.close')">
           <X :size="16" />
         </button>
       </div>
@@ -29,11 +29,11 @@
           <div class="compile-mode-row">
             <label class="compile-mode-label">
               <input type="radio" v-model="compileMode" value="single" />
-              单文件编译
+              {{ t('compile.singleMode') }}
             </label>
             <label class="compile-mode-label">
               <input type="radio" v-model="compileMode" value="incremental" />
-              增量编译
+              {{ t('compile.incrementalMode') }}
             </label>
           </div>
           <div
@@ -43,9 +43,9 @@
             @drop.prevent="onDrop"
           >
             <input type="file" ref="fileInput" accept=".pdf" class="upload-input" @change="onFile" />
-            <div class="upload-hint">拖拽或点击上传 PDF</div>
+            <div class="upload-hint">{{ t('compile.uploadHint') }}</div>
           </div>
-          <p v-else class="compile-hint">扫描 raw/ 目录中变更的 PDF 并重新编译。</p>
+          <p v-else class="compile-hint">{{ t('compile.incrementalHint') }}</p>
           <button
             class="btn btn-primary compile-start-btn"
             :disabled="compileStore.loading || compileStore.isRunning"
@@ -53,7 +53,13 @@
           >
             <Loader2 v-if="compileStore.loading" :size="14" class="spin" />
             <Play v-else :size="14" />
-            {{ compileStore.loading ? '处理中…' : compileMode === 'incremental' ? '开始增量编译' : '上传并编译' }}
+            {{
+              compileStore.loading
+                ? t('compile.processing')
+                : compileMode === 'incremental'
+                  ? t('compile.startIncremental')
+                  : t('compile.uploadAndCompile')
+            }}
           </button>
           <p v-if="compileStore.error" class="compile-error">{{ compileStore.error }}</p>
         </div>
@@ -68,11 +74,16 @@
               @click="selectedHistory = h"
             >
               <span class="ci-status status-badge" :class="outcomeClass(h.outcome)">{{ h.outcome }}</span>
-              <span class="ci-name">{{ h.entries_compiled }} 条目 / {{ h.entries_skipped }} 跳过</span>
+              <span class="ci-name">{{
+                t('compile.entriesSummary', {
+                  compiled: h.entries_compiled,
+                  skipped: h.entries_skipped,
+                })
+              }}</span>
               <span class="ci-time">{{ formatTime(h.finished_at) }}</span>
             </button>
           </div>
-          <p v-else class="compile-hint">暂无编译历史</p>
+          <p v-else class="compile-hint">{{ t('compile.noHistory') }}</p>
           <div v-if="selectedHistory" class="compile-detail">
             <div class="mono">{{ selectedHistory.message || compileStore.compileStatus?.message }}</div>
           </div>
@@ -81,15 +92,23 @@
         <div v-if="compileStore.activeTab === 'status'" class="compile-section">
           <div class="compile-status-card">
             <div class="compile-status-header">
-              <span class="compile-status-label">当前状态</span>
+              <span class="compile-status-label">{{ t('compile.currentStatus') }}</span>
               <span class="status-badge" :class="statusClass">{{ compileStore.statusText }}</span>
             </div>
             <div class="compile-status-time">
-              {{ compileStore.compileStatus?.last_finished || compileStore.compileStatus?.last_started || '从未运行' }}
+              {{
+                compileStore.compileStatus?.last_finished ||
+                compileStore.compileStatus?.last_started ||
+                t('compile.neverRun')
+              }}
             </div>
             <div v-if="compileStore.isRunning" class="compile-progress-hint">
               <span class="dots-loading"></span>
-              {{ compileStore.pipelineStatus === 'awaiting_agent' ? '等待 Agent 写入 wiki…' : '编译进行中，每 2 秒自动刷新…' }}
+              {{
+                compileStore.pipelineStatus === 'awaiting_agent'
+                  ? t('compile.awaitingAgent')
+                  : t('compile.pollingHint')
+              }}
             </div>
             <CompileStageList :stages="pipelineStages" />
           </div>
@@ -100,19 +119,19 @@
             <div class="quality-summary-grid">
               <div class="health-item">
                 <div class="hv">{{ compileStore.qualitySnapshot.issues_count }}</div>
-                <div class="hl">问题</div>
+                <div class="hl">{{ t('compile.issues') }}</div>
               </div>
               <div class="health-item">
                 <div class="hv">{{ compileStore.qualitySnapshot.orphan_count }}</div>
-                <div class="hl">孤立</div>
+                <div class="hl">{{ t('compile.orphans') }}</div>
               </div>
               <div class="health-item">
                 <div class="hv">{{ compileStore.qualitySnapshot.contradiction_pairs }}</div>
-                <div class="hl">矛盾对</div>
+                <div class="hl">{{ t('compile.contradictions') }}</div>
               </div>
               <div class="health-item">
                 <div class="hv">{{ compileStore.qualitySnapshot.blocked_count ?? 0 }}</div>
-                <div class="hl">已阻止</div>
+                <div class="hl">{{ t('compile.blocked') }}</div>
               </div>
             </div>
             <div class="quality-issues-list">
@@ -128,7 +147,7 @@
               </button>
             </div>
           </template>
-          <p v-else class="compile-hint">编译完成后将自动生成质量快照</p>
+          <p v-else class="compile-hint">{{ t('compile.qualityAfterCompile') }}</p>
         </div>
       </div>
 
@@ -137,8 +156,12 @@
         class="compile-quality-footer"
       >
         <button type="button" class="btn btn-sm" @click="compileStore.activeTab = 'quality'">
-          质量：{{ compileStore.qualitySnapshot.issues_count }} 个问题 ·
-          {{ compileStore.qualitySnapshot.contradiction_pairs }} 矛盾对
+          {{
+            t('compile.qualityFooter', {
+              issues: compileStore.qualitySnapshot.issues_count,
+              pairs: compileStore.qualitySnapshot.contradiction_pairs,
+            })
+          }}
         </button>
       </div>
     </aside>
@@ -147,23 +170,25 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useCompileStore } from '@/stores/compile'
 import { openEntry } from '@/composables/useWikiNavigation'
 import { Hammer, X, Upload, History, Activity, ShieldAlert, Play, Loader2 } from 'lucide-vue-next'
 import CompileStageList from '@/components/CompileStageList.vue'
 
+const { t } = useI18n()
 const compileStore = useCompileStore()
 const compileMode = ref('single')
 const fileInput = ref(null)
 const pendingFile = ref(null)
 const selectedHistory = ref(null)
 
-const tabs = [
-  { id: 'trigger', label: '编译', icon: Upload },
-  { id: 'history', label: '历史', icon: History },
-  { id: 'status', label: '状态', icon: Activity },
-  { id: 'quality', label: '质量', icon: ShieldAlert },
-]
+const tabs = computed(() => [
+  { id: 'trigger', label: t('compile.tabTrigger'), icon: Upload },
+  { id: 'history', label: t('compile.tabHistory'), icon: History },
+  { id: 'status', label: t('compile.tabStatus'), icon: Activity },
+  { id: 'quality', label: t('compile.tabQuality'), icon: ShieldAlert },
+])
 
 const history = computed(() => compileStore.compileStatus?.history || [])
 
@@ -200,7 +225,7 @@ async function startCompile() {
   }
   const file = pendingFile.value || fileInput.value?.files?.[0]
   if (!file) {
-    compileStore.error = '请选择 PDF 文件'
+    compileStore.error = t('compile.selectPdf')
     return
   }
   await compileStore.uploadAndCompile(file, 'single')

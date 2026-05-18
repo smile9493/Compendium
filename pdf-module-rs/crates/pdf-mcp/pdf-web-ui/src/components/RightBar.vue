@@ -1,11 +1,11 @@
 <template>
   <aside class="app-rightbar" :class="{ collapsed: collapsed }">
     <div class="rb-section">
-      页面目录
-      <span v-if="headings.length" class="rb-action" @click="scrollToTop" title="回到顶部">↑ 顶部</span>
+      {{ t('rightbar.toc') }}
+      <span v-if="headings.length" class="rb-action" @click="scrollToTop" :title="t('rightbar.backTop')">↑ {{ t('rightbar.backTop') }}</span>
     </div>
     <div id="toc-list">
-      <span v-if="!headings.length" class="rightbar-empty">选择条目后显示</span>
+      <span v-if="!headings.length" class="rightbar-empty">{{ t('rightbar.selectEntry') }}</span>
       <a
         v-for="(h, idx) in headings"
         :key="idx"
@@ -16,18 +16,21 @@
       >{{ h.text }}</a>
     </div>
     <div class="rb-divider"></div>
-    <div class="rb-section">概念图谱</div>
+    <div class="rb-section">{{ t('rightbar.conceptGraph') }}</div>
     <div class="graph-preview">
       <div v-if="mermaidPreview" class="graph-mini">{{ mermaidPreview }}</div>
-      <span v-else class="rightbar-empty">选择条目后显示</span>
+      <span v-else class="rightbar-empty">{{ t('rightbar.selectEntry') }}</span>
     </div>
-    <div class="rightbar-back-top" @click="scrollToTop">↑ 回到顶部</div>
+    <div class="rightbar-back-top" @click="scrollToTop">↑ {{ t('rightbar.backTop') }}</div>
   </aside>
 </template>
 
 <script setup>
 import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useWikiStore } from '@/stores/wiki'
+
+const { t } = useI18n()
 import { useScrollSpy } from '@/composables/useScrollSpy'
 
 const props = defineProps({

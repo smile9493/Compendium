@@ -1,0 +1,285 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Rust PDF MCP API",
+    "description": "PDF extraction, knowledge compilation, and full-text search HTTP API",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.3.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/api/compile/status": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "operationId": "compile_status_path",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "query",
+            "description": "Knowledge base id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compile job view JSON object"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "operationId": "health_path",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "query",
+            "description": "Knowledge base id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Health report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReportHttp"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/index/rebuild": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "operationId": "index_rebuild_path",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "query",
+            "description": "Knowledge base id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rebuild stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexRebuildHttp"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/index/status": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "operationId": "index_status_path",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "query",
+            "description": "Knowledge base id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Last index rebuild metadata"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ExtractionHealthHttp": {
+        "type": "object",
+        "required": [
+          "backends",
+          "vlm_configured",
+          "default_method"
+        ],
+        "properties": {
+          "backends": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default_method": {
+            "type": "string"
+          },
+          "vlm_configured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HealthReportHttp": {
+        "type": "object",
+        "required": [
+          "total_entries",
+          "orphan_count",
+          "contradiction_count",
+          "graph_nodes",
+          "graph_edges",
+          "avg_quality_score"
+        ],
+        "properties": {
+          "avg_quality_score": {
+            "type": "string"
+          },
+          "contradiction_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "extraction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtractionHealthHttp"
+              }
+            ]
+          },
+          "graph_edges": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "graph_nodes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "orphan_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_entries": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "IndexRebuildHttp": {
+        "type": "object",
+        "required": [
+          "status",
+          "fulltext_entries_indexed",
+          "graph_nodes",
+          "graph_edges",
+          "vector_entries_indexed"
+        ],
+        "properties": {
+          "fulltext_entries_indexed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "graph_edges": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "graph_nodes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string"
+          },
+          "vector_entries_indexed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "wiki",
+      "description": "Wiki browser read API"
+    },
+    {
+      "name": "management",
+      "description": "Health, compile, and index management"
+    },
+    {
+      "name": "collaboration",
+      "description": "Share links"
+    }
+  ]
+}

@@ -692,11 +692,16 @@ mod tests {
         write_entry(kb, "IT", "nginx_proxy", "Nginx 反向代理与负载均衡配置详解");
         rebuild_all(kb).unwrap();
 
-        let hybrid = search_with_mode(kb, "反向代理", 5, SearchMode::Hybrid).unwrap();
+        let resp =
+            search_with_options(kb, "反向代理", 5, SearchMode::Hybrid, SearchOptions::for_api())
+                .unwrap();
         assert!(
-            hybrid.iter().any(|h| h.path.contains("nginx_proxy")),
+            resp.hits.iter().any(|h| h.path.contains("nginx_proxy")),
             "hybrid should find Chinese content"
         );
+        assert_eq!(resp.meta.mode, "hybrid");
+        assert!(!resp.meta.used_fallback);
+        assert!(!resp.meta.index_empty);
     }
 
     fn write_draft_entry(kb: &Path, domain: &str, name: &str, body: &str) {

@@ -14,7 +14,28 @@
     "tabTrigger": "编译",
     "tabHistory": "历史",
     "tabStatus": "状态",
-    "tabQuality": "质量"
+    "tabQuality": "质量",
+    "close": "关闭",
+    "singleMode": "单文件编译",
+    "incrementalMode": "增量编译",
+    "uploadHint": "拖拽或点击上传 PDF",
+    "incrementalHint": "扫描 raw/ 目录中变更的 PDF 并重新编译。",
+    "processing": "处理中…",
+    "startIncremental": "开始增量编译",
+    "uploadAndCompile": "上传并编译",
+    "entriesSummary": "{compiled} 条目 / {skipped} 跳过",
+    "noHistory": "暂无编译历史",
+    "currentStatus": "当前状态",
+    "neverRun": "从未运行",
+    "awaitingAgent": "等待 Agent 写入 wiki…",
+    "pollingHint": "编译进行中，每 2 秒自动刷新…",
+    "issues": "问题",
+    "orphans": "孤立",
+    "contradictions": "矛盾对",
+    "blocked": "已阻止",
+    "qualityAfterCompile": "编译完成后将自动生成质量快照",
+    "qualityFooter": "质量：{issues} 个问题 · {pairs} 矛盾对",
+    "selectPdf": "请选择 PDF 文件"
   },
   "settings": {
     "title": "设置",
@@ -35,5 +56,28 @@
     "copyLink": "复制分享链接",
     "copied": "已复制",
     "readOnly": "只读分享"
+  },
+  "rightbar": {
+    "toc": "页面目录",
+    "backTop": "回到顶部",
+    "selectEntry": "选择条目后显示",
+    "conceptGraph": "概念图谱"
+  },
+  "header": {
+    "expandSidebar": "展开目录栏",
+    "collapseSidebar": "折叠目录栏",
+    "kbWorkspace": "知识库工作区",
+    "allDomains": "所有领域",
+    "kbStats": "知识库统计",
+    "knowledgeGraph": "知识图谱",
+    "readingMode": "阅读模式",
+    "toggleTheme": "切换主题",
+    "settings": "设置",
+    "expandRightbar": "展开信息栏",
+    "collapseRightbar": "折叠信息栏"
+  },
+  "entry": {
+    "invalidPath": "无效的条目路径",
+    "noBody": "条目无 Markdown 正文"
   }
 }

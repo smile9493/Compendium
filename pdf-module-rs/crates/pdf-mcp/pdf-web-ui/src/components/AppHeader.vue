@@ -1,7 +1,7 @@
 <template>
   <div class="app-header">
     <div class="header-left">
-      <button class="header-btn icon-btn" @click="$emit('toggleSidebar')" v-tooltip="sidebarCollapsed ? '展开目录栏' : '折叠目录栏'">
+      <button class="header-btn icon-btn" @click="$emit('toggleSidebar')" v-tooltip="sidebarCollapsed ? t('header.expandSidebar') : t('header.collapseSidebar')">
         <Menu v-if="!sidebarCollapsed" :size="16" />
         <PanelLeft v-else :size="16" />
       </button>
@@ -14,7 +14,7 @@
         class="kb-select"
         :value="workspaceStore.activeKbId ?? ''"
         @change="onKbChange"
-        v-tooltip="'知识库工作区'"
+        v-tooltip="t('header.kbWorkspace')"
       >
         <option v-for="w in workspaceStore.workspaces" :key="w.id" :value="w.id">
           {{ w.name }}
@@ -43,18 +43,19 @@
     <span class="header-spacer"></span>
 
     <div class="header-right">
-      <button class="header-btn icon-btn" @click="$emit('openDomains')" v-tooltip="'所有领域'">
+      <button class="header-btn icon-btn" @click="$emit('openDomains')" v-tooltip="t('header.allDomains')">
         <Tag :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="$emit('openStats')" v-tooltip="'知识库统计'">
+      <button class="header-btn icon-btn" @click="$emit('openStats')" v-tooltip="t('header.kbStats')">
         <BarChart2 :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="$emit('openGraph')" v-tooltip="'知识图谱'">
+      <button class="header-btn icon-btn" @click="$emit('openGraph')" v-tooltip="t('header.knowledgeGraph')">
         <GitBranch :size="15" />
       </button>
       <button
         class="header-btn icon-btn compile-header-btn"
         :class="{ 'compile-active': compileStore.isRunning }"
+        :aria-label="t('compile.tabTrigger')"
         @click="onOpenCompile"
         v-tooltip="compileHeaderTooltip"
       >
@@ -66,18 +67,18 @@
         class="header-btn icon-btn"
         :class="{ active: wikiStore.readingMode }"
         @click="wikiStore.toggleReadingMode()"
-        v-tooltip="'阅读模式'"
+        v-tooltip="t('header.readingMode')"
       >
         <BookMarked :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="wikiStore.toggleTheme()" v-tooltip="'切换主题'">
+      <button class="header-btn icon-btn" @click="wikiStore.toggleTheme()" v-tooltip="t('header.toggleTheme')">
         <Sun v-if="wikiStore.darkTheme" :size="15" />
         <Moon v-else :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="$emit('openSettings')" v-tooltip="'设置'">
+      <button class="header-btn icon-btn" @click="$emit('openSettings')" v-tooltip="t('header.settings')">
         <Settings :size="15" />
       </button>
-      <button class="header-btn icon-btn" @click="$emit('toggleRightbar')" v-tooltip="rightbarCollapsed ? '展开信息栏' : '折叠信息栏'">
+      <button class="header-btn icon-btn" @click="$emit('toggleRightbar')" v-tooltip="rightbarCollapsed ? t('header.expandRightbar') : t('header.collapseRightbar')">
         <PanelRight v-if="!rightbarCollapsed" :size="16" />
         <PanelRightClose v-else :size="16" />
       </button>
