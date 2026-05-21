@@ -146,7 +146,7 @@ pub fn export_knowledge_base(
             })?;
 
             if meta.is_dir() {
-                if skip_dirs.iter().any(|s| *s == file_name.as_str()) {
+                if skip_dirs.contains(&file_name.as_str()) {
                     debug!(dir = %entry_path.display(), "Skipping excluded directory");
                     continue;
                 }

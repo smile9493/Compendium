@@ -141,16 +141,15 @@ pub fn import_knowledge_base(
         let path_str = path.to_string_lossy().to_string();
 
         // Track top-level sections
-        if let Some(section) = path.components().next().and_then(|c| c.as_os_str().to_str()) {
-            if !sections.contains(&section.to_string())
-                && !section.starts_with('.')
-                && (section == "schema"
-                    || section == "raw"
-                    || section == "wiki"
-                    || section == ".rsut_index")
-            {
-                sections.push(section.to_string());
-            }
+        if let Some(section) = path.components().next().and_then(|c| c.as_os_str().to_str())
+            && !sections.contains(&section.to_string())
+            && !section.starts_with('.')
+            && (section == "schema"
+                || section == "raw"
+                || section == "wiki"
+                || section == ".rsut_index")
+        {
+            sections.push(section.to_string());
         }
 
         let size = entry.size();
