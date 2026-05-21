@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest, WikiPatchResult};
+use crate::knowledge::patch::{WikiPatchRequest, WikiPatchResult, apply_patch, preview_patch};
 
 fn rsut_dir(knowledge_base: &Path) -> PathBuf {
     knowledge_base.join("wiki").join(".rsut")
@@ -135,10 +135,10 @@ pub fn list_patch_proposals(
         let raw = fs::read_to_string(&path).map_err(storage_err)?;
         let proposal: PatchProposal =
             serde_json::from_str(&raw).map_err(|e| storage_err(e.to_string()))?;
-        if let Some(filter) = status_filter {
-            if proposal.status != filter {
-                continue;
-            }
+        if let Some(filter) = status_filter
+            && proposal.status != filter
+        {
+            continue;
         }
         summaries.push(PatchProposalSummary {
             id: proposal.id,
@@ -196,15 +196,12 @@ pub fn acquire_lock(
     let dir = locks_dir(knowledge_base);
     fs::create_dir_all(&dir).map_err(storage_err)?;
     let lock_path = lock_file_path(knowledge_base, entry_path);
-    if lock_path.exists() {
-        if let Ok(existing) = read_lock(&lock_path) {
-            if existing.holder != holder && !lock_expired(&existing) {
-                return Err(PdfModuleError::Storage(format!(
-                    "entry locked by {}",
-                    existing.holder
-                )));
-            }
-        }
+    if lock_path.exists()
+        && let Ok(existing) = read_lock(&lock_path)
+        && existing.holder != holder
+        && !lock_expired(&existing)
+    {
+        return Err(PdfModuleError::Storage(format!("entry locked by {}", existing.holder)));
     }
     let ttl = ttl_secs.unwrap_or(DEFAULT_LOCK_TTL_SECS);
     let lock = EntryLock {
@@ -222,10 +219,11 @@ pub fn release_lock(knowledge_base: &Path, entry_path: &str, holder: &str) -> Pd
     if !lock_path.exists() {
         return Ok(());
     }
-    if let Ok(existing) = read_lock(&lock_path) {
-        if existing.holder != holder && !lock_expired(&existing) {
-            return Err(PdfModuleError::Storage("lock held by another actor".into()));
-        }
+    if let Ok(existing) = read_lock(&lock_path)
+        && existing.holder != holder
+        && !lock_expired(&existing)
+    {
+        return Err(PdfModuleError::Storage("lock held by another actor".into()));
     }
     fs::remove_file(&lock_path).map_err(storage_err)?;
     Ok(())

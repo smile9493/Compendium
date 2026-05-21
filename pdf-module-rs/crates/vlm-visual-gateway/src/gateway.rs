@@ -4,7 +4,7 @@ use std::time::Duration;
 use regex::Regex;
 use reqwest::Client;
 use std::sync::LazyLock;
-use tokio::sync::{broadcast, Semaphore};
+use tokio::sync::{Semaphore, broadcast};
 use tokio::time::timeout;
 use tracing::{info, warn};
 use uuid::Uuid;

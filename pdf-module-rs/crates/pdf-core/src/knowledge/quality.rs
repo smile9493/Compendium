@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
-use crate::knowledge::index::vector::{cosine_similarity, EmbeddingModel, TfidfModel};
+use crate::knowledge::index::vector::{EmbeddingModel, TfidfModel, cosine_similarity};
 
 /// Severity level for quality issues.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -280,10 +280,10 @@ fn scan_entries_recursive(
         } else if path.extension().map(|e| e == "md").unwrap_or(false) {
             let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
             all_paths.insert(rel);
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                    entries.push((path, entry));
-                }
+            if let Ok(content) = fs::read_to_string(&path)
+                && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+            {
+                entries.push((path, entry));
             }
         }
     }
@@ -351,11 +351,7 @@ fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<D
                 let pair_key = {
                     let a = entries[idx_a].0.to_string_lossy().to_string();
                     let b = entries[idx_b].0.to_string_lossy().to_string();
-                    if a <= b {
-                        format!("{}↔{}", a, b)
-                    } else {
-                        format!("{}↔{}", b, a)
-                    }
+                    if a <= b { format!("{}↔{}", a, b) } else { format!("{}↔{}", b, a) }
                 };
                 if !seen_pairs.insert(pair_key) {
                     continue;

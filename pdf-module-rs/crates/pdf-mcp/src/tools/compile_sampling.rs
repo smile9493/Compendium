@@ -159,7 +159,8 @@ mod tests {
         use pdf_core::knowledge::IndexCache;
         use pdf_core::{McpPdfPipeline, ServerConfig};
 
-        std::env::set_var("RSUT_COMPILE_SAMPLING", "1");
+        // SAFETY: Single-threaded test environment — no concurrent access to env.
+        unsafe { std::env::set_var("RSUT_COMPILE_SAMPLING", "1") };
 
         let dir = tempfile::tempdir().expect("tempdir");
         let kb = dir.path().join("kb");
@@ -199,6 +200,7 @@ mod tests {
 
         let summary = handle.await.expect("join").expect("summary");
         assert!(summary.summary.contains("Quality"));
-        std::env::remove_var("RSUT_COMPILE_SAMPLING");
+        // SAFETY: Single-threaded test — ensures env cleanup after test.
+        unsafe { std::env::remove_var("RSUT_COMPILE_SAMPLING") };
     }
 }

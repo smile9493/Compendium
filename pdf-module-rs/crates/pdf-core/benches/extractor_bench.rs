@@ -2,7 +2,7 @@
 //!
 //! Run: `cargo bench -p pdf-core -- extractor_bench`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use pdf_core::{FileValidator, PathValidationConfig};
 use std::io::Write;
 use std::path::Path;

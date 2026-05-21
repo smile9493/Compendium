@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::publish_gate::{apply_publish_gate, GateResult};
-use crate::knowledge::quality::{analyze_wiki, QualityReport};
+use crate::knowledge::publish_gate::{GateResult, apply_publish_gate};
+use crate::knowledge::quality::{QualityReport, analyze_wiki};
 
 /// Summary issue for agents and UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]

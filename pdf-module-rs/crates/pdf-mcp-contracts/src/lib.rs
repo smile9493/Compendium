@@ -22,7 +22,7 @@ pub use index::*;
 pub use knowledge::*;
 pub use management::*;
 pub use platform::*;
-pub use registry::{all_tool_specs, manifest_sha256, tool_count, McpToolSpec};
+pub use registry::{McpToolSpec, all_tool_specs, manifest_sha256, tool_count};
 
 pub fn schema_for<T: schemars::JsonSchema>() -> serde_json::Value {
     serde_json::to_value(schemars::schema_for!(T)).expect("schema serializes to JSON")

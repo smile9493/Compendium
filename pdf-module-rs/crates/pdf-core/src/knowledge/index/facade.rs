@@ -17,7 +17,7 @@ use crate::knowledge::entry::KnowledgeEntry;
 use crate::knowledge::index::fulltext::SearchHit;
 use crate::knowledge::index::vector::{VectorHit, VectorIndex};
 use crate::knowledge::index::{FulltextIndex, GraphIndex};
-use crate::knowledge::publish_gate::{is_searchable, GateConfig};
+use crate::knowledge::publish_gate::{GateConfig, is_searchable};
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
@@ -202,10 +202,10 @@ fn filter_searchable(
     hits.into_iter()
         .filter(|h| {
             let full = wiki_dir.join(&h.path);
-            if let Ok(content) = fs::read_to_string(&full) {
-                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                    return is_searchable(&entry, config.quality_min_score);
-                }
+            if let Ok(content) = fs::read_to_string(&full)
+                && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+            {
+                return is_searchable(&entry, config.quality_min_score);
             }
             false
         })
@@ -260,11 +260,7 @@ fn expand_query_for_tantivy(query: &str) -> String {
         .map(|w| w.trim().to_string())
         .filter(|w| !w.is_empty() && w.chars().count() > 1)
         .collect();
-    if words.len() <= 1 {
-        query.to_string()
-    } else {
-        words.join(" OR ")
-    }
+    if words.len() <= 1 { query.to_string() } else { words.join(" OR ") }
 }
 
 fn rrf_merge(keyword: Vec<SearchHit>, semantic: Vec<VectorHit>, limit: usize) -> Vec<SearchHit> {
@@ -526,16 +522,15 @@ fn scan_wiki_for_embedding(
             if filename == "index.md" || filename == "log.md" {
                 continue;
             }
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                    if !is_searchable(&entry, config.quality_min_score) {
-                        continue;
-                    }
-                    let rel =
-                        path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
-                    let body = content.split("---").nth(2).unwrap_or("").to_string();
-                    out.push((rel, entry.title, entry.domain, body));
+            if let Ok(content) = fs::read_to_string(&path)
+                && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+            {
+                if !is_searchable(&entry, config.quality_min_score) {
+                    continue;
                 }
+                let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
+                let body = content.split("---").nth(2).unwrap_or("").to_string();
+                out.push((rel, entry.title, entry.domain, body));
             }
         }
     }

@@ -21,19 +21,19 @@ pub mod tokenizer;
 pub mod vector;
 
 pub use cache::{IndexCache, KbIndexes};
-pub use community::{detect_communities, Community};
+pub use community::{Community, detect_communities};
 pub use facade::{
-    graph, rebuild_all, rebuild_vectors, reindex_entry, search, search_with_mode,
-    search_with_options, search_with_options_ft, wiki_dir, RebuildStats, SearchMeta, SearchMode,
-    SearchOptions, SearchResponse,
+    RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, graph, rebuild_all,
+    rebuild_vectors, reindex_entry, search, search_with_mode, search_with_options,
+    search_with_options_ft, wiki_dir,
 };
 pub use fulltext::FulltextIndex;
 pub use fulltext_shard::FulltextShardManager;
 pub use graph::GraphIndex;
 pub use graph_partition::GraphPartitionStore;
 pub use lazy_loader::LazyLoadingCoordinator;
-pub use metadata_store::{extract_domain, MetadataStore};
+pub use metadata_store::{MetadataStore, extract_domain};
 pub use tokenizer::register_cjk_tokenizer;
 pub use vector::{
-    cosine_similarity, EmbeddingModel, TfidfModel, VectorHit, VectorIndex, VectorStore,
+    EmbeddingModel, TfidfModel, VectorHit, VectorIndex, VectorStore, cosine_similarity,
 };

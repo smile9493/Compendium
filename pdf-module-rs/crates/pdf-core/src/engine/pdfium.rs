@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use std::env;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -21,12 +21,11 @@ struct StructuredParts {
 }
 
 static PDFIUM: LazyLock<Option<Arc<pdfium_render::prelude::Pdfium>>> = LazyLock::new(|| {
-    if let Ok(path) = env::var("PDFIUM_LIB_PATH") {
-        if Path::new(&path).exists() {
-            if let Ok(bindings) = pdfium_render::prelude::Pdfium::bind_to_library(&path) {
-                return Some(Arc::new(pdfium_render::prelude::Pdfium::new(bindings)));
-            }
-        }
+    if let Ok(path) = env::var("PDFIUM_LIB_PATH")
+        && Path::new(&path).exists()
+        && let Ok(bindings) = pdfium_render::prelude::Pdfium::bind_to_library(&path)
+    {
+        return Some(Arc::new(pdfium_render::prelude::Pdfium::new(bindings)));
     }
     // Reload the pdfium binary using the system library path
     pdfium_render::prelude::Pdfium::bind_to_system_library()

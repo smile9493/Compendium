@@ -1,6 +1,6 @@
+use crate::tools::ToolContext;
 use crate::tools::json::{json_content, parse_args};
 use crate::tools::mcp_extraction::envelope_from_router;
-use crate::tools::ToolContext;
 use pdf_core::dto::ExtractOptions;
 use pdf_core::wiki::{AgentPayload, WikiStorage};
 use pdf_mcp_contracts::{

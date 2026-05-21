@@ -44,9 +44,9 @@ pub mod types;
 pub use buffer::VisualBuffer;
 pub use detector::{DetectionResult, EscalationDetector};
 pub use error::{PdfiumGuardError, PdfiumGuardResult, VlmError, VlmResult};
-pub use gateway::{render_page_pixels, VlmGateway, VlmGatewayHandle};
+pub use gateway::{VlmGateway, VlmGatewayHandle, render_page_pixels};
 pub use metrics::{MetricsCollector, RequestTimer};
-pub use pdfium_guard::{catch_pdfium, PdfiumGuard};
+pub use pdfium_guard::{PdfiumGuard, catch_pdfium};
 pub use types::{
     LayoutResult, PageComplexity, PayloadMetadata, PdfiumExtraction, Region, RegionType, VlmConfig,
     VlmModel,

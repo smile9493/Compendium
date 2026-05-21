@@ -12,9 +12,9 @@ use std::time::Instant;
 use tracing::debug;
 
 use crate::error::PdfResult;
+use crate::knowledge::index::MetadataStore;
 use crate::knowledge::index::fulltext_shard::FulltextShardManager;
 use crate::knowledge::index::graph_partition::GraphPartitionStore;
-use crate::knowledge::index::MetadataStore;
 
 /// Coordinates lazy loading across the three sharded stores.
 pub struct LazyLoadingCoordinator {

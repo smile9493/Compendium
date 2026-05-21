@@ -2332,7 +2332,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-cli"
-version = "1.0.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2495,23 +2495,6 @@ dependencies = [
  "tracing-wasm",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "pdf-web"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "clap",
- "pdf-core",
- "serde",
- "serde_json",
- "tokio",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

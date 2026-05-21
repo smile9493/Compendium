@@ -13,7 +13,7 @@
 //! let greeting = t.get("hello-world", Some(&[("name", "World")]))?;
 //! ```
 
-use fluent::{bundle::FluentBundle, FluentResource};
+use fluent::{FluentResource, bundle::FluentBundle};
 use intl_memoizer::concurrent::IntlLangMemoizer;
 use std::collections::HashMap;
 use std::fs;

@@ -18,12 +18,12 @@
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::all)]
-#![warn(clippy::await_holding_lock)]
-#![warn(clippy::await_holding_refcell_ref)]
-#![warn(clippy::large_stack_frames)]
-#![warn(clippy::undocumented_unsafe_blocks)]
-#![warn(clippy::todo)]
-#![warn(clippy::dbg_macro)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::await_holding_refcell_ref)]
+#![deny(clippy::large_stack_frames)]
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(clippy::todo)]
+#![deny(clippy::dbg_macro)]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 // Harden to deny once all public items have documentation:
 // #![deny(missing_docs)]
@@ -43,7 +43,7 @@ pub mod i18n;
 
 pub use config::AppConfig;
 #[cfg(feature = "config-loader")]
-pub use config_loader::{load_config, load_config_with_profile, AppSettings};
+pub use config_loader::{AppSettings, load_config, load_config_with_profile};
 #[cfg(feature = "diagnostics")]
 pub use diagnostics::DiagnosticExt;
 pub use dto::{ToolContext, ToolExecutionOptions};

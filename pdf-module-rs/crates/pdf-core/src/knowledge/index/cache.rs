@@ -2,15 +2,15 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::RwLock;
 
 use crate::error::PdfResult;
 use crate::knowledge::index::{
-    graph, search_with_options_ft, wiki_dir, FulltextIndex, GraphIndex, SearchMode, SearchOptions,
-    SearchResponse,
+    FulltextIndex, GraphIndex, SearchMode, SearchOptions, SearchResponse, graph,
+    search_with_options_ft, wiki_dir,
 };
 
 /// Loaded indexes for one knowledge base.
@@ -88,7 +88,7 @@ impl KbIndexes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::knowledge::index::{rebuild_all, SearchMode};
+    use crate::knowledge::index::{SearchMode, rebuild_all};
 
     fn write_entry(kb: &Path, domain: &str, name: &str, body: &str) {
         let dir = kb.join("wiki").join(domain);

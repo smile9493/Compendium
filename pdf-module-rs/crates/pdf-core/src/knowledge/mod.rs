@@ -28,27 +28,27 @@ pub mod quality_issues;
 pub mod renderer;
 
 pub use collab::{
-    acquire_lock, append_audit, apply_patch_proposal, list_patch_proposals, release_lock,
-    submit_patch_proposal, AuditAction, AuditEvent, EntryLock, PatchProposal, PatchProposalSummary,
+    AuditAction, AuditEvent, EntryLock, PatchProposal, PatchProposalSummary, acquire_lock,
+    append_audit, apply_patch_proposal, list_patch_proposals, release_lock, submit_patch_proposal,
 };
 pub use compile_pipeline::{
-    complete_compile_job, run_incremental_extract, run_single_pdf_extract, CompleteCompileJobResult,
+    CompleteCompileJobResult, complete_compile_job, run_incremental_extract, run_single_pdf_extract,
 };
 pub use compile_plan::{CompilePlan, CompilePlanStore, PlanTask, PlanTaskKind, PlanTaskStatus};
 pub use engine::KnowledgeEngine;
 pub use entry::{CompileStatus, EntryLevel, KnowledgeEntry, PublishStatus};
 pub use hash_cache::HashCache;
 pub use index::{
-    detect_communities, graph, rebuild_all, rebuild_vectors, reindex_entry, search,
-    search_with_mode, search_with_options, wiki_dir, Community, FulltextIndex, GraphIndex,
-    IndexCache, RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, VectorIndex,
+    Community, FulltextIndex, GraphIndex, IndexCache, RebuildStats, SearchMeta, SearchMode,
+    SearchOptions, SearchResponse, VectorIndex, detect_communities, graph, rebuild_all,
+    rebuild_vectors, reindex_entry, search, search_with_mode, search_with_options, wiki_dir,
 };
-pub use markdown_contract::{analyze_markdown_body, MarkdownStructure};
-pub use patch::{apply_patch, preview_patch, resolve_wiki_path, WikiPatchRequest, WikiPatchResult};
+pub use markdown_contract::{MarkdownStructure, analyze_markdown_body};
+pub use patch::{WikiPatchRequest, WikiPatchResult, apply_patch, preview_patch, resolve_wiki_path};
 pub use publish_gate::{
-    apply_publish_gate, is_searchable, GateConfig, GateResult, KEY_AUTO_PUBLISH,
-    KEY_GATE_BLOCK_ON_ERRORS, KEY_QUALITY_MIN_SCORE,
+    GateConfig, GateResult, KEY_AUTO_PUBLISH, KEY_GATE_BLOCK_ON_ERRORS, KEY_QUALITY_MIN_SCORE,
+    apply_publish_gate, is_searchable,
 };
-pub use quality::{analyze_wiki, build_next_actions, QualityReport};
-pub use quality_issues::{fix_suggest, list_quality_issues, ListedQualityIssue};
+pub use quality::{QualityReport, analyze_wiki, build_next_actions};
+pub use quality_issues::{ListedQualityIssue, fix_suggest, list_quality_issues};
 pub use renderer::{RenderedEntry, TreeNode, WikiRenderer};

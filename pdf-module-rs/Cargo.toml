@@ -6,7 +6,7 @@ members = [
     "crates/pdf-core",
     "crates/pdf-mcp-contracts",
     "crates/pdf-mcp",
-    "crates/pdf-web",
+    # "crates/pdf-web",  # Deprecated — replaced by pdf-mcp embedded Web UI (ADR-004)
     "crates/pdf-cli",
     "crates/pdf-wasm",
     "crates/vlm-visual-gateway",
@@ -17,7 +17,7 @@ version = "0.3.0"
 edition = "2024"
 rust-version = "1.91.0"
 license = "MIT"
-repository = "https://github.com/your-org/rsut-pdf-mcp"
+repository = "https://github.com/smile9493/Compendium"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }

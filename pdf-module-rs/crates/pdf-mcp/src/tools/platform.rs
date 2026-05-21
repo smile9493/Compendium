@@ -1,16 +1,16 @@
 //! Phase 3 platform tools: workspaces, extraction plugins, sync, collaboration.
 
 use pdf_core::knowledge::{
-    apply_patch_proposal, list_patch_proposals, submit_patch_proposal, WikiPatchRequest,
+    WikiPatchRequest, apply_patch_proposal, list_patch_proposals, submit_patch_proposal,
 };
 use pdf_core::management::{
-    sync_pull, sync_push, sync_status, FileSyncRemote, WorkspaceEntry, WorkspaceRegistry,
+    FileSyncRemote, WorkspaceEntry, WorkspaceRegistry, sync_pull, sync_push, sync_status,
 };
 
 use crate::protocol::Content;
 use crate::tools::json::{json_content, parse_args};
 use crate::tools::mcp_extraction::envelope_from_router;
-use crate::tools::{parse_kb_path, ToolContext};
+use crate::tools::{ToolContext, parse_kb_path};
 use pdf_core::quality_probe::{ExtractionMethod, QualityProbe};
 use pdf_mcp_contracts::{ProbeExtractionInput, ProbeExtractionOutput};
 

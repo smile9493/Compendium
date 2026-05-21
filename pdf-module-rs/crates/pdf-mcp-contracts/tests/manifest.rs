@@ -1,4 +1,4 @@
-use pdf_mcp_contracts::{all_tool_specs, manifest_sha256, tool_count, CONTRACT_VERSION};
+use pdf_mcp_contracts::{CONTRACT_VERSION, all_tool_specs, manifest_sha256, tool_count};
 
 #[test]
 fn contract_version_is_semver() {

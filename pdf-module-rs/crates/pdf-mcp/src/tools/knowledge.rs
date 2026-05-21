@@ -1,10 +1,10 @@
 use crate::tools::json::json_content;
-use crate::tools::{attach_compile_sampling, parse_kb_path, ToolContext};
+use crate::tools::{ToolContext, attach_compile_sampling, parse_kb_path};
+use pdf_core::KnowledgeEngine;
 use pdf_core::dto::ExtractOptions;
 use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
-use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract, CompilePlanStore};
+use pdf_core::knowledge::{CompilePlanStore, run_incremental_extract, run_single_pdf_extract};
 use pdf_core::management::CompileJobStore;
-use pdf_core::KnowledgeEngine;
 use pdf_mcp_contracts::{
     AggregateEntriesOutput, CompileToWikiOutput, CompileUploadedPdfOutput,
     CompleteCompileJobOutput, GenerateCompilePlanOutput, GetCompilePlanOutput,
@@ -130,10 +130,10 @@ fn parse_page_range(range: &str, max_page: u32) -> Vec<u32> {
                     pages.push(p);
                 }
             }
-        } else if let Ok(p) = part.parse::<u32>() {
-            if p <= max_page {
-                pages.push(p);
-            }
+        } else if let Ok(p) = part.parse::<u32>()
+            && p <= max_page
+        {
+            pages.push(p);
         }
     }
     pages.sort();
@@ -182,10 +182,10 @@ pub async fn handle_hypothesis_test(
     let mut enriched = Vec::new();
     for mut pair in contradictions {
         let path_b = wiki_dir.join(&pair.entry_b);
-        if let Ok(content) = tokio::fs::read_to_string(&path_b).await {
-            if let Some(entry) = pdf_core::knowledge::KnowledgeEntry::from_markdown(&content) {
-                pair.title_b = entry.title;
-            }
+        if let Ok(content) = tokio::fs::read_to_string(&path_b).await
+            && let Some(entry) = pdf_core::knowledge::KnowledgeEntry::from_markdown(&content)
+        {
+            pair.title_b = entry.title;
         }
         enriched.push(pair);
     }
@@ -322,15 +322,14 @@ pub async fn handle_save_wiki_entry(
     }
     let mark_compiled = args["mark_compiled"].as_bool().unwrap_or(true);
     let mut final_content = content.to_string();
-    if mark_compiled {
-        if let Some(mut entry) = KnowledgeEntry::from_markdown(content) {
-            if entry.status != CompileStatus::Compiled {
-                entry.status = CompileStatus::Compiled;
-                entry.touch();
-                let body = content.split("---").nth(2).unwrap_or("").trim_start();
-                final_content = entry.to_markdown(body)?;
-            }
-        }
+    if mark_compiled
+        && let Some(mut entry) = KnowledgeEntry::from_markdown(content)
+        && entry.status != CompileStatus::Compiled
+    {
+        entry.status = CompileStatus::Compiled;
+        entry.touch();
+        let body = content.split("---").nth(2).unwrap_or("").trim_start();
+        final_content = entry.to_markdown(body)?;
     }
 
     std::fs::write(&target_path, &final_content)?;
