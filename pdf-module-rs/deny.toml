@@ -10,18 +10,21 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-unsound = "deny"
+# cargo-deny 0.17+: scope filters (all | workspace | transitive | none).
+# vulnerability / notice / severity-threshold removed — always error when matched.
+# workspace: error only on direct workspace deps (replaces old unmaintained = "warn" noise model).
+unmaintained = "workspace"
+unsound = "all"
 yanked = "warn"
-notice = "warn"
-ignore = []
-severity-threshold = "medium"
+ignore = [
+    # bincode team ceased development; v1.3.3 is feature-complete for our cache format.
+    { id = "RUSTSEC-2025-0141", reason = "direct pdf-core cache dep; migration to postcard tracked separately" },
+    # lru 0.12 pulled in by tantivy 0.22; fixed in lru >=0.16.3 once tantivy upgrades.
+    { id = "RUSTSEC-2026-0002", reason = "transitive via tantivy; no workspace-controlled upgrade path yet" },
+]
 
 [licenses]
-unlicensed = "deny"
-allow-osi-fsf-free = "neither"
-default = "deny"
+# cargo-deny 0.18+: allow-list only (unlicensed / default / allow-osi-fsf-free removed).
 confidence-threshold = 0.8
 allow = [
     "MIT",
@@ -34,6 +37,7 @@ allow = [
     "CC0-1.0",
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
+    "MPL-2.0",
 ]
 exceptions = []
 
