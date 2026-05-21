@@ -1,84 +1,146 @@
-site_name: Compendium 文档
-site_description: AI 原生 PDF 知识编译引擎 — 用户与集成指南
+site_name: Compendium
+site_description: AI 原生 PDF 知识编译引擎 — 将 PDF 编译为结构化知识库，为 Claude、Cursor 等 MCP 客户端提供长期记忆与推理后端
 site_url: https://smile9493.github.io/Compendium/
 repo_url: https://github.com/smile9493/Compendium
 repo_name: smile9493/Compendium
 edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2025–2026 Compendium Contributors &middot; MIT License
 
 theme:
   name: material
   language: zh
+  logo: ""
+  favicon: ""
+  custom_dir: ""
   palette:
-    - scheme: default
+    # Auto: follow OS preference
+    - media: "(prefers-color-scheme)"
+      scheme: default
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-auto
+        name: 自动
+    # Light
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: deep orange
       accent: amber
       toggle:
         icon: material/brightness-7
         name: 深色模式
-    - scheme: slate
+    # Dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: deep orange
       accent: amber
       toggle:
         icon: material/brightness-4
         name: 浅色模式
   features:
+    # Navigation
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
     - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.footer
+    # Search
     - search.suggest
     - search.highlight
+    - search.share
+    # Content
     - content.code.copy
+    - content.code.annotate
     - content.action.edit
+    - content.tooltips
+    # TOC
+    - toc.follow
+    - toc.integrate
 
+# ═══════════════════════════════════════════════════════════════
+# Plugins
+# ═══════════════════════════════════════════════════════════════
 plugins:
   - search:
       lang:
         - zh
         - en
+      separator: '[\s\-\u3000-\u30FF\u4E00-\u9FFF]+'
+      jieba_dict_path: ""
 
-# Strict CI treats broken internal links as errors; repo-root paths use absolute GitHub URLs in docs.
+# ═══════════════════════════════════════════════════════════════
+# Strict link validation — catches broken internal links
+# ═══════════════════════════════════════════════════════════════
 validation:
   links:
     not_found: warn
     absolute_links: ignore
     unrecognized_links: warn
 
+# ═══════════════════════════════════════════════════════════════
+# Markdown extensions
+# ═══════════════════════════════════════════════════════════════
 markdown_extensions:
+  - abbr
   - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
   - pymdownx.details
   - pymdownx.superfences
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
-  - tables
   - toc:
       permalink: true
 
+# ═══════════════════════════════════════════════════════════════
+# Navigation — professional docs structure with discoverable paths
+# ═══════════════════════════════════════════════════════════════
 nav:
   - 首页: index.md
   - 快速开始:
+      - 安装与配置: AI_AGENT_SETUP_GUIDE.md
       - Karpathy 模式: KARPATHY_QUICKSTART.md
-      - AI 客户端配置: AI_AGENT_SETUP_GUIDE.md
       - 客户端安装: CLIENT_SETUP_GUIDE.md
-  - 使用指南:
+  - 用户指南:
       - 知识编译: KNOWLEDGE_COMPILATION_GUIDE.md
       - Code Mode: CODE_MODE.md
-      - VLM 集成: VLM_INTEGRATION.md
+      - Remote MCP: REMOTE_MCP.md
+      - VLM 视觉理解: VLM_INTEGRATION.md
       - WASM 部署: wasm-deployment-guide.md
-  - 参考:
-      - MCP API: API_REFERENCE.md
-  - 设计与规划:
-      - 改进设计: improvement-design.md
-      - 设计评审: design-review-report.md
-      - 改进方向: compendium_improvement_directions.md
+  - API 参考:
+      - MCP 工具列表: API_REFERENCE.md
+  - 架构:
+      - 改进设计与实现: implementation_plan.md
+      - 前端重构方案: frontend_redesign_proposal.md
+      - 设计评审报告: design-review-report.md
+      - 改进方向与路线图: improvement-design.md
+      - 未来方向: compendium_improvement_directions.md
       - ADR 模板: adr/0000-template.md
-  - 发布文档站:
+  - 贡献:
+      - 贡献指南: https://github.com/smile9493/Compendium/blob/main/CONTRIBUTING.md
+      - 变更日志: https://github.com/smile9493/Compendium/blob/main/pdf-module-rs/CHANGELOG.md
+      - 文档站发布: PUBLISHING_DOCS.md
       - GitHub Pages 通用教程: GITHUB_PAGES_STATIC_DOCS.md
-      - 本仓库发布说明: PUBLISHING_DOCS.md
 
+# ═══════════════════════════════════════════════════════════════
+# Extra — social links, analytics, metadata
+# ═══════════════════════════════════════════════════════════════
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/smile9493/Compendium
+      name: Compendium on GitHub
+  homepage: https://smile9493.github.io/Compendium/
