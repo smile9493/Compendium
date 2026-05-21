@@ -1,33 +1,32 @@
-# WASM Cross-Origin Isolation Deployment Guide
+# WASM 跨源隔离部署指南
 
-## Overview
+## 概述
 
-The `pdf-wasm` crate uses `SharedArrayBuffer` for zero-copy data transfer between JavaScript and WebAssembly. This requires cross-origin isolation headers to be configured on your web server.
+`pdf-wasm` crate 使用 `SharedArrayBuffer` 在 JavaScript 与 WebAssembly 之间进行零拷贝数据传输。这需要 Web 服务器配置跨源隔离（Cross-Origin Isolation）响应头。
 
-## Requirements
+## 环境要求
 
-### COOP/COEP Headers (Required)
+### COOP / COEP 响应头（必需）
 
-For `SharedArrayBuffer` to be available in the browser, the following HTTP headers **must** be set:
+浏览器中要启用 `SharedArrayBuffer`，**必须**设置以下 HTTP 响应头：
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-### Nginx Configuration
+### Nginx 配置
 
 ```nginx
 server {
     listen 443 ssl;
 
-    # Cross-origin isolation headers (required for SharedArrayBuffer)
+    # 跨源隔离响应头（SharedArrayBuffer 必需）
     add_header Cross-Origin-Opener-Policy "same-origin" always;
     add_header Cross-Origin-Embedder-Policy "require-corp" always;
 
     location / {
         root /var/www/pdf-wasm;
-        # If serving WASM files
         types {
             application/wasm wasm;
         }
@@ -35,11 +34,11 @@ server {
 }
 ```
 
-### Apache Configuration
+### Apache 配置
 
 ```apache
 <VirtualHost *:443>
-    # Cross-origin isolation headers
+    # 跨源隔离响应头
     Header always set Cross-Origin-Opener-Policy "same-origin"
     Header always set Cross-Origin-Embedder-Policy "require-corp"
 
@@ -47,7 +46,7 @@ server {
 </VirtualHost>
 ```
 
-### Express.js (Node.js)
+### Express.js（Node.js）
 
 ```javascript
 const express = require('express');
@@ -63,26 +62,26 @@ app.use(express.static('public'));
 app.listen(3000);
 ```
 
-## JavaScript Detection
+## JavaScript 检测
 
-Detect whether cross-origin isolation is active and `SharedArrayBuffer` is available:
+检测跨源隔离是否生效以及 `SharedArrayBuffer` 是否可用：
 
 ```javascript
 if (typeof SharedArrayBuffer === 'undefined') {
     console.warn(
-        'SharedArrayBuffer is not available. ' +
-        'Please ensure COOP/COEP headers are configured. ' +
-        'See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer'
+        'SharedArrayBuffer 不可用。' +
+        '请确认 COOP/COEP 响应头已配置。' +
+        '参考：https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer'
     );
-    // Fallback to non-shared-memory mode
+    // 回退到非共享内存模式
 } else {
-    // Use SharedArrayBuffer for zero-copy data transfer
+    // 使用 SharedArrayBuffer 进行零拷贝数据传输
 }
 ```
 
-## Worker Isolation Mode
+## Worker 隔离模式
 
-For running the WASM engine in a Web Worker:
+在 Web Worker 中运行 WASM 引擎：
 
 ```javascript
 // worker.js
@@ -107,42 +106,43 @@ self.onmessage = async (e) => {
 };
 ```
 
-## Cross-Origin Resource Sharing (CORS)
+## 跨源资源共享（CORS）
 
-If loading WASM from a different origin, the WASM file must be served with:
+若从不同源加载 WASM 文件，需设置：
 
 ```
 Access-Control-Allow-Origin: *
 Cross-Origin-Resource-Policy: cross-origin
 ```
 
-## Production Checklist
+## 生产环境检查清单
 
-- [ ] COOP header set to `same-origin`
-- [ ] COEP header set to `require-corp`
-- [ ] `SharedArrayBuffer` is available in browser console
-- [ ] WASM files served with correct MIME type (`application/wasm`)
-- [ ] Worker isolation mode tested
-- [ ] Fallback path for browsers without cross-origin isolation
+- [ ] COOP 响应头已设置为 `same-origin`
+- [ ] COEP 响应头已设置为 `require-corp`
+- [ ] 浏览器控制台中 `SharedArrayBuffer` 可用
+- [ ] WASM 文件以正确 MIME 类型（`application/wasm`）提供
+- [ ] Worker 隔离模式已测试
+- [ ] 已为不支持跨源隔离的浏览器准备回退路径
 
-## Browser Support
+## 浏览器支持
 
-| Browser | COOP/COEP Support | SharedArrayBuffer |
+| 浏览器 | COOP/COEP 支持 | SharedArrayBuffer |
 |---------|-------------------|-------------------|
-| Chrome 87+ | Yes | Yes |
-| Firefox 79+ | Yes | Yes |
-| Safari 15.2+ | Yes | Yes |
-| Edge 87+ | Yes | Yes |
+| Chrome 87+ | 是 | 是 |
+| Firefox 79+ | 是 | 是 |
+| Safari 15.2+ | 是 | 是 |
+| Edge 87+ | 是 | 是 |
 
-## Debugging
+## 调试
 
-If `SharedArrayBuffer` is undefined:
+如果 `SharedArrayBuffer` 未定义：
 
-1. Open browser DevTools
-2. Check the Console tab for COOP/COEP errors
-3. Verify headers using Network tab → Response Headers
-4. Ensure no service worker is intercepting responses
-5. Check that `crossOriginIsolated` is `true` in the console:
+1. 打开浏览器开发者工具（DevTools）
+2. 检查 Console 面板中的 COOP/COEP 错误
+3. 在 Network 面板 → Response Headers 中验证响应头
+4. 确保没有 Service Worker 拦截响应
+5. 在控制台中检查 `crossOriginIsolated` 是否为 `true`：
+
    ```javascript
-   console.log(window.crossOriginIsolated); // Should be true
+   console.log(window.crossOriginIsolated); // 应为 true
    ```

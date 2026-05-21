@@ -1,10 +1,10 @@
 # Compendium MCP Code Mode
 
-Code Mode replaces 53 per-tool JSON Schemas with **two MCP tools** plus an optional TypeScript API reference resource. Agents discover methods via search or `compendium.d.ts`, then run batches through `execute_compendium`.
+Code Mode 将 53 个 MCP 工具的 JSON Schema 开销压缩为 **2 个工具** + TypeScript API 参考资源。Agent 通过搜索或 `compendium.d.ts` 发现方法，然后通过 `execute_compendium` 批量执行。
 
-## Enable
+## 启用
 
-Set in MCP server env (default is `full` for backward compatibility):
+在 MCP server 环境变量中设置（默认为 `full` 以保持向后兼容）：
 
 ```json
 {
@@ -20,20 +20,20 @@ Set in MCP server env (default is `full` for backward compatibility):
 }
 ```
 
-## MCP tools (code mode)
+## MCP 工具（Code Mode 下仅 2 个）
 
-| Tool | Purpose |
-|------|---------|
-| `search_compendium_api` | Keyword search over method names and descriptions |
-| `execute_compendium` | Run `calls: [{ method, args }]` in-process (whitelist = full API catalog) |
+| 工具 | 用途 |
+|------|------|
+| `search_compendium_api` | 按关键词搜索方法名和描述 |
+| `execute_compendium` | 进程内批量执行 `calls: [{ method, args }]`（白名单 = 完整 API 目录） |
 
-## Resource
+## 资源
 
-| URI | Content |
-|-----|---------|
-| `compendium://sdk/typescript` | Generated `compendium.d.ts` (all 53 methods) |
+| URI | 内容 |
+|-----|------|
+| `compendium://sdk/typescript` | 自动生成的 `compendium.d.ts`（包含全部 53 个方法） |
 
-## Example batch
+## 批量调用示例
 
 ```json
 {
@@ -42,7 +42,7 @@ Set in MCP server env (default is `full` for backward compatibility):
       "method": "search_knowledge",
       "args": {
         "knowledge_base": "/home/user/my-kb",
-        "query": "HTTP/2 multiplexing",
+        "query": "HTTP/2 多路复用",
         "limit": 5
       }
     },
@@ -60,26 +60,26 @@ Set in MCP server env (default is `full` for backward compatibility):
 }
 ```
 
-Each result: `{ "method", "ok", "data" | "error", "truncated"? }`.
+每条结果格式：`{ "method", "ok", "data" | "error", "truncated"? }`。
 
-## Regenerate SDK artifacts
+## 重新生成 SDK 产物
 
-After changing tool contracts:
+修改工具契约后：
 
 ```bash
 cd pdf-module-rs
 cargo run -p pdf-mcp-contracts --bin generate-sdk
 ```
 
-Writes:
+写入文件：
 
 - `pdf-module-rs/templates/sdk/compendium.d.ts`
 - `pdf-module-rs/templates/sdk/compendium-api-index.json`
 
-## When to use full mode
+## 何时使用 Full 模式
 
-Use `COMPENDIUM_MCP_MODE=full` (or unset) when the client does not support Code Mode workflows or you want native per-tool MCP calls without batching.
+当客户端不支持 Code Mode 工作流，或希望使用原生按工具调用的 MCP 方式（不批处理）时，请使用 `COMPENDIUM_MCP_MODE=full`（或不设置该环境变量）。
 
-## Wiki UI (HTTP)
+## Wiki 界面（HTTP）
 
-When the HTTP server is running (`HTTP_PORT` set), open **Settings → About** in the embedded wiki browser. It shows the **current MCP mode** (read-only), tool counts, and buttons to **copy Cursor `mcp.json` snippets** for Code or Full mode. Changing mode still requires editing env and reloading MCP in Cursor.
+当 HTTP 服务启动后（设置了 `HTTP_PORT`），打开嵌入式 Wiki 浏览器中的 **Settings → About**。页面会显示**当前 MCP 模式**（只读）、工具数量统计，以及**复制 Cursor `mcp.json` 片段**的按钮（Code / Full 模式均可一键复制）。切换模式仍需修改环境变量并在 Cursor 中重新加载 MCP。
