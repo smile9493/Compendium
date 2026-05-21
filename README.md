@@ -16,7 +16,8 @@
 - 🔄 **增量编译** — Merkle 哈希检测，只编译变更的 PDF
 - 🖼️ **VLM 视觉理解** — 条件性 OCR 回退，用于扫描版/图片型 PDF
 - 🌐 **双协议服务** — stdio（MCP）+ HTTP（Wiki 浏览），oneshot 信号启动
-- 🎯 **23 个 MCP 工具** — 覆盖 PDF 提取、知识编译、认知索引、资源服务
+- 🦀 **Rust 2024 Edition** — 使用 Rust 2024 编写，需 rustc 1.91+
+- 🎯 **30 个 MCP 工具** — 覆盖 PDF 提取、知识编译、认知索引、管理、资源服务
 
 ## 📦 安装
 
@@ -95,7 +96,7 @@ AI: [调用 search_knowledge 工具]
 3. [Network] HTTP/2 vs HTTP/1.1 对比 (score: 0.78)
 ```
 
-## 🛠️ MCP 工具 (23 个)
+## 🛠️ MCP 工具 (30 个)
 
 ### PDF 提取 (6)
 
@@ -131,7 +132,7 @@ AI: [调用 search_knowledge 工具]
 | `suggest_links` | 链接建议（Jaccard 相似度） |
 | `export_concept_map` | Mermaid.js 概念图导出 |
 
-### 管理 (5)
+### 管理 (9)
 
 | 工具 | 说明 |
 |------|------|
@@ -140,6 +141,9 @@ AI: [调用 search_knowledge 工具]
 | `get_health_report` | 系统健康报告（引擎/索引/缓存状态） |
 | `trigger_incremental_compile` | 触发批量增量编译 |
 | `get_compile_status` | 查询编译任务状态 |
+| `list_quality_issues` | 列出待解决的质量问题（矛盾/漂移/空条目） |
+| `fix_suggest` | 生成质量问题的修复建议 |
+| `apply_quality_gate` | 施放质量门禁（阻塞/降级/仅警告） |
 | `show_wiki_browser` | 显示 Wiki 浏览器入口 |
 
 ### 资源 (2)
@@ -154,7 +158,7 @@ AI: [调用 search_knowledge 工具]
 ```
 ┌──────────────────────────────────────────────────┐
 │            AI Client (Claude / Cursor)            │
-│               23 MCP tools via JSON-RPC           │
+│               30 MCP tools via JSON-RPC           │
 └──────────────┬───────────────┬───────────────────┘
                │ stdio         │ HTTP
                ▼               ▼
@@ -262,7 +266,7 @@ pdf-module/
 │   │   ├── pdf-core/      # 提取/知识/并行引擎
 │   │   ├── pdf-mcp/       # MCP 协议服务器
 │   │   ├── pdf-wasm/      # WASM 编译目标
-│   │   ├── pdf-web/       # 已弃用：管理 API sidecar（请用 pdf-mcp + pdf-web-ui）
+│   │   ├── pdf-web/       # 已弃用：管理 API sidecar — 改用 pdf-mcp（ADR-004）
 │   │   ├── pdf-cli/       # CLI 工具
 │   │   ├── pdf-dashboard/ # 仪表板服务
 │   │   ├── pdf-macros/    # 派生宏
@@ -271,9 +275,10 @@ pdf-module/
 │   └── CHANGELOG.md       # 变更日志
 ├── scripts/               # 测试/工具脚本
 ├── docs/                  # 用户文档
-│   ├── API_REFERENCE.md
-│   ├── VLM_INTEGRATION.md
+│   ├── API_REFERENCE.md   # MCP 工具参考
+│   ├── VLM_INTEGRATION.md # VLM 集成指南
 │   └── ...
+├── CONTRIBUTING.md        # 贡献指南
 ├── plugins/               # 第三方 MCP 插件
 ├── pdf-mcp-installer/     # 安装器
 ├── deploy/                # 部署配置
