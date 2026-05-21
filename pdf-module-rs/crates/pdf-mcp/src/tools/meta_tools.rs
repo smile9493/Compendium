@@ -66,6 +66,8 @@ pub async fn handle_meta_query(
         if let Some(entry_path) = top_path {
             let mut ctx_args = args.clone();
             ctx_args["entry_path"] = serde_json::Value::String(entry_path.to_string());
+            ctx_args["knowledge_base"] =
+                serde_json::Value::String(kb_path.to_string_lossy().into_owned());
             let ctx_blocks = handle_get_agent_context(&ctx.workspace_registry, &ctx_args).await?;
             out["top_entry_context"] = parse_tool_json(&ctx_blocks);
         }
@@ -73,6 +75,8 @@ pub async fn handle_meta_query(
     } else if let Some(entry_path) = args.get("entry_path").and_then(|v| v.as_str()) {
         let mut ctx_args = args.clone();
         ctx_args["entry_path"] = serde_json::Value::String(entry_path.to_string());
+        ctx_args["knowledge_base"] =
+            serde_json::Value::String(kb_path.to_string_lossy().into_owned());
         let ctx_blocks = handle_get_agent_context(&ctx.workspace_registry, &ctx_args).await?;
         parse_tool_json(&ctx_blocks)
     } else {

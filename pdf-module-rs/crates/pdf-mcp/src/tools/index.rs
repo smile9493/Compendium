@@ -1,4 +1,4 @@
-use std::fs;
+use tokio::fs;
 
 use crate::tools::json::json_content;
 use crate::tools::parse_kb_path;
@@ -77,6 +77,7 @@ pub async fn handle_get_wiki_entry(
     let rel = entry_path.trim_start_matches("wiki/").trim_start_matches('/');
     let full_path = wiki_dir(&kb_path).join(rel);
     let content = fs::read_to_string(&full_path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to read entry '{}': {}", rel, e))?;
     let parsed = KnowledgeEntry::from_markdown(&content);
     let result = serde_json::json!({
@@ -199,7 +200,7 @@ pub async fn handle_check_quality(
         "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
         "domains": report.domains.iter().collect::<Vec<_>>(),
         "issues_count": report.issues.len(),
-        "issues": issues,
+        "quality_issues": issues,
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),
         "drift_pairs_count": report.drift_pairs.len(),
@@ -228,6 +229,7 @@ pub async fn handle_get_agent_context(
     let rel = entry_path.trim_start_matches("wiki/").trim_start_matches('/');
     let full_path = wiki_dir(&kb_path).join(rel);
     let content = fs::read_to_string(&full_path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to read entry: {}", e))?;
 
     let entry = KnowledgeEntry::from_markdown(&content)
@@ -235,17 +237,33 @@ pub async fn handle_get_agent_context(
     let body = extract_markdown_body(&content).unwrap_or("");
     let body_truncated = truncate_chars(body, max_body_chars);
 
-    let graph = graph(&kb_path)?;
-    let neighbors = graph.get_neighbors(rel, hops);
+    // Extract entry fields before moving into spawn_blocking.
+    let entry_title = entry.title.clone();
+    let entry_domain = entry.domain.clone();
+    let entry_tags = entry.tags.clone();
+    let entry_related = entry.related.clone();
+    let entry_contradictions = entry.contradictions.clone();
+    let entry_quality_score = entry.quality_score;
 
-    let related_query = format!("{} {}", entry.title, entry.tags.join(" "));
-    let related_resp = search_with_options(
-        &kb_path,
-        &related_query,
-        related_limit,
-        SearchMode::Hybrid,
-        SearchOptions::for_api(),
-    )?;
+    // Clone for spawn_blocking closure, keep originals for output.
+    let closure_title = entry_title.clone();
+    let closure_tags = entry_tags.clone();
+
+    let kb_path_clone = kb_path.clone();
+    let (graph, related_resp) = tokio::task::spawn_blocking(move || {
+        let g = graph(&kb_path_clone)?;
+        let related_query = format!("{} {}", closure_title, closure_tags.join(" "));
+        let r = search_with_options(
+            &kb_path_clone,
+            &related_query,
+            related_limit,
+            SearchMode::Hybrid,
+            SearchOptions::for_api(),
+        )?;
+        Ok::<_, anyhow::Error>((g, r))
+    })
+    .await??;
+    let neighbors = graph.get_neighbors(rel, hops);
     let related_hits = related_resp
         .hits
         .into_iter()
@@ -267,13 +285,13 @@ pub async fn handle_get_agent_context(
     let result = serde_json::json!({
         "entry_path": rel,
         "center": {
-            "title": entry.title,
-            "domain": entry.domain,
-            "tags": entry.tags,
+            "title": entry_title,
+            "domain": entry_domain,
+            "tags": entry_tags,
             "front_matter": {
-                "related": entry.related,
-                "contradictions": entry.contradictions,
-                "quality_score": entry.quality_score
+                "related": entry_related,
+                "contradictions": entry_contradictions,
+                "quality_score": entry_quality_score
             },
             "body": body_truncated
         },
@@ -357,7 +375,7 @@ pub async fn handle_get_compilation_context(
     {
         let max = input.max_chars as usize;
         for path in &j.artifacts.prompt_paths {
-            if let Ok(text) = fs::read_to_string(path) {
+            if let Ok(text) = fs::read_to_string(path).await {
                 let excerpt = truncate_chars(&text, max);
                 prompt_excerpts.push(PromptExcerptOut { path: path.clone(), excerpt });
             }
