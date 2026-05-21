@@ -1,6 +1,6 @@
 [package]
 name = "pdf-cli"
-version = "1.0.0"
+version.workspace = true
 edition = "2024"
 description = "Unified CLI for rsut-pdf-mcp knowledge engine — dual-mode (local/remote), file upload, knowledge management"
 license = "MIT"

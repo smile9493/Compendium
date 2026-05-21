@@ -456,10 +456,10 @@ fn normalize_path(p: &str) -> String {
 fn extract_title_from_path(path: &str) -> String {
     let file_name = Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled");
 
-    if file_name.starts_with('[') {
-        if let Some(end) = file_name.find(']') {
-            return file_name[end + 2..].to_string();
-        }
+    if file_name.starts_with('[')
+        && let Some(end) = file_name.find(']')
+    {
+        return file_name[end + 2..].to_string();
     }
 
     file_name.to_string()

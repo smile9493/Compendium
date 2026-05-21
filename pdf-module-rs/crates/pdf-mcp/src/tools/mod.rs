@@ -189,13 +189,12 @@ pub async fn attach_compile_sampling(
     result: &mut serde_json::Value,
 ) {
     if let Some(summary) = compile_sampling::maybe_run_compile_sampling(ctx, kb_path, job_id).await
+        && let Some(obj) = result.as_object_mut()
     {
-        if let Some(obj) = result.as_object_mut() {
-            obj.insert(
-                "sampling_summary".to_string(),
-                serde_json::to_value(&summary).unwrap_or(serde_json::Value::Null),
-            );
-        }
+        obj.insert(
+            "sampling_summary".to_string(),
+            serde_json::to_value(&summary).unwrap_or(serde_json::Value::Null),
+        );
     }
 }
 

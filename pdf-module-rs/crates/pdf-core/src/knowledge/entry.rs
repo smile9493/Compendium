@@ -32,10 +32,10 @@ where
         if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
             return Ok(dt.with_timezone(&Utc));
         }
-        if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
-            if let Some(dt) = naive.and_hms_opt(0, 0, 0) {
-                return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
-            }
+        if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            && let Some(dt) = naive.and_hms_opt(0, 0, 0)
+        {
+            return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
         }
         Err(serde::de::Error::custom(format!(
             "invalid datetime format: '{}', expected RFC 3339 or YYYY-MM-DD",

@@ -256,16 +256,16 @@ impl MetadataStore {
 
             if path.is_dir() {
                 self.scan_and_store(base, &path, count)?;
-            } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                        let rel =
-                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
-                        self.upsert_entry(&rel, &entry)?;
-                        *count += 1;
-                    } else {
-                        debug!(path = %path.display(), "No front matter found, skipping");
-                    }
+            } else if path.extension().map(|e| e == "md").unwrap_or(false)
+                && let Ok(content) = fs::read_to_string(&path)
+            {
+                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
+                    let rel =
+                        path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
+                    self.upsert_entry(&rel, &entry)?;
+                    *count += 1;
+                } else {
+                    debug!(path = %path.display(), "No front matter found, skipping");
                 }
             }
         }
@@ -286,12 +286,11 @@ pub fn extract_domain(path: &str) -> &str {
         }
     }
     // Otherwise, attempt to parse domain from filename [Domain] Title.md
-    if let Some(filename) = path.rsplit('/').next() {
-        if let Some(end) = filename.find(']') {
-            if filename.starts_with('[') {
-                return &filename[1..end];
-            }
-        }
+    if let Some(filename) = path.rsplit('/').next()
+        && let Some(end) = filename.find(']')
+        && filename.starts_with('[')
+    {
+        return &filename[1..end];
     }
     "未分类"
 }

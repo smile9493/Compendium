@@ -549,10 +549,10 @@ impl GraphIndex {
                 if filename == "index.md" || filename == "log.md" {
                     continue;
                 }
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                        entries.push((path, entry));
-                    }
+                if let Ok(content) = fs::read_to_string(&path)
+                    && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+                {
+                    entries.push((path, entry));
                 }
             }
         }

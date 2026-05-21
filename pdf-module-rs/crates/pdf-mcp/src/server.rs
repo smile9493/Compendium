@@ -9,16 +9,16 @@
 
 use crate::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
 use crate::sampling::{
-    create_sampling_jsonrpc_request, parse_sampling_response, OutgoingRequest, SamplingClient,
-    SamplingClientConfig,
+    OutgoingRequest, SamplingClient, SamplingClientConfig, create_sampling_jsonrpc_request,
+    parse_sampling_response,
 };
 use crate::tools;
 use crate::upload::UploadStore;
 use pdf_core::McpPdfPipeline;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -223,8 +223,8 @@ pub async fn run_stdio_with_tool_ctx(
                     if line.len() > 100 { &line[..100] } else { &line }
                 );
 
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if value.get("method").is_none() && (value.get("result").is_some() || value.get("error").is_some()) {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line)
+                    && value.get("method").is_none() && (value.get("result").is_some() || value.get("error").is_some()) {
                         match parse_sampling_response(&value) {
                             Ok((id, result)) => {
                                 info!("Received sampling response for id={}", id);
@@ -246,7 +246,6 @@ pub async fn run_stdio_with_tool_ctx(
                             }
                         }
                     }
-                }
 
                 let request: JsonRpcRequest = match serde_json::from_str::<JsonRpcRequest>(&line) {
                     Ok(req) => {
@@ -369,7 +368,7 @@ async fn handle_tools_call(
             return JsonRpcResponse::error(
                 request.id.clone(),
                 JsonRpcError::invalid_params("Missing tool name"),
-            )
+            );
         }
     };
 

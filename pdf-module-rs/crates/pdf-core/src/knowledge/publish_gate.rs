@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::{CompileStatus, KnowledgeEntry, PublishStatus};
-use crate::knowledge::quality::{analyze_wiki, IssueSeverity, QualityReport};
+use crate::knowledge::quality::{IssueSeverity, QualityReport, analyze_wiki};
 use crate::management::config_manager::ConfigManager;
 
 pub const KEY_QUALITY_MIN_SCORE: &str = "quality_min_score";

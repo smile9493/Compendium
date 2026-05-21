@@ -1,6 +1,6 @@
 # PDF Module MCP 工具 API 参考
 
-本文档详细描述 PDF Module 提供的全部 20 个 MCP 工具的参数、返回值和使用示例。
+本文档详细描述 PDF Module 提供的全部 MCP 工具的参数、返回值和使用示例。
 
 ---
 
@@ -28,6 +28,16 @@
   - [find_orphans](#find_orphans)
   - [suggest_links](#suggest_links)
   - [export_concept_map](#export_concept_map)
+- [管理工具](#管理工具)
+  - [get_config](#get_config)
+  - [set_config](#set_config)
+  - [get_health_report](#get_health_report)
+  - [trigger_incremental_compile](#trigger_incremental_compile)
+  - [get_compile_status](#get_compile_status)
+  - [list_quality_issues](#list_quality_issues)
+  - [fix_suggest](#fix_suggest)
+  - [apply_quality_gate](#apply_quality_gate)
+  - [show_wiki_browser](#show_wiki_browser)
 
 ---
 
@@ -621,6 +631,245 @@ Tantivy 全文搜索知识库。
 
 ---
 
+## 管理工具
+
+### get_config
+
+获取知识库的运行时配置。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID（与 knowledge_base 二选一，优先使用）|
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"config\": {\n    \"max_entry_size\": \"10485760\",\n    \"language\": \"zh-CN\"\n  },\n  \"total_keys\": 2,\n  \"config_path\": \"/path/to/kb/.rsut_index/config.json\"\n}"
+    }
+  ]
+}
+```
+
+---
+
+### set_config
+
+设置知识库的运行时配置值。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+| `key` | string | 是 | 配置键名 |
+| `value` | string | 是 | 配置值 |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"key\": \"language\",\n  \"value\": \"en\",\n  \"message\": \"Configuration 'language' updated successfully.\"\n}"
+    }
+  ]
+}
+```
+
+---
+
+### get_health_report
+
+获取知识库全面健康报告，包括条目、图谱、索引、质量快照和提取栈状态。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"total_entries\": 150,\n  \"orphan_count\": 3,\n  \"contradiction_count\": 1,\n  \"broken_link_count\": 0,\n  \"index_size_mb\": 12,\n  \"graph_nodes\": 1200,\n  \"graph_edges\": 3500,\n  \"avg_quality_score\": \"85.2%\",\n  \"domains\": [\"backend\", \"frontend\"],\n  \"last_compile\": \"2026-01-15T10:30:00+00:00\",\n  \"generated_at\": \"2026-01-15T12:00:00+00:00\",\n  \"extraction\": {}\n}"
+    }
+  ]
+}
+```
+
+---
+
+### trigger_incremental_compile
+
+手动触发增量编译，检测并编译新的或变更的 PDF 文件。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"result\": {\n    \"job_id\": \"ef145c16-3ca1-4215-957a-8a7b3c57f88f\",\n    \"pipeline_status\": \"awaiting_agent\",\n    \"new_entries\": 2,\n    \"updated_entries\": 1,\n    \"unchanged_entries\": 100,\n    \"errors\": []\n  }\n}"
+    }
+  ]
+}
+```
+
+---
+
+### get_compile_status
+
+获取当前或上次编译任务的状态，包含阶段进度和质量快照。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"running\": false,\n  \"last_started\": \"2026-01-15T10:30:00+00:00\",\n  \"last_finished\": \"2026-01-15T10:35:00+00:00\",\n  \"progress\": 1.0,\n  \"stats\": {\n    \"new\": 2,\n    \"updated\": 1,\n    \"errors\": 0\n  },\n  \"history\": []\n}"
+    }
+  ]
+}
+```
+
+---
+
+### list_quality_issues
+
+列出知识库中的质量问题，支持按严重程度筛选。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+| `severity` | string | 否 | 严重程度过滤（如 "error", "warning"）|
+| `limit` | number | 否 | 返回条数上限（默认 50）|
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"issues\": [\n    {\n      \"issue_id\": \"q-001\",\n      \"severity\": \"error\",\n      \"message\": \"Broken internal link: [[missing-page]]\",\n      \"file\": \"wiki/backend/architecture.md\",\n      \"line\": 42\n    }\n  ],\n  \"count\": 1\n}"
+    }
+  ]
+}
+```
+
+---
+
+### fix_suggest
+
+针对特定质量问题，建议 MCP 修复操作。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+| `issue_id` | string | 是 | 要修复的问题 ID |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"suggestions\": [],\n  \"issue_id\": \"q-001\"\n}"
+    }
+  ]
+}
+```
+
+---
+
+### apply_quality_gate
+
+对所有 Wiki 条目运行发布质量门禁，检查并反馈阻塞条目。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 否 | 知识库根目录的绝对路径 |
+| `kb_id` | string | 否 | 知识库 ID |
+| `job_id` | string | 否 | 关联的编译任务 ID |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"blocked_count\": 0,\n  \"total_entries\": 100,\n  \"passed\": true\n}"
+    }
+  ]
+}
+```
+
+---
+
+### show_wiki_browser
+
+打开交互式 Wiki 浏览器 MCP App 资源。
+
+**参数**
+
+无。
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"type\": \"resource\",\n  \"uri\": \"ui://wiki/browser\",\n  \"message\": \"Wiki browser opened. The client should render ui://wiki/browser as an MCP App iframe.\"\n}"
+    }
+  ]
+}
+```
+
+---
+
 ## 错误码参考
 
 | 错误码 | 描述 |
@@ -636,4 +885,4 @@ Tantivy 全文搜索知识库。
 
 - **协议版本**: MCP 2024-11-05
 - **服务器版本**: 0.6.0
-- **工具总数**: 20
+- **工具总数**: 28

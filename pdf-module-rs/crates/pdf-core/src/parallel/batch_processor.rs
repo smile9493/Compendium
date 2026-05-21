@@ -126,10 +126,10 @@ impl BatchProcessor {
                 (file_path, result)
             });
 
-            if set.len() >= max_parallel {
-                if let Some(res) = set.join_next().await {
-                    results.push(res?);
-                }
+            if set.len() >= max_parallel
+                && let Some(res) = set.join_next().await
+            {
+                results.push(res?);
             }
         }
 
@@ -176,12 +176,12 @@ impl BatchProcessor {
                 (file_path, result, count + 1)
             });
 
-            if set.len() >= max_parallel {
-                if let Some(res) = set.join_next().await {
-                    let (file_path, result, count) = res?;
-                    progress_callback(count, total);
-                    results.push((file_path, result));
-                }
+            if set.len() >= max_parallel
+                && let Some(res) = set.join_next().await
+            {
+                let (file_path, result, count) = res?;
+                progress_callback(count, total);
+                results.push((file_path, result));
             }
         }
 

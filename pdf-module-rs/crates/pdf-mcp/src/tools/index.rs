@@ -2,11 +2,11 @@ use std::fs;
 
 use crate::tools::json::json_content;
 use crate::tools::parse_kb_path;
-use pdf_core::knowledge::patch::{apply_patch, preview_patch, WikiPatchRequest};
+use pdf_core::knowledge::patch::{WikiPatchRequest, apply_patch, preview_patch};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
-    graph, rebuild_all, reindex_entry, search_with_options, wiki_dir, KnowledgeEntry, SearchMode,
-    SearchOptions,
+    KnowledgeEntry, SearchMode, SearchOptions, graph, rebuild_all, reindex_entry,
+    search_with_options, wiki_dir,
 };
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{CompileJobStore, QualitySnapshotStore};
@@ -310,14 +310,14 @@ pub async fn handle_get_compilation_context(
     let quality_snapshot = QualitySnapshotStore::new(&kb_path).read().unwrap_or_default();
 
     let mut prompt_excerpts = Vec::new();
-    if input.include_prompt_excerpts {
-        if let Some(ref j) = job {
-            let max = input.max_chars as usize;
-            for path in &j.artifacts.prompt_paths {
-                if let Ok(text) = fs::read_to_string(path) {
-                    let excerpt = truncate_chars(&text, max);
-                    prompt_excerpts.push(PromptExcerptOut { path: path.clone(), excerpt });
-                }
+    if input.include_prompt_excerpts
+        && let Some(ref j) = job
+    {
+        let max = input.max_chars as usize;
+        for path in &j.artifacts.prompt_paths {
+            if let Ok(text) = fs::read_to_string(path) {
+                let excerpt = truncate_chars(&text, max);
+                prompt_excerpts.push(PromptExcerptOut { path: path.clone(), excerpt });
             }
         }
     }

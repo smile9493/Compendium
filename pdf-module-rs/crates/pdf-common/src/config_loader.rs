@@ -15,8 +15,8 @@
 //! let settings: AppSettings = load_config(None)?;
 //! ```
 
-use figment::providers::{Env, Format, Toml};
 use figment::Figment;
+use figment::providers::{Env, Format, Toml};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

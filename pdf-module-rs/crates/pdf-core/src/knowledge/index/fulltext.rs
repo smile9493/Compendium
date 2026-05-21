@@ -9,13 +9,13 @@ use std::path::{Path, PathBuf};
 use tantivy::collector::TopDocs;
 use tantivy::query::{BooleanQuery, Occur, QueryParser, TermQuery};
 use tantivy::schema::*;
-use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, Term};
+use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Term, doc};
 use tracing::{debug, info};
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::KnowledgeEntry;
 use crate::knowledge::index::tokenizer;
-use crate::knowledge::publish_gate::{is_searchable, GateConfig};
+use crate::knowledge::publish_gate::{GateConfig, is_searchable};
 
 /// A single search hit returned by the fulltext index.
 #[derive(Debug, Clone, serde::Serialize)]

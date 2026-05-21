@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PdfResult;
 use crate::knowledge::quality::{
-    analyze_wiki, build_next_actions, IssueSeverity, QualityIssue, QualityReport,
+    IssueSeverity, QualityIssue, QualityReport, analyze_wiki, build_next_actions,
 };
 
 /// Stable issue identifier for `fix_suggest`.
@@ -65,10 +65,10 @@ fn collect_issues(
 
     for issue in &report.issues {
         let sev = issue.severity.to_string();
-        if let Some(f) = severity_filter {
-            if !sev.eq_ignore_ascii_case(f) {
-                continue;
-            }
+        if let Some(f) = severity_filter
+            && !sev.eq_ignore_ascii_case(f)
+        {
+            continue;
         }
         let kind = classify_issue(issue);
         out.push(ListedQualityIssue {

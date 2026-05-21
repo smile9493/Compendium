@@ -141,10 +141,9 @@ impl WikiStorage {
                 if path.extension().map(|e| e == "md").unwrap_or(false)
                     && name != "index.md"
                     && name != "log.md"
+                    && let Some(info) = Self::parse_entity(&path)
                 {
-                    if let Some(info) = Self::parse_entity(&path) {
-                        entities.push(info);
-                    }
+                    entities.push(info);
                 }
             }
         }

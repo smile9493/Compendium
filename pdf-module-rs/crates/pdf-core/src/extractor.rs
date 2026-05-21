@@ -466,7 +466,9 @@ impl McpPdfPipeline {
         file_path: &Path,
     ) -> PdfResult<StructuredExtractionResult> {
         let Some(ref gateway) = self.vlm_gateway else {
-            warn!("VLM structured extraction requested but no gateway available, falling back to Pdfium");
+            warn!(
+                "VLM structured extraction requested but no gateway available, falling back to Pdfium"
+            );
             return PdfiumEngine::extract_structured_from_mmap(&ctx.loader, file_path);
         };
 
@@ -590,17 +592,15 @@ impl McpPdfPipeline {
         let mut enhanced_pages = 0u32;
 
         for page in &mut result.pages {
-            if page.text.chars().count() < 100 {
-                if let Ok((vlm_text, vlm_regions)) = self
+            if page.text.chars().count() < 100
+                && let Ok((vlm_text, vlm_regions)) = self
                     .extract_page_structured_via_vlm(gateway, pdf_data, page.page_number - 1)
                     .await
-                {
-                    if vlm_text.chars().count() > page.text.chars().count() {
-                        page.text = vlm_text;
-                        page.regions = Some(vlm_regions);
-                        enhanced_pages += 1;
-                    }
-                }
+                && vlm_text.chars().count() > page.text.chars().count()
+            {
+                page.text = vlm_text;
+                page.regions = Some(vlm_regions);
+                enhanced_pages += 1;
             }
         }
 

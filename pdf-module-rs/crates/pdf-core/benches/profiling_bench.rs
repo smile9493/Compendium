@@ -8,7 +8,7 @@
 //! Output:
 //!   target/criterion/<bench_name>/profile/flamegraph.svg
 
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
+use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
 use pprof::criterion::{Output, PProfProfiler};
 use std::fs;
 use std::path::PathBuf;

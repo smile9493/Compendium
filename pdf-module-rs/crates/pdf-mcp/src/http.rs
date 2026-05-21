@@ -35,28 +35,28 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_stream::stream;
+use axum::Router;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json, Redirect};
 use axum::routing::{delete, get, post};
-use axum::Router;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::{info, instrument};
 
+use pdf_core::McpPdfPipeline;
 use pdf_core::knowledge::index::MetadataStore;
 use pdf_core::knowledge::quality::analyze_wiki;
 use pdf_core::knowledge::renderer::WikiRenderer;
 use pdf_core::knowledge::{
-    rebuild_all, IndexCache, KnowledgeEngine, SearchMode, SearchOptions, SearchResponse,
+    IndexCache, KnowledgeEngine, SearchMode, SearchOptions, SearchResponse, rebuild_all,
 };
 use pdf_core::knowledge::{run_incremental_extract, run_single_pdf_extract};
 use pdf_core::management::{
-    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
-    QualitySnapshotStore, WorkspaceRegistry,
+    CompileJobStore, ConfigManager, HealthReporter, QualitySnapshotStore, WorkspaceRegistry,
+    build_compile_status_json,
 };
-use pdf_core::McpPdfPipeline;
 
 use crate::embed::Assets;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
@@ -88,11 +88,7 @@ fn normalize_wiki_entry_path(path: &str) -> String {
     if path.is_empty() {
         return String::new();
     }
-    if path.ends_with(".md") {
-        path.to_string()
-    } else {
-        format!("{path}.md")
-    }
+    if path.ends_with(".md") { path.to_string() } else { format!("{path}.md") }
 }
 
 #[instrument(skip(state))]
@@ -172,11 +168,7 @@ async fn serve_spa(uri: axum::extract::OriginalUri) -> impl IntoResponse {
 
     // Strip leading slash and optional /app/ prefix for asset lookup
     let lookup = if let Some(rest) = path.strip_prefix("/app/") {
-        if rest.is_empty() {
-            "index.html"
-        } else {
-            rest
-        }
+        if rest.is_empty() { "index.html" } else { rest }
     } else if path == "/app" {
         "index.html"
     } else {
@@ -457,7 +449,7 @@ async fn api_health(
         Some(p) => p,
         None => {
             return Json(serde_json::json!({"error": "No knowledge base configured"}))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -508,7 +500,7 @@ async fn api_config_get(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -542,7 +534,7 @@ async fn api_config_set(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -577,7 +569,7 @@ async fn api_config_remove(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -811,7 +803,7 @@ async fn api_compile_status(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -837,7 +829,7 @@ async fn api_index_rebuild(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -961,12 +953,12 @@ fn scan_domains_from_fs(wiki_dir: &PathBuf) -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(wiki_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(name) = path.file_name() {
-                    let name = name.to_string_lossy().to_string();
-                    if !name.starts_with('.') {
-                        domains.push(name);
-                    }
+            if path.is_dir()
+                && let Some(name) = path.file_name()
+            {
+                let name = name.to_string_lossy().to_string();
+                if !name.starts_with('.') {
+                    domains.push(name);
                 }
             }
         }
@@ -983,27 +975,25 @@ fn count_entries_by_domain(wiki_dir: &PathBuf) -> std::collections::HashMap<Stri
     if let Ok(domain_entries) = std::fs::read_dir(wiki_dir) {
         for de in domain_entries.flatten() {
             let dp = de.path();
-            if dp.is_dir() {
-                if let Some(dn) = dp.file_name() {
-                    let dn = dn.to_string_lossy().to_string();
-                    if dn.starts_with('.') {
-                        continue;
-                    }
-                    let mut count = 0usize;
-                    if let Ok(files) = std::fs::read_dir(&dp) {
-                        for f in files.flatten() {
-                            let fp = f.path();
-                            if fp.extension().is_some_and(|e| e == "md")
-                                && fp
-                                    .file_name()
-                                    .is_some_and(|n| !n.to_string_lossy().starts_with('.'))
-                            {
-                                count += 1;
-                            }
+            if dp.is_dir()
+                && let Some(dn) = dp.file_name()
+            {
+                let dn = dn.to_string_lossy().to_string();
+                if dn.starts_with('.') {
+                    continue;
+                }
+                let mut count = 0usize;
+                if let Ok(files) = std::fs::read_dir(&dp) {
+                    for f in files.flatten() {
+                        let fp = f.path();
+                        if fp.extension().is_some_and(|e| e == "md")
+                            && fp.file_name().is_some_and(|n| !n.to_string_lossy().starts_with('.'))
+                        {
+                            count += 1;
                         }
                     }
-                    counts.insert(dn, count);
                 }
+                counts.insert(dn, count);
             }
         }
     }
@@ -1142,7 +1132,7 @@ async fn api_index_status(
         Some(p) => p,
         None => {
             return Json(serde_json::json!({"error": "No knowledge base configured"}))
-                .into_response()
+                .into_response();
         }
     };
     match read_index_meta(&kb) {
@@ -1165,7 +1155,7 @@ async fn api_compile_events(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "No KB"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1220,11 +1210,11 @@ fn share_path(kb: &std::path::Path, token: &str) -> PathBuf {
 fn load_share(kb: &std::path::Path, token: &str) -> Option<ShareRecord> {
     let raw = std::fs::read_to_string(share_path(kb, token)).ok()?;
     let record: ShareRecord = serde_json::from_str(&raw).ok()?;
-    if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&record.expires_at) {
-        if exp < Utc::now() {
-            let _ = std::fs::remove_file(share_path(kb, token));
-            return None;
-        }
+    if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&record.expires_at)
+        && exp < Utc::now()
+    {
+        let _ = std::fs::remove_file(share_path(kb, token));
+        return None;
     }
     Some(record)
 }
@@ -1252,7 +1242,7 @@ async fn api_shares_create(
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": e.to_string()})),
             )
-                .into_response()
+                .into_response();
         }
     };
 

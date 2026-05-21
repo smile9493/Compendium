@@ -342,29 +342,27 @@ related: ["wiki/other/concept.md"]
         );
 
         // ── 上下文注入 1: 已有知识库条目清单 ──
-        if let Ok(existing) = self.collect_wiki_entries() {
-            if !existing.is_empty() {
-                prompt.push_str("\n\n## 已有知识库上下文\n\n");
-                prompt.push_str(
-                    "以下是 `wiki/` 中已存在的所有知识条目，用于判断新内容的相关性：\n\n",
-                );
-                prompt.push_str("| # | 标题 | 领域 | 路径 | 标签 |\n");
-                prompt.push_str("|---|------|------|------|------|\n");
-                for (i, (path, e)) in existing.iter().enumerate() {
-                    prompt.push_str(&format!(
-                        "| {} | {} | {} | `{}` | {} |\n",
-                        i + 1,
-                        e.title,
-                        e.domain,
-                        path,
-                        e.tags.join(", ")
-                    ));
-                }
+        if let Ok(existing) = self.collect_wiki_entries()
+            && !existing.is_empty()
+        {
+            prompt.push_str("\n\n## 已有知识库上下文\n\n");
+            prompt.push_str("以下是 `wiki/` 中已存在的所有知识条目，用于判断新内容的相关性：\n\n");
+            prompt.push_str("| # | 标题 | 领域 | 路径 | 标签 |\n");
+            prompt.push_str("|---|------|------|------|------|\n");
+            for (i, (path, e)) in existing.iter().enumerate() {
                 prompt.push_str(&format!(
+                    "| {} | {} | {} | `{}` | {} |\n",
+                    i + 1,
+                    e.title,
+                    e.domain,
+                    path,
+                    e.tags.join(", ")
+                ));
+            }
+            prompt.push_str(&format!(
                     "\n**共 {} 条已有条目**。如果新提取的内容与以上任何条目相关，请在 `related` 字段中引用其路径。\n",
                     existing.len()
                 ));
-            }
         }
 
         // ── 上下文注入 2: 标签 Jaccard 相似度建议 ──
@@ -391,12 +389,12 @@ related: ["wiki/other/concept.md"]
 
         // ── 上下文注入 3: AGENTS.md 行为规则 ──
         let agents_path = self.knowledge_base.join("schema").join("AGENTS.md");
-        if let Ok(rules) = fs::read_to_string(&agents_path) {
-            if !rules.trim().is_empty() {
-                prompt.push_str("\n\n## 行为规则 (schema/AGENTS.md)\n\n");
-                prompt.push_str(&rules);
-                prompt.push_str("\n\n**以上规则必须严格遵守，违反规则视为编译失败。**\n");
-            }
+        if let Ok(rules) = fs::read_to_string(&agents_path)
+            && !rules.trim().is_empty()
+        {
+            prompt.push_str("\n\n## 行为规则 (schema/AGENTS.md)\n\n");
+            prompt.push_str(&rules);
+            prompt.push_str("\n\n**以上规则必须严格遵守，违反规则视为编译失败。**\n");
         }
 
         // ── 提取内容（始终位于 prompt 末尾）──
@@ -576,7 +574,7 @@ related: ["wiki/other/concept.md"]
     /// 3. For each multi-entry community, assign to the majority domain
     /// 4. Return clusters with >= 2 members as aggregation candidates
     pub fn identify_aggregation_candidates(&self) -> PdfResult<Vec<AggregationCandidate>> {
-        use crate::knowledge::index::{detect_communities, GraphIndex};
+        use crate::knowledge::index::{GraphIndex, detect_communities};
 
         let wiki_dir = self.wiki_dir();
         let mut graph = GraphIndex::new();
@@ -587,14 +585,12 @@ related: ["wiki/other/concept.md"]
             std::collections::HashMap::new();
         for path in graph.all_paths() {
             let full_path = wiki_dir.join(&path);
-            if let Ok(content) = fs::read_to_string(&full_path) {
-                if let Some(entry) =
+            if let Ok(content) = fs::read_to_string(&full_path)
+                && let Some(entry) =
                     crate::knowledge::entry::KnowledgeEntry::from_markdown(&content)
-                {
-                    if entry.level == crate::knowledge::entry::EntryLevel::L1 {
-                        l1_domains.insert(path, entry.domain);
-                    }
-                }
+                && entry.level == crate::knowledge::entry::EntryLevel::L1
+            {
+                l1_domains.insert(path, entry.domain);
             }
         }
 
@@ -667,27 +663,24 @@ related: ["wiki/other/concept.md"]
             let path = entry.path();
             if path.is_dir() {
                 self.scan_contradictions(base, &path, pairs, seen)?;
-            } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Some(entry) =
-                        crate::knowledge::entry::KnowledgeEntry::from_markdown(&content)
-                    {
-                        let rel =
-                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
+            } else if path.extension().map(|e| e == "md").unwrap_or(false)
+                && let Ok(content) = fs::read_to_string(&path)
+                && let Some(entry) =
+                    crate::knowledge::entry::KnowledgeEntry::from_markdown(&content)
+            {
+                let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
 
-                        for contra in &entry.contradictions {
-                            let mut pair_key = [rel.clone(), contra.clone()];
-                            pair_key.sort();
-                            let key = pair_key.join("↔");
-                            if seen.insert(key) {
-                                pairs.push(ContradictionPair {
-                                    entry_a: rel.clone(),
-                                    entry_b: contra.clone(),
-                                    title_a: entry.title.clone(),
-                                    title_b: String::new(), // Will be filled if we can read B
-                                });
-                            }
-                        }
+                for contra in &entry.contradictions {
+                    let mut pair_key = [rel.clone(), contra.clone()];
+                    pair_key.sort();
+                    let key = pair_key.join("↔");
+                    if seen.insert(key) {
+                        pairs.push(ContradictionPair {
+                            entry_a: rel.clone(),
+                            entry_b: contra.clone(),
+                            title_a: entry.title.clone(),
+                            title_b: String::new(), // Will be filled if we can read B
+                        });
                     }
                 }
             }
@@ -803,11 +796,11 @@ related: ["wiki/other/concept.md"]
                 if filename == "index.md" || filename == "log.md" {
                     continue;
                 }
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                        let body = content.split("---").nth(2).unwrap_or("").to_string();
-                        docs.push(format!("{} {}", entry.title, body));
-                    }
+                if let Ok(content) = fs::read_to_string(&path)
+                    && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+                {
+                    let body = content.split("---").nth(2).unwrap_or("").to_string();
+                    docs.push(format!("{} {}", entry.title, body));
                 }
             }
         }
@@ -837,13 +830,13 @@ related: ["wiki/other/concept.md"]
                 if filename == "index.md" || filename == "log.md" {
                     continue;
                 }
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                        let body = content.split("---").nth(2).unwrap_or("").to_string();
-                        let rel =
-                            path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
-                        results.push((rel, entry.title, entry.domain, body));
-                    }
+                if let Ok(content) = fs::read_to_string(&path)
+                    && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+                {
+                    let body = content.split("---").nth(2).unwrap_or("").to_string();
+                    let rel =
+                        path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
+                    results.push((rel, entry.title, entry.domain, body));
                 }
             }
         }
@@ -861,10 +854,10 @@ related: ["wiki/other/concept.md"]
         let mut results = Vec::new();
         for path in paths {
             let rel = path.strip_prefix(&wiki_dir).unwrap_or(&path).to_string_lossy().to_string();
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                    results.push((rel, entry));
-                }
+            if let Ok(content) = fs::read_to_string(&path)
+                && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+            {
+                results.push((rel, entry));
             }
         }
         Ok(results)

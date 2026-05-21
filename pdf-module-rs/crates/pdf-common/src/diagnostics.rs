@@ -114,12 +114,12 @@ fn help_text_for(err: &crate::PdfError) -> Option<&'static str> {
         crate::PdfError::CorruptedFile(_) => {
             Some("The PDF appears malformed. Try re-saving from the source application.")
         }
-        crate::PdfError::Extraction(_) => {
-            Some("Extraction failed. Ensure pdfium is available and the PDF is not password-protected.")
-        }
-        crate::PdfError::Timeout(ms) if *ms > 30_000 => {
-            Some("Operation timed out. Consider increasing the timeout or processing in smaller batches.")
-        }
+        crate::PdfError::Extraction(_) => Some(
+            "Extraction failed. Ensure pdfium is available and the PDF is not password-protected.",
+        ),
+        crate::PdfError::Timeout(ms) if *ms > 30_000 => Some(
+            "Operation timed out. Consider increasing the timeout or processing in smaller batches.",
+        ),
         crate::PdfError::Config(key) => {
             Some("Check your configuration. Use `pdf-cli config show` to inspect current values.")
         }

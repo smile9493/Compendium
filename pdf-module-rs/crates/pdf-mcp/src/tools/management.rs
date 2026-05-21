@@ -1,11 +1,11 @@
 use crate::tools::json::json_content;
-use crate::tools::{attach_compile_sampling, parse_kb_path, ToolContext};
+use crate::tools::{ToolContext, attach_compile_sampling, parse_kb_path};
+use pdf_core::KnowledgeEngine;
 use pdf_core::knowledge::run_incremental_extract;
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::management::{
-    build_compile_status_json, CompileJobStore, ConfigManager, HealthReporter,
+    CompileJobStore, ConfigManager, HealthReporter, build_compile_status_json,
 };
-use pdf_core::KnowledgeEngine;
 use pdf_mcp_contracts::*;
 use std::sync::Arc;
 use tracing::instrument;

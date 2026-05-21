@@ -216,15 +216,13 @@ fn scan_l3(base: &Path, dir: &Path, found: &mut bool) -> PdfResult<()> {
         let path = entry.path();
         if path.is_dir() {
             scan_l3(base, &path, found)?;
-        } else if path.extension().is_some_and(|e| e == "md") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Some(meta) = KnowledgeEntry::from_markdown(&content) {
-                    if meta.level == EntryLevel::L3 {
-                        *found = true;
-                        return Ok(());
-                    }
-                }
-            }
+        } else if path.extension().is_some_and(|e| e == "md")
+            && let Ok(content) = fs::read_to_string(&path)
+            && let Some(meta) = KnowledgeEntry::from_markdown(&content)
+            && meta.level == EntryLevel::L3
+        {
+            *found = true;
+            return Ok(());
         }
     }
     Ok(())
@@ -242,18 +240,17 @@ fn scan_recompile_tasks(base: &Path, dir: &Path, tasks: &mut Vec<PlanTask>) -> P
             scan_recompile_tasks(base, &path, tasks)?;
         } else if path.extension().is_some_and(|e| e == "md") {
             let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().replace('\\', "/");
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Some(meta) = KnowledgeEntry::from_markdown(&content) {
-                    if meta.status == CompileStatus::NeedsRecompile {
-                        tasks.push(PlanTask {
-                            id: format!("recompile-{}", rel.replace('/', "_")),
-                            kind: PlanTaskKind::RecompileEntry,
-                            depends_on: Vec::new(),
-                            status: PlanTaskStatus::Pending,
-                            payload: serde_json::json!({ "entry_path": rel }),
-                        });
-                    }
-                }
+            if let Ok(content) = fs::read_to_string(&path)
+                && let Some(meta) = KnowledgeEntry::from_markdown(&content)
+                && meta.status == CompileStatus::NeedsRecompile
+            {
+                tasks.push(PlanTask {
+                    id: format!("recompile-{}", rel.replace('/', "_")),
+                    kind: PlanTaskKind::RecompileEntry,
+                    depends_on: Vec::new(),
+                    status: PlanTaskStatus::Pending,
+                    payload: serde_json::json!({ "entry_path": rel }),
+                });
             }
         }
     }

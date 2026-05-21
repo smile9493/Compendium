@@ -7,8 +7,8 @@
 pub mod client;
 
 pub use client::{
-    create_sampling_jsonrpc_request, parse_sampling_response, OutgoingRequest, SamplingClient,
-    SamplingClientConfig,
+    OutgoingRequest, SamplingClient, SamplingClientConfig, create_sampling_jsonrpc_request,
+    parse_sampling_response,
 };
 
 use serde::{Deserialize, Serialize};

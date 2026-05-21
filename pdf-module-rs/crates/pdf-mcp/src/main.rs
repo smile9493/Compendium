@@ -30,8 +30,8 @@
 #![allow(dead_code)]
 #![recursion_limit = "256"]
 
-use pdf_core::management::WorkspaceRegistry;
 use pdf_core::ServerConfig;
+use pdf_core::management::WorkspaceRegistry;
 use std::sync::Arc;
 use tracing::info;
 use vlm_visual_gateway::MetricsCollector;

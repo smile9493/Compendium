@@ -20,8 +20,8 @@ pub mod workspace;
 
 #[cfg(feature = "knowledge")]
 pub use compile_job::{
-    build_compile_status_json, CompileArtifacts, CompileJob, CompileJobStats, CompileJobStore,
-    CompileJobView, CompileStage, CompileStageRecord, CompileTrigger, PipelineStatus, StageStatus,
+    CompileArtifacts, CompileJob, CompileJobStats, CompileJobStore, CompileJobView, CompileStage,
+    CompileStageRecord, CompileTrigger, PipelineStatus, StageStatus, build_compile_status_json,
 };
 pub use compile_status::{CompileFinishStats, CompileGuard, CompileStatusStore};
 pub use config_manager::ConfigManager;
@@ -29,12 +29,12 @@ pub use config_manager::ConfigManager;
 pub use health_reporter::HealthReporter;
 #[cfg(feature = "knowledge")]
 pub use quality_snapshot::{
-    refresh_quality_snapshot, QualityIssueBrief, QualitySnapshot, QualitySnapshotStore,
+    QualityIssueBrief, QualitySnapshot, QualitySnapshotStore, refresh_quality_snapshot,
 };
 #[cfg(feature = "knowledge")]
 pub use sync::{
-    build_local_manifest, sync_dir, sync_pull, sync_push, sync_status, FileSyncRemote,
-    SyncManifest, SyncRemote, SyncReport, SyncStatus,
+    FileSyncRemote, SyncManifest, SyncRemote, SyncReport, SyncStatus, build_local_manifest,
+    sync_dir, sync_pull, sync_push, sync_status,
 };
 pub use types::{CompileStatusRecord, HealthReport};
 pub use workspace::{WorkspaceEntry, WorkspaceId, WorkspaceRegistry};

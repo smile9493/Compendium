@@ -186,11 +186,7 @@ impl CompileJob {
 
     pub fn current_stage(&self) -> Option<CompileStage> {
         self.stages.iter().find_map(|s| {
-            if matches!(s.status, StageStatus::Running) {
-                Some(s.stage)
-            } else {
-                None
-            }
+            if matches!(s.status, StageStatus::Running) { Some(s.stage) } else { None }
         })
     }
 

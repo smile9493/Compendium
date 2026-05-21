@@ -128,12 +128,12 @@ impl FulltextShardManager {
         for domain in &domains {
             self.warm_shard(domain)?;
             let domain_wiki = wiki_dir.join(domain);
-            if domain_wiki.exists() {
-                if let Some(shard) = self.warm.get(domain) {
-                    let count = shard.index.rebuild(&domain_wiki)?;
-                    total += count;
-                    debug!(domain = %domain, count = count, "Shard rebuilt");
-                }
+            if domain_wiki.exists()
+                && let Some(shard) = self.warm.get(domain)
+            {
+                let count = shard.index.rebuild(&domain_wiki)?;
+                total += count;
+                debug!(domain = %domain, count = count, "Shard rebuilt");
             }
         }
 
@@ -201,12 +201,12 @@ impl FulltextShardManager {
         if let Ok(entries) = std::fs::read_dir(&tantivy_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_dir() {
-                    if let Some(name) = path.file_name() {
-                        let name = name.to_string_lossy().to_string();
-                        if !name.starts_with('.') && path.join("meta.json").exists() {
-                            domains.push(name);
-                        }
+                if path.is_dir()
+                    && let Some(name) = path.file_name()
+                {
+                    let name = name.to_string_lossy().to_string();
+                    if !name.starts_with('.') && path.join("meta.json").exists() {
+                        domains.push(name);
                     }
                 }
             }
@@ -240,12 +240,12 @@ fn discover_domains(wiki_dir: &Path) -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(wiki_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(name) = path.file_name() {
-                    let name = name.to_string_lossy().to_string();
-                    if !name.starts_with('.') && name != ".versions" {
-                        domains.push(name);
-                    }
+            if path.is_dir()
+                && let Some(name) = path.file_name()
+            {
+                let name = name.to_string_lossy().to_string();
+                if !name.starts_with('.') && name != ".versions" {
+                    domains.push(name);
                 }
             }
         }

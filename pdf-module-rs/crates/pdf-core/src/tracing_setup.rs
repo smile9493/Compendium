@@ -95,10 +95,10 @@ impl TracingConfig {
 }
 
 fn build_env_filter(config: &TracingConfig) -> EnvFilter {
-    if let Ok(env) = std::env::var("RUST_LOG") {
-        if env.to_lowercase() == "off" {
-            return EnvFilter::new("off");
-        }
+    if let Ok(env) = std::env::var("RUST_LOG")
+        && env.to_lowercase() == "off"
+    {
+        return EnvFilter::new("off");
     }
 
     EnvFilter::try_from_default_env()
