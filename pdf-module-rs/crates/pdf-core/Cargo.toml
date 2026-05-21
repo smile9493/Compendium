@@ -26,7 +26,7 @@ knowledge = [
 ]
 vlm = ["dep:vlm-visual-gateway"]
 dhat-heap = ["dhat"]
-axum-tracing = []
+axum-tracing = ["dep:axum", "dep:tower"]
 
 [dependencies]
 # Always-required: core runtime and serialization
@@ -74,6 +74,10 @@ bumpalo = { workspace = true, optional = true }
 
 # Optional: profiling
 dhat = { workspace = true, optional = true }
+
+# Optional: axum tracing layer
+axum = { workspace = true, optional = true }
+tower = { version = "0.4", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"

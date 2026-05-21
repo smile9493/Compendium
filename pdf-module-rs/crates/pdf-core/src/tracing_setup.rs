@@ -211,11 +211,9 @@ pub fn request_span(request_id: Option<&str>) -> tracing::Span {
 /// Reads `x-request-id` header and injects it into the tracing span.
 #[cfg(feature = "axum-tracing")]
 pub mod axum_layer {
-    use super::RequestId;
-    use axum::http::{HeaderMap, Request};
+    use axum::http::Request;
     use std::task::{Context, Poll};
     use tower::{Layer, Service};
-    use tracing::Span;
 
     const REQUEST_ID_HEADER: &str = "x-request-id";
 
@@ -225,7 +223,7 @@ pub mod axum_layer {
     impl<S> Layer<S> for TraceLayer {
         type Service = TraceService<S>;
 
-        fn layer(&self, inner: S) -> Self::Service {
+        fn layer(&self, inner: S) -> TraceService<S> {
             TraceService { inner }
         }
     }
@@ -245,11 +243,11 @@ pub mod axum_layer {
         type Error = S::Error;
         type Future = S::Future;
 
-        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), S::Error>> {
             self.inner.poll_ready(cx)
         }
 
-        fn call(&mut self, req: Request<B>) -> Self::Future {
+        fn call(&mut self, req: Request<B>) -> S::Future {
             let request_id = req
                 .headers()
                 .get(REQUEST_ID_HEADER)
@@ -259,7 +257,6 @@ pub mod axum_layer {
             let span = super::request_span(request_id.as_deref());
 
             let _guard = span.enter();
-            span.extensions_mut().insert(RequestId(request_id.unwrap_or_else(|| "unknown".into())));
 
             self.inner.call(req)
         }
