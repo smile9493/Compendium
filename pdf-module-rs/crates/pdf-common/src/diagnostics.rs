@@ -47,24 +47,37 @@ pub trait DiagnosticExt {
     fn severity(&self) -> miette::Severity;
 }
 
-#[derive(Debug, Diagnostic, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("{message}")]
-#[diagnostic(
-    code({error_code}),
-    help("{help_text}"),
-    severity({severity_level})
-)]
 struct PdfDiagnostic {
     message: String,
     error_code: String,
     help_text: String,
     severity_level: String,
-
-    #[source_code]
     src: miette::NamedSource<String>,
-
-    #[label]
     span: Option<miette::SourceSpan>,
+}
+
+impl Diagnostic for PdfDiagnostic {
+    fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(self.error_code.clone()))
+    }
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(self.help_text.clone()))
+    }
+    fn severity(&self) -> Option<miette::Severity> {
+        match self.severity_level.as_str() {
+            "Error" => Some(miette::Severity::Error),
+            "Warning" => Some(miette::Severity::Warning),
+            _ => Some(miette::Severity::Advice),
+        }
+    }
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        Some(&self.src as &dyn miette::SourceCode)
+    }
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        None
+    }
 }
 
 fn error_code_for(err: &crate::PdfError) -> &'static str {
@@ -120,10 +133,10 @@ fn help_text_for(err: &crate::PdfError) -> Option<&'static str> {
         crate::PdfError::Timeout(ms) if *ms > 30_000 => Some(
             "Operation timed out. Consider increasing the timeout or processing in smaller batches.",
         ),
-        crate::PdfError::Config(key) => {
+        crate::PdfError::Config(_key) => {
             Some("Check your configuration. Use `pdf-cli config show` to inspect current values.")
         }
-        crate::PdfError::ParameterMissing(name) => {
+        crate::PdfError::ParameterMissing(_name) => {
             Some("This parameter is required. Provide it via CLI flag, env var, or config file.")
         }
         _ => None,
@@ -194,17 +207,7 @@ impl DiagnosticExt for crate::PdfError {
 /// }
 /// ```
 pub fn install_handler() {
-    miette::set_hook(Box::new(|_| {
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .terminal_links(true)
-                .unicode(true)
-                .context_lines(3)
-                .tab_width(4)
-                .build(),
-        )
-    }))
-    .expect("failed to install miette error hook");
+    let _ = miette::set_hook(Box::new(|_| Box::new(miette::NarratableReportHandler::new())));
 }
 
 #[cfg(test)]

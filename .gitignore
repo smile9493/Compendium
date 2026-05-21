@@ -73,6 +73,9 @@ wiki/
 data/
 test_kb/
 .rsut_index/
+
+# Template file exceptions (these are tracked in git)
+!pdf-module-rs/templates/knowledge_base/wiki/
 .hash_cache
 .cache_db/
 
