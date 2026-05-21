@@ -143,7 +143,10 @@ mod tests {
 
         let t = Translator::load(tmp.path(), "en-US").unwrap();
         let msg = t.get("hello-world", Some(&[("name", "World")])).unwrap();
-        assert_eq!(msg, "Hello, World!");
+        // Fluent wraps interpolated values in Unicode bidi isolation markers.
+        // Strip them for comparison.
+        let stripped: String = msg.chars().filter(|c| !matches!(c, '\u{2068}' | '\u{2069}')).collect();
+        assert_eq!(stripped, "Hello, World!");
     }
 
     #[test]

@@ -23,9 +23,13 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
+    #[serde(default)]
     pub server: ServerSettings,
+    #[serde(default)]
     pub database: DatabaseSettings,
+    #[serde(default)]
     pub logging: LoggingSettings,
+    #[serde(default)]
     pub security: SecuritySettings,
 }
 
