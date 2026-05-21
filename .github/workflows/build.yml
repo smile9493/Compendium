@@ -174,10 +174,23 @@ jobs:
         with:
           chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
       - name: Generate coverage
         run: |
           cd pdf-module-rs
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          cargo llvm-cov --all-features --workspace --exclude pdf-wasm --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
