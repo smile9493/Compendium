@@ -16,7 +16,7 @@
 //! ```
 
 use figment::Figment;
-use figment::providers::{Env, Format, Toml};
+use figment::providers::{Env, Format, Serialized, Toml};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -57,7 +57,7 @@ fn default_port() -> u16 {
     8000
 }
 fn default_workers() -> usize {
-    num_cpus::get()
+    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
 }
 
 impl Default for ServerSettings {
@@ -150,7 +150,8 @@ pub fn load_config<T: DeserializeOwned + Default>(
 ) -> Result<T, figment::Error> {
     let config_file = config_path.unwrap_or_else(|| PathBuf::from("config.toml"));
 
-    Figment::from(T::default())
+    Figment::new()
+        .merge(Serialized::defaults(T::default()))
         .merge(Toml::file(&config_file))
         .merge(Toml::file("config.local.toml"))
         .merge(Env::prefixed("APP_").split("__"))
@@ -168,7 +169,8 @@ pub fn load_config_with_profile<T: DeserializeOwned + Default>(
     let config_file = config_path.unwrap_or_else(|| PathBuf::from("config.toml"));
     let profile_file = format!("config.{}.toml", profile);
 
-    Figment::from(T::default())
+    Figment::new()
+        .merge(Serialized::defaults(T::default()))
         .merge(Toml::file(&config_file))
         .merge(Toml::file(&profile_file))
         .merge(Env::prefixed("APP_").split("__"))
