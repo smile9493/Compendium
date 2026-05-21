@@ -154,6 +154,7 @@ pub async fn dispatch_api_tool_inner(
         "search_knowledge" => handle_search_knowledge(ctx, args).await,
         "rebuild_index" => handle_rebuild_index(ctx, args).await,
         "get_entry_context" => handle_get_entry_context(&ctx.workspace_registry, args).await,
+        "get_wiki_entry" => handle_get_wiki_entry(&ctx.workspace_registry, args).await,
         "get_agent_context" => handle_get_agent_context(&ctx.workspace_registry, args).await,
         "preview_wiki_patch" => handle_preview_wiki_patch(&ctx.workspace_registry, args).await,
         "patch_wiki_entry" | "apply_wiki_patch" => {

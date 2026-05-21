@@ -28,8 +28,8 @@ fn tool_names_unique() {
 
 #[test]
 fn expected_tool_count() {
-    // 6 extract + 21 knowledge + 12 index + 9 management + 11 platform = 59
-    assert_eq!(tool_count(), 59);
+    // 6 extract + 21 knowledge + 13 index + 9 management + 11 platform = 60
+    assert_eq!(tool_count(), 60);
 }
 
 #[test]

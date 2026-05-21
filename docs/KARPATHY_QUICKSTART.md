@@ -16,7 +16,7 @@ compendium kb init ~/my-kb
 - `wiki/index.md`、`wiki/log.md` — 中枢神经系统
 - `raw/` — 原始素材（只读约定）
 
-> 仓库根目录 [`CLAUDE.md`](../CLAUDE.md) 用于 **Rust 开发**；Wiki 维护规范在 `knowledge_base/schema/`。
+> 仓库根目录 [`CLAUDE.md`](https://github.com/smile9493/Compendium/blob/main/CLAUDE.md) 用于 **Rust 开发**；Wiki 维护规范在 `knowledge_base/schema/`。
 
 ## 2. 配置 Cursor MCP
 

@@ -24,6 +24,7 @@ pub fn tool_exposure_tier(name: &str) -> ToolExposureTier {
     match name {
         // --- Core (15) ---
         "search_knowledge"
+        | "get_wiki_entry"
         | "get_agent_context"
         | "lint_wiki"
         | "ingest"
@@ -110,8 +111,8 @@ mod tests {
         let def = tools_in_tier(ToolExposureTier::Deferred).len();
         let code = tools_in_tier(ToolExposureTier::CodeOnly).len();
         assert_eq!(core + def + code, crate::tool_count());
-        assert_eq!(core, 16); // 15 atomic + load_tools
+        assert_eq!(core, 17); // wiki I/O + meta + load_tools
         assert_eq!(code, 12); // high-risk manifest tools (Code Mode adds +2)
-        assert_eq!(def, 31); // includes sync_push / sync_pull
+        assert_eq!(def, 31); // deferred manifest tools
     }
 }

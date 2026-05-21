@@ -4,7 +4,7 @@
 
 ---
 
-> **配置说明**：仓库根目录 [`CLAUDE.md`](../CLAUDE.md) 面向 Compendium **Rust 开发**；每个知识库的 Wiki 维护规范在 `knowledge_base/schema/AGENTS.md`（Karpathy 三口令：ingest / query / lint）。快速上手见 [KARPATHY_QUICKSTART.md](./KARPATHY_QUICKSTART.md)。
+> **配置说明**：仓库根目录 [`CLAUDE.md`](https://github.com/smile9493/Compendium/blob/main/CLAUDE.md) 面向 Compendium **Rust 开发**；每个知识库的 Wiki 维护规范在 `knowledge_base/schema/AGENTS.md`（Karpathy 三口令：ingest / query / lint）。快速上手见 [KARPATHY_QUICKSTART.md](./KARPATHY_QUICKSTART.md)。
 
 ## 一、核心概念
 
@@ -441,4 +441,4 @@ AI: [调用 rebuild_index]
 
 - [API 参考](./API_REFERENCE.md)
 - [AI Agent 工作流指南](./AI_AGENT_SETUP_GUIDE.md)
-- [架构设计](../pdf-module-rs/ARCHITECTURE.md)
+- [架构设计](https://github.com/smile9493/Compendium/blob/main/pdf-module-rs/ARCHITECTURE.md)

@@ -37,6 +37,13 @@ plugins:
         - zh
         - en
 
+# Strict CI treats broken internal links as errors; repo-root paths use absolute GitHub URLs in docs.
+validation:
+  links:
+    not_found: warn
+    absolute_links: ignore
+    unrecognized_links: warn
+
 markdown_extensions:
   - admonition
   - pymdownx.details

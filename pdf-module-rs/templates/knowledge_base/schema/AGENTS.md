@@ -24,8 +24,9 @@ When the user asks a question:
 
 1. **`query`** (recommended) — index excerpt + `search_knowledge` + top-hit context
 2. Or read `wiki/index.md` and `search_knowledge` with `mode: wiki_first` when configured
-3. Synthesize an answer with `[[wikilink]]` citations to entry paths
-4. If the answer is durable, call **`archive_answer`** to write an `overview` page
+3. For **full page text** (remote/LAN — no host filesystem), use **`get_wiki_entry`**; use **`get_agent_context`** when you only need a token-budget excerpt + neighbors
+4. Synthesize an answer with `[[wikilink]]` citations to entry paths
+5. If the answer is durable, call **`archive_answer`** to write an `overview` page
 
 Do not answer from memory alone when the wiki already contains the topic.
 
@@ -35,7 +36,7 @@ When the user says **lint**:
 
 1. **`lint`** (recommended) — `lint_wiki` + `check_quality` + `find_orphans` + `detect_stale_entries` + load-bearing report
 2. Or **`lint_wiki`** alone for a lighter pass
-2. Fix high-severity issues via `patch_wiki_entry` / `save_wiki_entry`
+2. Fix high-severity issues via `patch_wiki_entry` / `save_wiki_entry` (read bodies with `get_wiki_entry` when not on the same machine as the KB)
 3. Append summary is written to `wiki/log.md` automatically
 
 ## Page types (`entry_type`)

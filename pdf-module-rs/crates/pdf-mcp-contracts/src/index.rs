@@ -76,6 +76,24 @@ pub struct GetEntryContextOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GetWikiEntryInput {
+    pub entry_path: String,
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GetWikiEntryOutput {
+    pub entry_path: String,
+    pub content: String,
+    pub size_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GetAgentContextInput {
     pub entry_path: String,
     #[serde(flatten)]
@@ -246,6 +264,10 @@ pub fn tool_specs() -> Vec<McpToolSpec> {
         McpToolSpec::new::<GetEntryContextInput, GetEntryContextOutput>(
             "get_entry_context",
             "Get N-hop neighbors of a knowledge entry",
+        ),
+        McpToolSpec::new::<GetWikiEntryInput, GetWikiEntryOutput>(
+            "get_wiki_entry",
+            "Read full wiki Markdown (remote-safe pair to save_wiki_entry)",
         ),
         McpToolSpec::new::<GetAgentContextInput, GetAgentContextOutput>(
             "get_agent_context",

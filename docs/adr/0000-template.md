@@ -18,4 +18,4 @@
 
 ---
 
-*Template: [ADR-0000](docs/adr/0000-template.md)*
+*Template: [ADR-0000](0000-template.md)*

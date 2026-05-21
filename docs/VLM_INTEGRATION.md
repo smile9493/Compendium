@@ -355,4 +355,4 @@ curl -X POST https://open.bigmodel.cn/api/paas/v4/chat/completions \
 
 - [客户端配置指南](./CLIENT_SETUP_GUIDE.md)
 - [API 参考](./API_REFERENCE.md)
-- [架构设计](../pdf-module-rs/ARCHITECTURE.md)
+- [架构设计](https://github.com/smile9493/Compendium/blob/main/pdf-module-rs/ARCHITECTURE.md)

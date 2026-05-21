@@ -14,7 +14,10 @@
 
 1. 打开 **Settings → Pages**
 2. **Build and deployment → Source** 选择 **GitHub Actions**（不要选 `gh-pages` 分支；本仓库已改用 artifact 部署）
-3. 合并文档相关改动到 `main` 后，在 **Actions** 查看 **Docs** workflow 是否通过
+3. 若 Pages 尚未创建，需先启用（或通过 API `POST /repos/{owner}/{repo}/pages` 且 `build_type: workflow`）
+4. 合并文档相关改动到 `main` 后，在 **Actions** 运行 **Docs** workflow（或推送 `docs/**` / `mkdocs.yml` 变更）
+
+站点 404 常见原因：**Pages 未启用**、**Docs workflow 从未成功部署**、或 `mkdocs build --strict` 因文档内失效链接失败。
 
 若此前用过 `mkdocs gh-deploy` 生成的 `gh-pages` 分支，可保留或删除；以 Actions 部署为准即可。
 

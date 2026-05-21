@@ -58,7 +58,7 @@ fn truncate_result_value(
     value = serde_json::json!({
         "truncated": true,
         "preview": truncated_str,
-        "hint": "Use get_agent_context or open wiki entry paths for full bodies."
+        "hint": "Use get_wiki_entry for full Markdown; get_agent_context for token-budget excerpts."
     });
     (value, true)
 }

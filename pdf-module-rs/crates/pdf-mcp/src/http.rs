@@ -24,6 +24,7 @@
 //! | DELETE | `/api/config/{key}` | Remove config key |
 //! | GET | `/api/compile/status` | Compile status |
 //! | POST | `/api/index/rebuild` | Rebuild indexes |
+//! | POST | `/mcp` | MCP JSON-RPC (`tools/call`, `initialize`, `tools/list`) |
 //!
 //! ### SPA
 //! | Method | Path | Description |
@@ -62,6 +63,9 @@ use pdf_core::management::{
 use crate::embed::Assets;
 use crate::http_schemas::ServerInfoHttp;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
+use crate::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use crate::server::{ToolStats, handle_request};
+use crate::tools::ToolContext;
 use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_from_pipeline};
 use crate::tools::mcp_mode_label;
 use crate::upload::UploadStore;
@@ -142,6 +146,8 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/share/{token}/wiki/entries/*path", get(api_share_wiki_entry))
         .route("/api/v1/workspaces", get(api_workspaces_list).post(api_workspaces_upsert))
         .route("/api/v1/workspaces/active", post(api_workspaces_set_active))
+        // ── MCP over HTTP (LAN / public — same JSON-RPC as stdio) ──
+        .route("/mcp", post(api_mcp_jsonrpc))
         // ── SPA (legacy redirects) ──
         .route("/", get(|| async { Redirect::permanent("/app/") }))
         .route("/settings", get(|| async { Redirect::permanent("/app/") }))
@@ -1366,5 +1372,32 @@ async fn api_share_wiki_entry(
     match renderer.render_entry(&entry_path) {
         Ok(entry) => Json(serde_json::json!({"entry": entry, "read_only": true})).into_response(),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+    }
+}
+
+/// JSON-RPC MCP bridge for remote clients (`pdf-cli --remote`, Cursor over HTTP).
+#[instrument(skip(state, request))]
+async fn api_mcp_jsonrpc(
+    State(state): State<Arc<HttpState>>,
+    Json(request): Json<JsonRpcRequest>,
+) -> Json<JsonRpcResponse> {
+    let Some(pipeline) = state.pipeline.clone() else {
+        return Json(JsonRpcResponse::error(
+            request.id,
+            JsonRpcError::internal_error("HTTP MCP requires PDF pipeline (server misconfigured)"),
+        ));
+    };
+
+    let tool_ctx = ToolContext::new_with_upload_store(
+        pipeline,
+        state.upload_store.clone(),
+        Arc::clone(&state.workspace_registry),
+        Arc::clone(&state.index_cache),
+    );
+    let stats = Arc::new(ToolStats::new());
+
+    match handle_request(&tool_ctx, &stats, request).await {
+        Some(response) => Json(response),
+        None => Json(JsonRpcResponse::success(None, serde_json::json!({}))),
     }
 }

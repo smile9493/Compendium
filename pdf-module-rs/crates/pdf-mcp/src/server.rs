@@ -332,7 +332,7 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
     let instructions = if mode == "code" {
         pdf_mcp_contracts::code_mode_instructions()
     } else {
-        "Knowledge engine (contract 1.1.0). FIRST read schema/AGENTS.md. Meta tools: ingest, query, lint (Karpathy commands). Atomic: compile_to_wiki, incremental_compile, save_wiki_entry, complete_compile_job, search_knowledge (wiki_first), lint_wiki, detect_stale_entries, archive_answer. PDF: extract_*."
+        "Knowledge engine (contract 1.1.0). FIRST read schema/AGENTS.md. Meta tools: ingest, query, lint (Karpathy commands). Atomic: get_wiki_entry, save_wiki_entry, compile_to_wiki, incremental_compile, complete_compile_job, search_knowledge (wiki_first), lint_wiki, detect_stale_entries, archive_answer. PDF: extract_*."
     };
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",

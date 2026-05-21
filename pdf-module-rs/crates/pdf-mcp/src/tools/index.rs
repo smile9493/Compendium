@@ -65,6 +65,30 @@ pub async fn handle_rebuild_index(
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 
+/// Read full wiki Markdown for remote agents (pair with `save_wiki_entry`).
+#[instrument(skip(args))]
+pub async fn handle_get_wiki_entry(
+    registry: &WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path = parse_kb_path(registry, args)?;
+    let entry_path =
+        args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
+    let rel = entry_path.trim_start_matches("wiki/").trim_start_matches('/');
+    let full_path = wiki_dir(&kb_path).join(rel);
+    let content = fs::read_to_string(&full_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read entry '{}': {}", rel, e))?;
+    let parsed = KnowledgeEntry::from_markdown(&content);
+    let result = serde_json::json!({
+        "entry_path": rel,
+        "content": content,
+        "size_bytes": content.len(),
+        "title": parsed.as_ref().map(|e| e.title.as_str()),
+        "domain": parsed.as_ref().map(|e| e.domain.as_str()),
+    });
+    Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
+}
+
 #[instrument(skip(args))]
 pub async fn handle_get_entry_context(
     registry: &WorkspaceRegistry,
@@ -382,7 +406,9 @@ mod tests {
     fn test_index_tool_names_in_manifest() {
         let names: std::collections::HashSet<_> =
             pdf_mcp_contracts::all_tool_specs().into_iter().map(|s| s.name).collect();
-        for name in ["search_knowledge", "get_compilation_context", "apply_wiki_patch"] {
+        for name in
+            ["search_knowledge", "get_wiki_entry", "get_compilation_context", "apply_wiki_patch"]
+        {
             assert!(names.contains(name), "missing {name}");
         }
     }
@@ -421,6 +447,14 @@ mod tests {
 
         let registry = test_ctx().workspace_registry;
         let result = handle_get_entry_context(&registry, &args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
+    }
+
+    #[tokio::test]
+    async fn test_get_wiki_entry_missing_entry_path() {
+        let registry = test_ctx().workspace_registry;
+        let result = handle_get_wiki_entry(&registry, &serde_json::json!({})).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Missing entry_path"));
     }

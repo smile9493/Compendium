@@ -66,6 +66,7 @@ pub fn tool_category(name: &str) -> &'static str {
         "search_knowledge"
         | "rebuild_index"
         | "get_entry_context"
+        | "get_wiki_entry"
         | "get_agent_context"
         | "preview_wiki_patch"
         | "patch_wiki_entry"

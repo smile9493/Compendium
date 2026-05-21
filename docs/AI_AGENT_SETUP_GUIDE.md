@@ -429,5 +429,5 @@ aggregated_from:
 ## 相关文档
 
 - [客户端配置指南](./CLIENT_SETUP_GUIDE.md)
-- [架构设计文档](../pdf-module-rs/ARCHITECTURE.md)
-- [知识引擎模块](../pdf-module-rs/crates/pdf-core/src/knowledge/README.md)
+- [架构设计文档](https://github.com/smile9493/Compendium/blob/main/pdf-module-rs/ARCHITECTURE.md)
+- [知识引擎模块](https://github.com/smile9493/Compendium/blob/main/pdf-module-rs/crates/pdf-core/src/knowledge/README.md)
