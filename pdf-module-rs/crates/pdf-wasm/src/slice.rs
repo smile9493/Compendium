@@ -99,13 +99,9 @@ pub struct OwnedSlice {
     data: Vec<u8>,
 }
 
-#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+/// Non-`#[wasm_bindgen]` methods — `WasmSlice` and `&[u8]` return types are
+/// unsupported by wasm-bindgen.
 impl OwnedSlice {
-    /// Create an OwnedSlice from a byte vector.
-    pub fn from_vec(data: Vec<u8>) -> Self {
-        Self { data }
-    }
-
     /// Get a zero-copy view of the data as a WasmSlice.
     ///
     /// The returned slice is valid for the lifetime of this `OwnedSlice`.
@@ -119,6 +115,14 @@ impl OwnedSlice {
     /// Get a reference to the underlying data.
     pub fn as_bytes(&self) -> &[u8] {
         &self.data
+    }
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+impl OwnedSlice {
+    /// Create an OwnedSlice from a byte vector.
+    pub fn from_vec(data: Vec<u8>) -> Self {
+        Self { data }
     }
 
     /// Get the length of the data.
