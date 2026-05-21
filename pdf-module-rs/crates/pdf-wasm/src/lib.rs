@@ -24,7 +24,7 @@
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", target_family = "wasm"))]
 #[global_allocator]
 // SAFETY: TalckWasm provides a thread-safe bump-allocated global allocator
 // backed by WASM linear memory. It implements the GlobalAlloc trait correctly

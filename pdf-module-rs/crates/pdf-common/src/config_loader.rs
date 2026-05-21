@@ -21,7 +21,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSettings {
     #[serde(default)]
     pub server: ServerSettings,
@@ -31,17 +31,6 @@ pub struct AppSettings {
     pub logging: LoggingSettings,
     #[serde(default)]
     pub security: SecuritySettings,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            server: ServerSettings::default(),
-            database: DatabaseSettings::default(),
-            logging: LoggingSettings::default(),
-            security: SecuritySettings::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +138,7 @@ impl Default for SecuritySettings {
 /// 2. `config.toml` (or the file at `config_path`)
 /// 3. `config.local.toml` (git-ignored overrides)
 /// 4. Rust `Default` impl
+#[allow(clippy::result_large_err)]
 pub fn load_config<T: DeserializeOwned + Default + Serialize>(
     config_path: Option<PathBuf>,
 ) -> Result<T, figment::Error> {
@@ -166,6 +156,7 @@ pub fn load_config<T: DeserializeOwned + Default + Serialize>(
 ///
 /// After loading defaults and config.toml, applies
 /// `config.{profile}.toml` overrides, then env vars.
+#[allow(clippy::result_large_err)]
 pub fn load_config_with_profile<T: DeserializeOwned + Default + Serialize>(
     config_path: Option<PathBuf>,
     profile: &str,

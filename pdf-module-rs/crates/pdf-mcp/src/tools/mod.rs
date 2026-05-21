@@ -47,7 +47,14 @@ impl ToolContext {
         workspace_registry: Arc<WorkspaceRegistry>,
         index_cache: Arc<IndexCache>,
     ) -> Self {
-        Self::new_with_upload_store(pipeline, None, workspace_registry, index_cache)
+        Self {
+            pipeline,
+            path_config: default_path_config(),
+            upload_store: None,
+            workspace_registry,
+            index_cache,
+            sampling: None,
+        }
     }
 
     pub fn with_sampling(mut self, sampling: Arc<SamplingClient>) -> Self {
@@ -66,14 +73,7 @@ impl ToolContext {
         workspace_registry: Arc<WorkspaceRegistry>,
         index_cache: Arc<IndexCache>,
     ) -> Self {
-        Self {
-            pipeline,
-            path_config: default_path_config(),
-            upload_store,
-            workspace_registry,
-            index_cache,
-            sampling: None,
-        }
+        Self { upload_store, ..Self::new(pipeline, workspace_registry, index_cache) }
     }
 }
 

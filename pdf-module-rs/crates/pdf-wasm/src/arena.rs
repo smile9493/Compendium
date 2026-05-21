@@ -87,19 +87,6 @@ impl WasmPdfEngine {
         self.arena.allocated_bytes()
     }
 
-    /// Allocate a slice in the arena and copy data into it.
-    ///
-    /// Returns a reference into the arena-allocated memory that is valid
-    /// until `reset_arena()` is called.
-    pub fn alloc_slice_copy<'a>(&'a self, data: &[u8]) -> &'a [u8] {
-        self.arena.alloc_slice_copy(data)
-    }
-
-    /// Allocate a string in the arena.
-    pub fn alloc_str<'a>(&'a self, s: &str) -> &'a str {
-        self.arena.alloc_str(s)
-    }
-
     /// Process a PDF buffer using arena-allocated temporary storage.
     ///
     /// This demonstrates the arena pattern: all temporary allocations
@@ -123,6 +110,22 @@ impl WasmPdfEngine {
         self.reset_arena();
 
         Ok(extracted)
+    }
+}
+
+/// Non-`#[wasm_bindgen]` methods — lifetime parameters are unsupported by wasm-bindgen.
+impl WasmPdfEngine {
+    /// Allocate a slice in the arena and copy data into it.
+    ///
+    /// Returns a reference into the arena-allocated memory that is valid
+    /// until `reset_arena()` is called.
+    pub fn alloc_slice_copy<'a>(&'a self, data: &[u8]) -> &'a [u8] {
+        self.arena.alloc_slice_copy(data)
+    }
+
+    /// Allocate a string in the arena.
+    pub fn alloc_str<'a>(&'a self, s: &str) -> &'a str {
+        self.arena.alloc_str(s)
     }
 }
 

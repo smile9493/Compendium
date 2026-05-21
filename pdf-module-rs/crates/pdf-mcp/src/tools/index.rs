@@ -100,8 +100,9 @@ pub async fn handle_get_entry_context(
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let hops = args["hops"].as_u64().unwrap_or(2) as u32;
 
-    let graph = graph(&kb_path)?;
-    let neighbors = graph.get_neighbors(entry_path, hops);
+    let entry_path_owned = entry_path.to_string();
+    let graph = tokio::task::spawn_blocking(move || graph(&kb_path)).await??;
+    let neighbors = graph.get_neighbors(&entry_path_owned, hops);
 
     let result = serde_json::json!({
         "entry": entry_path,
@@ -119,7 +120,7 @@ pub async fn handle_find_orphans(
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(registry, args)?;
 
-    let graph = graph(&kb_path)?;
+    let graph = tokio::task::spawn_blocking(move || graph(&kb_path)).await??;
     let orphans = graph.find_orphans();
 
     let result = serde_json::json!({
@@ -144,8 +145,9 @@ pub async fn handle_suggest_links(
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let top_k = args["top_k"].as_u64().unwrap_or(10) as usize;
 
-    let graph = graph(&kb_path)?;
-    let suggestions = graph.suggest_links(entry_path, top_k);
+    let entry_path_owned = entry_path.to_string();
+    let graph = tokio::task::spawn_blocking(move || graph(&kb_path)).await??;
+    let suggestions = graph.suggest_links(&entry_path_owned, top_k);
 
     let result = serde_json::json!({
         "entry": entry_path,
@@ -165,8 +167,9 @@ pub async fn handle_export_concept_map(
         args["entry_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing entry_path"))?;
     let depth = args["depth"].as_u64().unwrap_or(2) as u32;
 
-    let graph = graph(&kb_path)?;
-    let mermaid = graph.export_concept_map(entry_path, depth);
+    let entry_path_owned = entry_path.to_string();
+    let graph = tokio::task::spawn_blocking(move || graph(&kb_path)).await??;
+    let mermaid = graph.export_concept_map(&entry_path_owned, depth);
 
     let result = serde_json::json!({
         "entry": entry_path,
@@ -185,21 +188,27 @@ pub async fn handle_check_quality(
     let kb_path = parse_kb_path(registry, args)?;
     let wiki_dir = kb_path.join("wiki");
 
-    let report = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir)?;
+    let wiki_dir_for_blocking = wiki_dir.clone();
+    let kb_path_for_blocking = kb_path.clone();
+    let (report, issues, diversity, propagation) = tokio::task::spawn_blocking(move || {
+        let rpt = pdf_core::knowledge::quality::analyze_wiki(&wiki_dir_for_blocking)?;
+        let iss = pdf_core::knowledge::list_quality_issues(&wiki_dir_for_blocking, None, 50)?;
+        let g = graph(&kb_path_for_blocking)?;
+        let h = pdf_core::knowledge::hub_threshold_for_kb(&kb_path_for_blocking, &g)?;
+        let d = pdf_core::knowledge::analyze_cognitive_diversity(&kb_path_for_blocking, &g, h)?;
+        let p = pdf_core::knowledge::compute_propagation(&kb_path_for_blocking, &g, 2)?;
+        Ok::<_, anyhow::Error>((rpt, iss, d, p))
+    })
+    .await??;
+
     let kb_str = kb_path.to_string_lossy();
     let next_actions = build_next_actions(&report, &kb_str);
-    let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, None, 50)?;
-
-    let graph = graph(&kb_path)?;
-    let hub = pdf_core::knowledge::hub_threshold_for_kb(&kb_path, &graph)?;
-    let diversity = pdf_core::knowledge::analyze_cognitive_diversity(&kb_path, &graph, hub)?;
-    let propagation = pdf_core::knowledge::compute_propagation(&kb_path, &graph, 2)?;
 
     let result = serde_json::json!({
         "total_entries": report.total_entries,
         "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
         "domains": report.domains.iter().collect::<Vec<_>>(),
-        "issues_count": report.issues.len(),
+        "issues_count": issues.len(),
         "quality_issues": issues,
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),

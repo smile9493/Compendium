@@ -106,14 +106,20 @@ pub async fn handle_meta_lint(
     let lint_report = lint_wiki(&kb_path)?;
     let summary = lint_report.summary.clone();
     let stale = detect_stale_entries(&kb_path, max_age)?;
-    let graph_ref = graph(&kb_path)?;
-    let hub = pdf_core::knowledge::hub_threshold_for_kb(&kb_path, &graph_ref)?;
-    let load_bearing = graph_ref.load_bearing_entries(hub);
+
+    let kb_path_clone = kb_path.clone();
+    let (load_bearing, diversity, propagation) = tokio::task::spawn_blocking(move || {
+        let g = graph(&kb_path_clone)?;
+        let h = pdf_core::knowledge::hub_threshold_for_kb(&kb_path_clone, &g)?;
+        let lb = g.load_bearing_entries(h);
+        let d = pdf_core::knowledge::analyze_cognitive_diversity(&kb_path_clone, &g, h)?;
+        let p = pdf_core::knowledge::compute_propagation(&kb_path_clone, &g, 2)?;
+        Ok::<_, anyhow::Error>((lb, d, p))
+    })
+    .await??;
 
     let quality_json = parse_tool_json(&handle_check_quality(&ctx.workspace_registry, args).await?);
     let orphans_json = parse_tool_json(&handle_find_orphans(&ctx.workspace_registry, args).await?);
-    let diversity = pdf_core::knowledge::analyze_cognitive_diversity(&kb_path, &graph_ref, hub)?;
-    let propagation = pdf_core::knowledge::compute_propagation(&kb_path, &graph_ref, 2)?;
 
     let payload = serde_json::json!({
         "command": "lint",
