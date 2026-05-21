@@ -1,3 +1,4 @@
+mod code_mode;
 mod compile_sampling;
 mod extract;
 mod index;
@@ -77,11 +78,36 @@ impl ToolContext {
 }
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
+    if code_mode::is_code_mode() {
+        return code_mode::tool_definitions();
+    }
     pdf_mcp_contracts::all_tool_specs().into_iter().map(ToolDefinition::from).collect()
+}
+
+pub fn mcp_mode_label() -> &'static str {
+    if code_mode::is_code_mode() { "code" } else { "full" }
 }
 
 #[tracing::instrument(skip(ctx, args), fields(tool = %tool_name))]
 pub async fn dispatch_tool(
+    ctx: &ToolContext,
+    tool_name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
+    match tool_name {
+        "search_compendium_api" if code_mode::is_code_mode() => {
+            code_mode::handle_search_compendium_api(args).await
+        }
+        "execute_compendium" if code_mode::is_code_mode() => {
+            code_mode::handle_execute_compendium(ctx, args).await
+        }
+        _ => dispatch_api_tool(ctx, tool_name, args).await,
+    }
+}
+
+/// Dispatch a manifest API method (used by full mode and `execute_compendium` batches).
+#[tracing::instrument(skip(ctx, args), fields(tool = %tool_name))]
+pub async fn dispatch_api_tool(
     ctx: &ToolContext,
     tool_name: &str,
     args: &serde_json::Value,
@@ -93,6 +119,9 @@ pub async fn dispatch_tool(
         "search_keywords" => handle_search_keywords(ctx, args).await,
         "extrude_to_server_wiki" => handle_extrude_to_server_wiki(ctx, args).await,
         "extrude_to_agent_payload" => handle_extrude_to_agent_payload(ctx, args).await,
+        "init_knowledge_base" => handle_init_knowledge_base(args).await,
+        "lint_wiki" => handle_lint_wiki(args).await,
+        "archive_answer" => handle_archive_answer(args).await,
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
         "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
         "incremental_compile" => handle_incremental_compile(ctx, args).await,
@@ -207,9 +236,18 @@ mod tests {
     }
 
     #[test]
-    fn test_all_tool_definitions_count() {
-        let tools = all_tool_definitions();
+    fn test_all_tool_definitions_count_full_mode() {
+        let tools = pdf_mcp_contracts::all_tool_specs()
+            .into_iter()
+            .map(ToolDefinition::from)
+            .collect::<Vec<_>>();
         assert_eq!(tools.len(), pdf_mcp_contracts::tool_count());
+    }
+
+    #[test]
+    fn test_code_mode_tool_definitions_count() {
+        let tools = code_mode::tool_definitions();
+        assert_eq!(tools.len(), pdf_mcp_contracts::code_mode_tool_count());
     }
 
     #[test]

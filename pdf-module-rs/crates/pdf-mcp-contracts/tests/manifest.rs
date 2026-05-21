@@ -1,4 +1,7 @@
-use pdf_mcp_contracts::{CONTRACT_VERSION, all_tool_specs, manifest_sha256, tool_count};
+use pdf_mcp_contracts::{
+    CONTRACT_VERSION, all_api_methods, all_tool_specs, code_mode_tool_count, code_mode_tool_specs,
+    manifest_sha256, search_api, tool_count,
+};
 
 #[test]
 fn contract_version_is_semver() {
@@ -25,13 +28,31 @@ fn tool_names_unique() {
 
 #[test]
 fn expected_tool_count() {
-    // 6 extract + 12 knowledge + 12 index (incl. apply_wiki_patch alias + get_compilation_context)
-    // + 9 management + 11 platform = 50
-    assert_eq!(tool_count(), 50);
+    // 6 extract + 15 knowledge + 12 index + 9 management + 11 platform = 53
+    assert_eq!(tool_count(), 53);
 }
 
 #[test]
 fn manifest_hash_stable_for_fixed_specs() {
     let h = manifest_sha256();
     assert_eq!(h.len(), 64);
+}
+
+#[test]
+fn code_mode_tool_count_is_two() {
+    assert_eq!(code_mode_tool_count(), 2);
+    let names: Vec<String> = code_mode_tool_specs().into_iter().map(|s| s.name).collect();
+    assert!(names.iter().any(|n| n == "search_compendium_api"));
+    assert!(names.iter().any(|n| n == "execute_compendium"));
+}
+
+#[test]
+fn api_catalog_matches_full_tool_count() {
+    assert_eq!(all_api_methods().len(), tool_count());
+}
+
+#[test]
+fn search_api_returns_hits() {
+    let hits = search_api("lint", 5);
+    assert!(hits.iter().any(|h| h.name == "lint_wiki"));
 }

@@ -19,7 +19,7 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 ```
 ┌──────────────────────────────────────────────────┐
 │            AI Client (Claude / Cursor)            │
-│            23 MCP tools via JSON-RPC              │
+│  full: 53 MCP tools  |  code: 2 tools + SDK res   │
 └──────────────┬───────────────┬───────────────────┘
                │ stdio         │ HTTP
                ▼               ▼
@@ -35,25 +35,39 @@ AI-native knowledge compilation engine — PDF extraction + Karpathy compiler pa
 │  │  extrude_to_agent_payload              │
 │  └────────────────────────────────────────┘
 │
-│  ┌── Knowledge Engine (7) ───────────────┐
-│  │  compile_to_wiki / incremental_compile │
+│  ┌── Knowledge Engine (10) ────────────┐
+│  │  init_knowledge_base / compile_to_wiki │
+│  │  incremental_compile / lint_wiki       │
+│  │  archive_answer / save_wiki_entry      │
 │  │  recompile_entry / aggregate_entries   │
-│  │  check_quality / micro_compile         │
-│  │  hypothesis_test                       │
+│  │  micro_compile / check_quality         │
+│  │  hypothesis_test / generate_compile_plan│
 │  └────────────────────────────────────────┘
 │
-│  ┌── Cognitive Index (6) ────────────────┐
-│  │  search_knowledge (Tantivy + CJK)     │
+│  ┌── Cognitive Index (12) ─────────────┐
+│  │  search_knowledge (hybrid | wiki_first)│
 │  │  rebuild_index                         │
 │  │  get_entry_context / find_orphans      │
 │  │  suggest_links / export_concept_map    │
+│  │  get_agent_context                     │
+│  │  get_compilation_context               │
+│  │  preview_wiki_patch / patch_wiki_entry │
+│  │  save_wiki_entry / complete_compile_job│
+│  │  mark_plan_task_done / get_compile_plan│
 │  └────────────────────────────────────────┘
 │
-│  ┌── Management (5) ─────────────────────┐
+│  ┌── Management (16) ──────────────────┐
 │  │  get_config / set_config               │
+│  │  compile_uploaded_pdf                  │
 │  │  get_health_report                     │
 │  │  trigger_incremental_compile           │
 │  │  get_compile_status / show_wiki_browser│
+│  │  list_quality_issues / fix_suggest     │
+│  │  apply_quality_gate / sync_push        │
+│  │  sync_pull / sync_status               │
+│  │  submit_patch_proposal / list_patch_proposals│
+│  │  list_workspaces / set_active_workspace│
+│  │  register_workspace / list_extraction_plugins│
 │  └────────────────────────────────────────┘
 │
 │  ┌── Resources (2) ──────────────────────┐
@@ -135,7 +149,7 @@ knowledge_base/
 | `pdf-common` | 统一错误、DTO、配置、traits | `PdfError` (23 variants), `ToolContext`, `AppConfig` |
 | `pdf-macros` | 过程宏 | `#[derive(Builder)]` |
 | `pdf-core` | PdfiumEngine + FileValidator + VlmPipeline + **KnowledgeEngine** + **FulltextIndex** + **GraphIndex** + **VectorIndex** | TF-IDF embedding, batch_embed_all, community detection |
-| `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 23 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
+| `pdf-mcp` | MCP stdio + HTTP 入口 (JSON-RPC) — 53 tools | `tokio::select!` dispatch, oneshot HTTP bootstrap, resources protocol |
 | `pdf-cli` | 统一 CLI (双模式: local/remote) | `clap` derive, `reqwest` for remote, file upload, knowledge management |
 | `pdf-web` | **已弃用** 管理 API sidecar (`axum`) | 请使用 `pdf-mcp`（Wiki + 管理 API + 内嵌 `pdf-web-ui`） |
 | `pdf-wasm` | WASM 引擎 | `WasmSlice` zero-copy, `bumpalo` arena, `talc` allocator |
@@ -145,7 +159,9 @@ knowledge_base/
 
 | 子模块 | 职责 | 关键类型 |
 |--------|------|----------|
-| `entry` | 统一 front matter 规范 | `KnowledgeEntry`, `EntryLevel`, `CompileStatus` |
+| `entry` | 统一 front matter 规范（含 `entry_type` / `confidence`） | `KnowledgeEntry`, `EntryLevel`, `EntryType`, `EntryConfidence`, `CompileStatus` |
+| `kb_init` | 初始化空知识库（Karpathy 模板） | `InitKnowledgeBaseResult`, `init_knowledge_base()` |
+| `wiki_lint` | 聚合 lint 检查（矛盾/孤儿/缺页/漂移） | `LintWikiReport`, `lint_wiki()` |
 | `hash_cache` | Merkle 增量变更检测 | `HashCache` |
 | `engine` | 编译调度核心 | `KnowledgeEngine`, `CompileResult`, `RecompileResult`, `CollectContext`, `AggregationCandidate` |
 | `renderer` | Markdown → HTML 渲染 | `RenderedEntry`, `TreeNode` |
@@ -156,7 +172,19 @@ knowledge_base/
 | `index::community` | 标签社区检测 | `LouvainCluster` |
 | `index::tokenizer` | CJK n-gram 分词器 | `register_cjk_tokenizer()` |
 
-## MCP Tool Inventory (23 tools)
+## MCP Code Mode
+
+When `COMPENDIUM_MCP_MODE=code`:
+
+| Surface | Count | Notes |
+|---------|-------|-------|
+| MCP tools | 2 | `search_compendium_api`, `execute_compendium` |
+| API catalog | 53 | Invoked via `execute_compendium` `calls[]` → `dispatch_api_tool` |
+| Resource | 1 | `compendium://sdk/typescript` (embedded `templates/sdk/compendium.d.ts`) |
+
+Regenerate SDK: `cargo run -p pdf-mcp-contracts --bin generate-sdk`. See [docs/CODE_MODE.md](../docs/CODE_MODE.md).
+
+## MCP Tool Inventory (53 tools, full mode)
 
 ### PDF Extraction (6)
 | Tool | Description |
@@ -168,21 +196,26 @@ knowledge_base/
 | `extrude_to_server_wiki` | 提取到 server wiki |
 | `extrude_to_agent_payload` | 提取 + 返回 Agent payload 到对话 |
 
-### Compilation (7)
+### Compilation (10)
 | Tool | Description |
 |------|-------------|
+| `init_knowledge_base` | 初始化空知识库（Karpathy 模板：schema + index + log） |
 | `compile_to_wiki` | PDF → raw/ + 编译提示 (知识库入口) |
 | `incremental_compile` | Merkle 哈希增量扫描，只编译变更的 PDF |
+| `save_wiki_entry` | 创建或更新 wiki 条目（YAML front matter 必填） |
+| `complete_compile_job` | 完成编译 job：重建索引 + 质量门禁 |
+| `lint_wiki` | Karpathy lint：矛盾/孤儿/缺页概念/漂移/断链 |
+| `archive_answer` | 将问答结果回写为 overview 页面 |
 | `recompile_entry` | 单条目重编译 + 版本备份 + 漂移检测 |
 | `aggregate_entries` | L1→L2 聚合候选发现 (标签社区检测) |
 | `check_quality` | 全 wiki 质量扫描 |
 | `micro_compile` | 即时 PDF 提取 (不写 wiki，注入对话) |
 | `hypothesis_test` | 矛盾对发现 + 辩论框架生成 |
 
-### Indexing (6)
+### Indexing (12)
 | Tool | Description |
 |------|-------------|
-| `search_knowledge` | 混合检索 (Tantivy CJK + TF-IDF RRF)，`mode`: keyword/semantic/hybrid |
+| `search_knowledge` | 混合检索 (Tantivy CJK + TF-IDF RRF)，`mode`: keyword/semantic/hybrid/wiki_first |
 | `rebuild_index` | 完全重建 Tantivy + petgraph + vector |
 | `get_entry_context` | N 跳邻居发现 |
 | `get_agent_context` | Agent 上下文包 (body + neighbors + related) |
@@ -192,8 +225,12 @@ knowledge_base/
 | `find_orphans` | 孤立条目检测 |
 | `suggest_links` | Jaccard 相似度链接建议 |
 | `export_concept_map` | Mermaid.js 概念图导出 |
+| `generate_compile_plan` | 生成编译计划 JSON |
+| `get_compile_plan` | 读取编译计划与任务状态 |
+| `mark_plan_task_done` | 标记编译计划任务完成 |
+| `compile_uploaded_pdf` | 编译通过上传 API 提交的 PDF |
 
-### Management (5)
+### Management (16)
 | Tool | Description |
 |------|-------------|
 | `get_config` | 获取当前配置 |
@@ -201,7 +238,17 @@ knowledge_base/
 | `get_health_report` | 系统健康报告 |
 | `trigger_incremental_compile` | 批量增量编译 |
 | `get_compile_status` | 编译状态查询 |
+| `list_quality_issues` | 列出待解决质量问题 |
+| `fix_suggest` | 质量修复建议 |
+| `apply_quality_gate` | 质量门禁（阻塞/降级/仅警告） |
 | `show_wiki_browser` | Wiki 浏览器入口 |
+| `list_workspaces` | 列出所有工作区 |
+| `set_active_workspace` | 设置当前工作区 |
+| `register_workspace` | 注册新的工作区 |
+| `sync_push` / `sync_pull` / `sync_status` | Git 式同步 |
+| `submit_patch_proposal` | 提交补丁提案 |
+| `list_patch_proposals` | 列出待审补丁提案 |
+| `list_extraction_plugins` / `probe_extraction` | 插件管理与探测 |
 
 ### Resources (2)
 | Resource | Description |
@@ -213,6 +260,8 @@ knowledge_base/
 
 ```yaml
 ---
+entry_type: concept       # concept | entity | source-summary | comparison | overview
+confidence: high          # high | medium | low
 title: "概念名称"
 domain: "IT"
 source: "raw/paper.pdf"

@@ -320,6 +320,17 @@ pub async fn handle_request(
 
 fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRpcResponse {
     let stats_json = stats.to_json();
+    let mode = tools::mcp_mode_label();
+    let tool_count = if mode == "code" {
+        pdf_mcp_contracts::code_mode_tool_count()
+    } else {
+        pdf_mcp_contracts::tool_count()
+    };
+    let instructions = if mode == "code" {
+        pdf_mcp_contracts::code_mode_instructions()
+    } else {
+        "Knowledge engine (contract 1.1.0). FIRST read schema/AGENTS.md in the knowledge base. Three commands: ingest → compile_to_wiki/incremental_compile → save_wiki_entry → complete_compile_job; query → read wiki/index.md then get_agent_context or search_knowledge (mode wiki_first); lint → lint_wiki. Also: init_knowledge_base, archive_answer for query write-back. Wiki: patch_wiki_entry, search_knowledge. PDF: extract_*."
+    };
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "serverInfo": {
@@ -336,14 +347,16 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
             },
             "extensions": {
                 "compendium": {
+                    "mode": mode,
                     "outputSchema": true,
                     "contractVersion": pdf_mcp_contracts::CONTRACT_VERSION,
-                    "toolCount": pdf_mcp_contracts::tool_count(),
-                    "manifestSha256": pdf_mcp_contracts::manifest_sha256()
+                    "toolCount": tool_count,
+                    "manifestSha256": pdf_mcp_contracts::manifest_sha256(),
+                    "apiCatalogSize": pdf_mcp_contracts::tool_count()
                 }
             }
         },
-        "instructions": "Knowledge engine (contract 1.0.0). Compile loop: compile_to_wiki/incremental_compile → job_id + awaiting_agent → get_compilation_context → save_wiki_entry(job_id) → complete_compile_job. Wiki: patch_wiki_entry or apply_wiki_patch (alias), preview_wiki_patch, get_agent_context, search_knowledge. PDF: extract_* returns JSON with extraction envelope. Management: get_compile_status, get_health_report (includes extraction stack).",
+        "instructions": instructions,
         "stats": stats_json
     });
     JsonRpcResponse::success(request.id.clone(), result)

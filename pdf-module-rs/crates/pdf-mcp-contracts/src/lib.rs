@@ -6,8 +6,9 @@
 #![deny(clippy::unwrap_used)]
 #![allow(ambiguous_glob_reexports)]
 
-pub const CONTRACT_VERSION: &str = "1.0.0";
+pub const CONTRACT_VERSION: &str = "1.1.0";
 
+mod code_mode;
 mod common;
 mod extract;
 mod index;
@@ -16,6 +17,13 @@ mod management;
 mod platform;
 mod registry;
 
+pub use code_mode::{
+    ApiMethodEntry, CompendiumCall, CompendiumCallResult, CompendiumMcpMode,
+    ExecuteCompendiumInput, ExecuteCompendiumOutput, SearchCompendiumApiInput,
+    SearchCompendiumApiOutput, all_api_methods, allowed_tool_names, code_mode_instructions,
+    code_mode_tool_count, code_mode_tool_specs, generate_api_index_json, generate_typescript_sdk,
+    search_api, snake_to_camel, tool_category,
+};
 pub use common::*;
 pub use extract::*;
 pub use index::*;

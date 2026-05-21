@@ -46,7 +46,18 @@
     "rebuildIndex": "Rebuild index",
     "language": "Language",
     "langZh": "简体中文",
-    "langEn": "English"
+    "langEn": "English",
+    "mcpModeTitle": "MCP connection mode",
+    "mcpTools": "{count} MCP tools",
+    "mcpModeHintCode": "Agents call the full API via execute_compendium batches. Reload MCP in Cursor after changing env.",
+    "mcpModeHintFull": "Each API is a separate MCP tool. Switch to Code Mode to reduce context usage.",
+    "mcpModeDoc": "Code Mode docs",
+    "mcpModeReloadHint": "To switch modes, edit COMPENDIUM_MCP_MODE in Cursor mcp.json and reload the MCP server (not toggled from this UI).",
+    "mcpModeLoading": "Loading server mode…",
+    "mcpCopySnippet": "Copy current config",
+    "mcpCopyCode": "Copy Code config",
+    "mcpCopyFull": "Copy Full config",
+    "mcpCopied": "Copied"
   },
   "ops": {
     "indexEmpty": "Search index is empty. Rebuild fulltext and graph indexes.",

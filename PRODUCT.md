@@ -42,7 +42,12 @@
 | **部署复杂度** | 单二进制，零依赖 | 云端闭源 | 多组件（embedder + vector db + orchestrator） |
 | **长期所有权** | 100% 用户持有 | 锁定在平台 | 锁定在基础设施 |
 
-## 23 MCP 工具能力矩阵
+## MCP 工具能力矩阵
+
+- **full 模式**（默认）：53 个独立 MCP 工具，各带 input/output JSON Schema
+- **Code Mode**（`COMPENDIUM_MCP_MODE=code`）：`search_compendium_api` + `execute_compendium`；53 个 API 通过批次 `calls` 调用。见 [docs/CODE_MODE.md](../docs/CODE_MODE.md)
+
+### full 模式工具分组
 
 ### PDF 提取层
 
@@ -101,7 +106,7 @@
 |------|------|
 | Rust 版本 | 1.95.0 |
 | Crates 数量 | 9 (8 lib + 1 bin) |
-| MCP 工具总数 | 23 |
+| MCP 工具总数 | 53（full）/ 2（code） |
 | MCP 资源 | 2 embedded |
 | 单二进制大小 | ~30MB (release, stripped) |
 | WASM 引擎大小 | ~800KB (gzipped) |

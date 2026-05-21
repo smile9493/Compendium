@@ -17,7 +17,7 @@
 - 🖼️ **VLM 视觉理解** — 条件性 OCR 回退，用于扫描版/图片型 PDF
 - 🌐 **双协议服务** — stdio（MCP）+ HTTP（Wiki 浏览），oneshot 信号启动
 - 🦀 **Rust 2024 Edition** — 使用 Rust 2024 编写，需 rustc 1.91+
-- 🎯 **30 个 MCP 工具** — 覆盖 PDF 提取、知识编译、认知索引、管理、资源服务
+- 🎯 **53 个 MCP 工具**（full 模式）— 或 **Code Mode**（2 工具 + TypeScript API 资源，见 [Code Mode](docs/CODE_MODE.md)）
 
 ## 📦 安装
 
@@ -60,6 +60,24 @@ cargo build --release --bin pdf-mcp
 }
 ```
 
+**Code Mode**（减少上下文中的工具 Schema 开销，推荐多步 ingest/query 任务）：
+
+```json
+{
+  "mcpServers": {
+    "pdf-mcp": {
+      "command": "/opt/pdf-module/pdf-mcp",
+      "env": {
+        "COMPENDIUM_MCP_MODE": "code",
+        "KNOWLEDGE_BASE_PATH": "/home/user/my-kb"
+      }
+    }
+  }
+}
+```
+
+详见 [docs/CODE_MODE.md](docs/CODE_MODE.md)。
+
 **Claude Desktop** (`claude_desktop_config.json`):
 
 ```json
@@ -72,7 +90,13 @@ cargo build --release --bin pdf-mcp
 }
 ```
 
-### 2. 编译 PDF 到知识库
+### 2. 初始化知识库（Karpathy 模板）
+
+```bash
+compendium kb init ~/my-kb
+```
+
+### 3. 编译 PDF 到知识库
 
 ```
 用户: 帮我把 /path/to/paper.pdf 编译到知识库
@@ -84,7 +108,7 @@ AI: [调用 compile_to_wiki 工具]
 请阅读提取内容，提炼核心概念，创建原子化词条...
 ```
 
-### 3. 搜索知识库
+### 4. 搜索知识库
 
 ```
 用户: 搜索关于 HTTP/2 的知识
@@ -96,7 +120,7 @@ AI: [调用 search_knowledge 工具]
 3. [Network] HTTP/2 vs HTTP/1.1 对比 (score: 0.78)
 ```
 
-## 🛠️ MCP 工具 (30 个)
+## 🛠️ MCP 工具 (53 个)
 
 ### PDF 提取 (6)
 
@@ -109,30 +133,35 @@ AI: [调用 search_knowledge 工具]
 | `extrude_to_server_wiki` | 提取到服务端 Wiki |
 | `extrude_to_agent_payload` | 返回 Markdown payload 到对话 |
 
-### 知识编译 (7)
+### 知识编译 (10)
 
 | 工具 | 说明 |
 |------|------|
+| `init_knowledge_base` | 初始化空知识库（Karpathy 模板） |
 | `compile_to_wiki` | PDF → 知识库编译入口 |
 | `incremental_compile` | 增量编译（Merkle 哈希检测） |
+| `save_wiki_entry` | 创建或更新 wiki 条目（含 front matter） |
 | `recompile_entry` | 单条目重编译 + 版本备份 |
 | `aggregate_entries` | L1→L2 聚合候选发现 |
 | `check_quality` | Wiki 质量扫描（漂移/矛盾检测） |
 | `micro_compile` | 即时提取（不持久化） |
 | `hypothesis_test` | 矛盾对发现 + 辩论框架生成 |
+| `lint_wiki` | Karpathy 聚合 lint（矛盾/孤儿/概念/断链） |
+| `archive_answer` | QA 对话结果回写为 overview 页面 |
+| `complete_compile_job` | 完成编译 job：重建索引 + 质量门禁 |
 
 ### 认知索引 (6)
 
 | 工具 | 说明 |
 |------|------|
-| `search_knowledge` | Tantivy 全文搜索（CJK 分词） |
+| `search_knowledge` | 多模态搜索（keyword/semantic/hybrid/wiki_first） |
 | `rebuild_index` | 重建所有索引 |
 | `get_entry_context` | N 跳邻居发现（知识图谱遍历） |
 | `find_orphans` | 孤立条目检测 |
 | `suggest_links` | 链接建议（Jaccard 相似度） |
 | `export_concept_map` | Mermaid.js 概念图导出 |
 
-### 管理 (9)
+### 管理 (16)
 
 | 工具 | 说明 |
 |------|------|
@@ -141,10 +170,16 @@ AI: [调用 search_knowledge 工具]
 | `get_health_report` | 系统健康报告（引擎/索引/缓存状态） |
 | `trigger_incremental_compile` | 触发批量增量编译 |
 | `get_compile_status` | 查询编译任务状态 |
-| `list_quality_issues` | 列出待解决的质量问题（矛盾/漂移/空条目） |
+| `list_quality_issues` | 列出待解决的质量问题 |
 | `fix_suggest` | 生成质量问题的修复建议 |
 | `apply_quality_gate` | 施放质量门禁（阻塞/降级/仅警告） |
 | `show_wiki_browser` | 显示 Wiki 浏览器入口 |
+| `list_workspaces` | 列出所有工作区 |
+| `set_active_workspace` | 设置当前工作区 |
+| `register_workspace` | 注册新的工作区 |
+| `sync_push` / `sync_pull` / `sync_status` | Git 式同步 |
+| `submit_patch_proposal` / `list_patch_proposals` | 补丁提案 |
+| `list_extraction_plugins` / `probe_extraction` | 插件管理与探测 |
 
 ### 资源 (2)
 
@@ -158,7 +193,7 @@ AI: [调用 search_knowledge 工具]
 ```
 ┌──────────────────────────────────────────────────┐
 │            AI Client (Claude / Cursor)            │
-│               30 MCP tools via JSON-RPC           │
+│               53 MCP tools via JSON-RPC           │
 └──────────────┬───────────────┬───────────────────┘
                │ stdio         │ HTTP
                ▼               ▼
@@ -215,6 +250,8 @@ knowledge_base/
 
 ```yaml
 ---
+entry_type: concept       # concept | entity | source-summary | comparison | overview
+confidence: high          # high | medium | low
 title: "HTTP/2 多路复用"
 domain: "IT"
 source: "raw/rfc7540.pdf"

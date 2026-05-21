@@ -6,40 +6,61 @@
 
 use crate::embed::Assets;
 use crate::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use crate::tools::code_mode::TYPESCRIPT_SDK;
 
 pub fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
-    let resources = serde_json::json!({
-        "resources": [
-            {
-                "uri": "ui://wiki/browser",
-                "name": "Wiki Browser",
-                "description": "Interactive wiki knowledge browser with tree navigation, full-text search, concept maps, and backlinks. Built with Vue3 SPA.",
-                "mimeType": "text/html",
-                "annotations": {
-                    "audience": ["user"],
-                    "priority": 0.8
-                }
-            },
-            {
-                "uri": "ui://dashboard/health",
-                "name": "Knowledge Health Dashboard",
-                "description": "Dashboard showing knowledge base health metrics, domain distribution, index statistics, and server configuration.",
-                "mimeType": "text/html",
-                "annotations": {
-                    "audience": ["user"],
-                    "priority": 0.7
-                }
+    let resources = vec![
+        serde_json::json!({
+            "uri": "compendium://sdk/typescript",
+            "name": "Compendium TypeScript API",
+            "description": "Code Mode API signatures for execute_compendium (read once, then call methods via calls batch).",
+            "mimeType": "text/plain",
+            "annotations": {
+                "audience": ["assistant"],
+                "priority": 0.9
             }
-        ]
-    });
+        }),
+        serde_json::json!({
+            "uri": "ui://wiki/browser",
+            "name": "Wiki Browser",
+            "description": "Interactive wiki knowledge browser with tree navigation, full-text search, concept maps, and backlinks. Built with Vue3 SPA.",
+            "mimeType": "text/html",
+            "annotations": {
+                "audience": ["user"],
+                "priority": 0.8
+            }
+        }),
+        serde_json::json!({
+            "uri": "ui://dashboard/health",
+            "name": "Knowledge Health Dashboard",
+            "description": "Dashboard showing knowledge base health metrics, domain distribution, index statistics, and server configuration.",
+            "mimeType": "text/html",
+            "annotations": {
+                "audience": ["user"],
+                "priority": 0.7
+            }
+        }),
+    ];
+    let resources = serde_json::json!({ "resources": resources });
     JsonRpcResponse::success(request.id.clone(), resources)
 }
 
 pub fn handle_resources_read(request: &JsonRpcRequest) -> JsonRpcResponse {
     let uri = request.params.get("uri").and_then(|u| u.as_str()).unwrap_or("");
 
-    // Both resources serve the same SPA (routes internally via Vue Router)
     match uri {
+        "compendium://sdk/typescript" => JsonRpcResponse::success(
+            request.id.clone(),
+            serde_json::json!({
+                "contents": [
+                    {
+                        "uri": uri,
+                        "mimeType": "text/plain",
+                        "text": TYPESCRIPT_SDK
+                    }
+                ]
+            }),
+        ),
         "ui://wiki/browser" | "ui://dashboard/health" => match Assets::get("index.html") {
             Some(content) => {
                 let html = String::from_utf8_lossy(&content.data).into_owned();
@@ -91,10 +112,11 @@ mod tests {
         let resources = result.get("resources").expect("Should have resources");
         let resources_arr = resources.as_array().expect("Resources should be array");
 
-        assert!(resources_arr.len() >= 2);
+        assert!(resources_arr.len() >= 3);
 
         let uris: Vec<&str> =
             resources_arr.iter().filter_map(|r| r.get("uri").and_then(|u| u.as_str())).collect();
+        assert!(uris.contains(&"compendium://sdk/typescript"));
         assert!(uris.contains(&"ui://wiki/browser"));
         assert!(uris.contains(&"ui://dashboard/health"));
     }
@@ -153,6 +175,18 @@ mod tests {
         let error = response.error.unwrap();
         assert_eq!(error.code, -32602);
         assert!(error.message.contains("Unknown resource URI"));
+    }
+
+    #[test]
+    fn test_handle_resources_read_typescript_sdk() {
+        let request = create_request(
+            "resources/read",
+            serde_json::json!({ "uri": "compendium://sdk/typescript" }),
+        );
+        let response = handle_resources_read(&request);
+        let result = response.result.expect("result");
+        let text = result["contents"][0]["text"].as_str().expect("sdk text");
+        assert!(text.contains("searchKnowledge"));
     }
 
     #[test]

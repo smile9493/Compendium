@@ -4,6 +4,14 @@
 
 本指南详细说明如何使用 AI Agent (Cursor/Claude Desktop) 进行 PDF 知识编译的完整工作流。这是 PDF Module 的核心使用场景。
 
+> **Schema 位置**：Wiki 维护读 `knowledge_base/schema/AGENTS.md`（ingest / query / lint）；根目录 `CLAUDE.md` 仅用于本仓库 Rust 开发。新库：`compendium kb init <path>` 或 MCP `init_knowledge_base`。
+
+## MCP Code Mode（可选）
+
+设置 `COMPENDIUM_MCP_MODE=code` 时，MCP 仅暴露 `search_compendium_api` 与 `execute_compendium`；完整 53 个 API 通过 `execute_compendium` 的 `calls: [{ method, args }]` 批次调用。可先读资源 `compendium://sdk/typescript` 或调用 `search_compendium_api`。
+
+详见 [CODE_MODE.md](./CODE_MODE.md)。
+
 ## 核心理念
 
 **Karpathy 编译器模式**: PDF 文档被预编译为结构化 Markdown 知识库，而非传统的 RAG 检索增强生成。
