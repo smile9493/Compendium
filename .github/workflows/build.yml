@@ -55,6 +55,19 @@ jobs:
         with:
           chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
       - name: Run doc tests (pdf-module-rs)
         run: |
           cd pdf-module-rs
@@ -65,26 +78,17 @@ jobs:
           cd pdf-module-rs
           cargo test --all-targets --workspace --all-features --exclude pdf-wasm
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
-
       - name: Verify OpenAPI fixture and generated types
         run: |
           cd pdf-module-rs
           cargo test -p pdf-mcp api_doc::tests::openapi_fixture_matches_code
           cd crates/pdf-mcp/pdf-web-ui
-          npm ci
           npm run generate:api
           git diff --exit-code ../tests/fixtures/openapi.json src/api/generated.d.ts
 
       - name: Build and test pdf-web-ui
         run: |
           cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
-          npm run build
           npm test
 
       - name: Playwright e2e (pdf-web-ui)
