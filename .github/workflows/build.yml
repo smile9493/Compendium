@@ -58,12 +58,12 @@ jobs:
       - name: Run doc tests (pdf-module-rs)
         run: |
           cd pdf-module-rs
-          cargo test --doc --all-features
+          cargo test --doc --workspace --all-features --exclude pdf-wasm
 
       - name: Run tests (pdf-module-rs)
         run: |
           cd pdf-module-rs
-          cargo test --all-targets --all-features
+          cargo test --all-targets --workspace --all-features --exclude pdf-wasm
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -116,7 +116,7 @@ jobs:
       - name: Check documentation
         run: |
           cd pdf-module-rs
-          cargo doc --no-deps --document-private-items --all-features
+          cargo doc --no-deps --document-private-items --workspace --all-features --exclude pdf-wasm
 
   security-audit:
     name: Security Audit
