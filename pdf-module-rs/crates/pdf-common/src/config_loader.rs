@@ -145,7 +145,7 @@ impl Default for SecuritySettings {
 /// 2. `config.toml` (or the file at `config_path`)
 /// 3. `config.local.toml` (git-ignored overrides)
 /// 4. Rust `Default` impl
-pub fn load_config<T: DeserializeOwned + Default>(
+pub fn load_config<T: DeserializeOwned + Default + Serialize>(
     config_path: Option<PathBuf>,
 ) -> Result<T, figment::Error> {
     let config_file = config_path.unwrap_or_else(|| PathBuf::from("config.toml"));
@@ -162,7 +162,7 @@ pub fn load_config<T: DeserializeOwned + Default>(
 ///
 /// After loading defaults and config.toml, applies
 /// `config.{profile}.toml` overrides, then env vars.
-pub fn load_config_with_profile<T: DeserializeOwned + Default>(
+pub fn load_config_with_profile<T: DeserializeOwned + Default + Serialize>(
     config_path: Option<PathBuf>,
     profile: &str,
 ) -> Result<T, figment::Error> {

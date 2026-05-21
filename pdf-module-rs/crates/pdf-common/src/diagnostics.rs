@@ -62,8 +62,8 @@ impl Diagnostic for PdfDiagnostic {
     fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
         Some(Box::new(self.error_code.clone()))
     }
-    fn help<'a>(&'a self) -> Option<&'a str> {
-        Some(&self.help_text)
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(self.help_text.clone()))
     }
     fn severity(&self) -> Option<miette::Severity> {
         match self.severity_level.as_str() {
@@ -207,17 +207,9 @@ impl DiagnosticExt for crate::PdfError {
 /// }
 /// ```
 pub fn install_handler() {
-    miette::set_hook(Box::new(|_| {
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .terminal_links(true)
-                .unicode(true)
-                .context_lines(3)
-                .tab_width(4)
-                .build(),
-        )
-    }))
-    .expect("failed to install miette error hook");
+    let _ = miette::set_hook(Box::new(|_| {
+        Box::new(miette::GraphicalReportHandler::new())
+    }));
 }
 
 #[cfg(test)]
