@@ -28,8 +28,8 @@ hide:
 </p>
 
 <p align="center">
-  <a href="KARPATHY_QUICKSTART.md" class="md-button md-button--primary">5 分钟快速开始</a>
-  <a href="AI_AGENT_SETUP_GUIDE.md" class="md-button">安装指南</a>
+  <a href="KARPATHY_QUICKSTART/" class="md-button md-button--primary">5 分钟快速开始</a>
+  <a href="AI_AGENT_SETUP_GUIDE/" class="md-button">安装指南</a>
   <a href="https://github.com/smile9493/Compendium" class="md-button">:fontawesome-brands-github: GitHub</a>
 </p>
 
