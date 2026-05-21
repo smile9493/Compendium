@@ -260,6 +260,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
       - name: Build MCP Server
         run: |
           cd pdf-module-rs

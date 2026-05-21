@@ -38,6 +38,19 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
       - name: Check compilation (all targets, all features)
         run: cargo check --workspace --all-targets --all-features
 
@@ -149,6 +162,21 @@ jobs:
         uses: ./.github/actions/setup-pdfium
         with:
           chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
+
+      - name: Setup Node.js
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
 
       - name: Run tests (ubuntu)
         if: matrix.os == 'ubuntu-latest'
