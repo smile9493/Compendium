@@ -4,7 +4,8 @@ use pdf_core::knowledge::{
     WikiPatchRequest, apply_patch_proposal, list_patch_proposals, submit_patch_proposal,
 };
 use pdf_core::management::{
-    FileSyncRemote, WorkspaceEntry, WorkspaceRegistry, sync_pull, sync_push, sync_status,
+    FileSyncRemote, SyncConflictResolution, WorkspaceEntry, WorkspaceRegistry, sync_pull,
+    sync_push, sync_status,
 };
 
 use crate::protocol::Content;
@@ -78,6 +79,15 @@ pub async fn handle_probe_extraction(
     })
 }
 
+fn conflict_resolution_from_args(args: &serde_json::Value) -> SyncConflictResolution {
+    match args.get("conflict_resolution").and_then(|v| v.as_str()) {
+        Some("prefer_local") => SyncConflictResolution::PreferLocal,
+        Some("prefer_remote") => SyncConflictResolution::PreferRemote,
+        Some("prefer_newest") => SyncConflictResolution::PreferNewest,
+        _ => SyncConflictResolution::Abort,
+    }
+}
+
 fn remote_from_args(args: &serde_json::Value) -> anyhow::Result<FileSyncRemote> {
     let url = args["remote_url"].as_str().ok_or_else(|| anyhow::anyhow!("remote_url required"))?;
     FileSyncRemote::from_url(url).map_err(|e| anyhow::anyhow!("{e}"))
@@ -99,7 +109,8 @@ pub async fn handle_sync_push(
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb = parse_kb_path(registry, args)?;
     let remote = remote_from_args(args)?;
-    let report = sync_push(&kb, &remote).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let resolution = conflict_resolution_from_args(args);
+    let report = sync_push(&kb, &remote, resolution).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(vec![Content::text(serde_json::to_string_pretty(&report)?)])
 }
 
@@ -109,7 +120,8 @@ pub async fn handle_sync_pull(
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb = parse_kb_path(registry, args)?;
     let remote = remote_from_args(args)?;
-    let report = sync_pull(&kb, &remote).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let resolution = conflict_resolution_from_args(args);
+    let report = sync_pull(&kb, &remote, resolution).map_err(|e| anyhow::anyhow!("{e}"))?;
     if args["rebuild_index"].as_bool().unwrap_or(true) && report.rebuilt_index_recommended {
         pdf_core::knowledge::rebuild_all(&kb).map_err(|e| anyhow::anyhow!("rebuild: {e}"))?;
     }

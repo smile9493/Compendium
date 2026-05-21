@@ -151,6 +151,42 @@ impl VlmGateway {
         });
     }
 
+    /// Describe a standalone image (PNG/JPEG/WebP) for knowledge compilation.
+    ///
+    /// Uses the chat-completions endpoint with base64 `data:` URL; rate-limited via semaphore.
+    #[tracing::instrument(skip(self, image_bytes))]
+    pub async fn describe_image(&self, image_bytes: &[u8], mime: &str) -> VlmResult<String> {
+        if image_bytes.is_empty() {
+            return Err(VlmError::InvalidImage("image_bytes is empty".into()));
+        }
+        let permit = self
+            .semaphore
+            .acquire()
+            .await
+            .map_err(|_| VlmError::Unavailable("semaphore closed".into()))?;
+
+        let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, image_bytes);
+        let payload = VlmPayload {
+            image: b64,
+            hint: None,
+            metadata: PayloadMetadata { page_width: 1.0, page_height: 1.0, page_number: 1 },
+            model: self.config.model.model_id().to_string(),
+        };
+
+        let prompt = "Describe this image for a personal knowledge base. \
+            Output structured Markdown: visible text, diagram semantics, key concepts, and uncertainty.";
+
+        let body = timeout(
+            self.config.timeout,
+            self.send_chat_request_with_prompt(&payload, prompt, false, false, mime),
+        )
+        .await
+        .map_err(|_| VlmError::Timeout(self.config.timeout.as_secs()))??;
+
+        drop(permit);
+        Self::extract_chat_message_text(&body)
+    }
+
     /// Health check — lightweight GET to the endpoint.
     pub async fn health_check(&self) -> bool {
         self.client
@@ -305,13 +341,32 @@ impl VlmGateway {
         let enable_function_call =
             self.config.enable_function_call && self.config.model.supports_function_call();
 
-        let chat_request = payload.to_chat_request(
+        self.send_chat_request_with_prompt(
+            payload,
             "Analyze this PDF page and identify all layout regions. \
              For each region, provide: type (title/body/table/image/caption), \
              coordinates as [xmin,ymin,xmax,ymax], and a brief content description. \
              Format each region on a separate line.",
             enable_thinking,
             enable_function_call,
+            "image/png",
+        )
+        .await
+    }
+
+    async fn send_chat_request_with_prompt(
+        &self,
+        payload: &VlmPayload,
+        system_prompt: &str,
+        enable_thinking: bool,
+        enable_function_call: bool,
+        image_mime: &str,
+    ) -> VlmResult<String> {
+        let chat_request = payload.to_chat_request_mime(
+            system_prompt,
+            enable_thinking,
+            enable_function_call,
+            image_mime,
         );
 
         let resp = self
@@ -401,17 +456,20 @@ impl VlmGateway {
         }
     }
 
-    fn parse_chat_response(&self, body: &str) -> VlmResult<LayoutResult> {
+    fn extract_chat_message_text(body: &str) -> VlmResult<String> {
         let chat_response: ChatCompletionResponse =
             serde_json::from_str(body).map_err(|e| VlmError::ParseError(e.to_string()))?;
-
-        let message_content = chat_response
+        chat_response
             .choices
             .first()
-            .and_then(|c| c.message.content.as_ref())
-            .ok_or_else(|| VlmError::ParseError("empty response from VLM".into()))?;
+            .and_then(|c| c.message.content.clone())
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| VlmError::ParseError("empty response from VLM".into()))
+    }
 
-        let regions = self.parse_layout_from_text(message_content);
+    fn parse_chat_response(&self, body: &str) -> VlmResult<LayoutResult> {
+        let message_content = Self::extract_chat_message_text(body)?;
+        let regions = self.parse_layout_from_text(&message_content);
 
         Ok(LayoutResult { regions, reading_order: Vec::new(), confidence: 1.0 })
     }

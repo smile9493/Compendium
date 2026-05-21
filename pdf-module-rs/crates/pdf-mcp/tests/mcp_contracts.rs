@@ -12,9 +12,15 @@ use pdf_mcp_contracts::{
 fn manifest_matches_tool_definitions() {
     let defs = all_tool_definitions();
     let specs = pdf_mcp_contracts::all_tool_specs();
-    assert_eq!(defs.len(), specs.len());
-    for spec in specs {
-        let def = defs.iter().find(|d| d.name == spec.name).expect("tool in list");
+    let core_specs: Vec<_> =
+        specs.iter().filter(|s| pdf_mcp_contracts::listed_in_default_manifest(&s.name)).collect();
+    assert_eq!(defs.len(), core_specs.len());
+    assert_eq!(
+        defs.len(),
+        pdf_mcp_contracts::tools_in_tier(pdf_mcp_contracts::ToolExposureTier::Core).len()
+    );
+    for spec in core_specs {
+        let def = defs.iter().find(|d| d.name == spec.name).expect("core tool in default list");
         assert_eq!(def.input_schema, spec.input_schema);
         assert_eq!(def.output_schema.as_ref(), Some(&spec.output_schema));
     }

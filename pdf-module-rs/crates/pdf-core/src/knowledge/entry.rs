@@ -49,6 +49,29 @@ where
     }
 }
 
+/// Karpathy-style page type (orthogonal to `level`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryType {
+    #[default]
+    Concept,
+    Entity,
+    #[serde(alias = "source-summary")]
+    SourceSummary,
+    Comparison,
+    Overview,
+}
+
+/// Confidence in claims on this page (not PDF extraction quality).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryConfidence {
+    High,
+    #[default]
+    Medium,
+    Low,
+}
+
 /// Classification level of a knowledge entry in the compilation pyramid.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -168,6 +191,12 @@ pub struct KnowledgeEntry {
     /// Compilation level in the knowledge pyramid.
     #[serde(default)]
     pub level: EntryLevel,
+    /// Page type (concept, entity, source-summary, comparison, overview).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<EntryType>,
+    /// Confidence in synthesized claims on this page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<EntryConfidence>,
 
     // === Linkage ===
     /// Paths to entries this entry explicitly contradicts.
@@ -199,6 +228,46 @@ pub struct KnowledgeEntry {
     pub created: DateTime<Utc>,
     #[serde(serialize_with = "serialize_utc_date", deserialize_with = "deserialize_utc_date")]
     pub updated: DateTime<Utc>,
+    /// Last human or agent validation of claims on this page (decay tracking).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_opt_utc_date",
+        deserialize_with = "deserialize_opt_utc_date"
+    )]
+    pub last_validated: Option<DateTime<Utc>>,
+}
+
+fn serialize_opt_utc_date<S>(date: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match date {
+        Some(d) => serialize_utc_date(d, serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_opt_utc_date<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(s) if s.is_empty() => Ok(None),
+        Some(s) => {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
+                return Ok(Some(dt.with_timezone(&Utc)));
+            }
+            if let Ok(naive) = NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+                && let Some(dt) = naive.and_hms_opt(0, 0, 0)
+            {
+                return Ok(Some(DateTime::from_naive_utc_and_offset(dt, Utc)));
+            }
+            Err(serde::de::Error::custom(format!("invalid last_validated: '{s}'")))
+        }
+    }
 }
 
 fn default_quality() -> f32 {
@@ -218,6 +287,8 @@ impl KnowledgeEntry {
             source_hash: None,
             tags: Vec::new(),
             level: EntryLevel::L1,
+            entry_type: Some(EntryType::Concept),
+            confidence: Some(EntryConfidence::Medium),
             contradictions: Vec::new(),
             related: Vec::new(),
             aggregated_from: Vec::new(),
@@ -227,6 +298,7 @@ impl KnowledgeEntry {
             version: 1,
             created: now,
             updated: now,
+            last_validated: None,
         }
     }
 
@@ -243,13 +315,8 @@ impl KnowledgeEntry {
     /// Extract front matter from a complete Markdown file content.
     /// Returns `None` if no valid front matter block is found.
     pub fn from_markdown(content: &str) -> Option<Self> {
-        let content = content.trim_start();
-        if !content.starts_with("---") {
-            return None;
-        }
-        let after_first = &content[3..];
-        let end = after_first.find("---")?;
-        let yaml = &after_first[..end].trim();
+        let _body = extract_markdown_body(content)?;
+        let yaml = extract_front_matter_yaml(content)?;
         match Self::from_yaml(yaml) {
             Ok(entry) => Some(entry),
             Err(e) => {
@@ -259,6 +326,44 @@ impl KnowledgeEntry {
         }
     }
 
+    /// Body after the first closing `---` delimiter (same rules as [`from_markdown`]).
+    ///
+    /// Returns `None` only when front matter is present but not closed. Files without
+    /// front matter return the full trimmed content.
+    pub fn extract_markdown_body(content: &str) -> Option<&str> {
+        extract_markdown_body(content)
+    }
+}
+
+/// YAML between the opening and first closing `---` (no delimiters in string).
+pub fn extract_front_matter_yaml(content: &str) -> Option<&str> {
+    let content = content.trim_start();
+    if !content.starts_with("---") {
+        return None;
+    }
+    let after_first = &content[3..];
+    let end = after_first.find("---")?;
+    Some(after_first[..end].trim())
+}
+
+/// Markdown body after front matter; preserves `---` horizontal rules in the body.
+pub fn extract_markdown_body(content: &str) -> Option<&str> {
+    let content = content.trim_start();
+    if !content.starts_with("---") {
+        return Some(content);
+    }
+    let after_first = &content[3..];
+    let end = after_first.find("---")?;
+    let mut body = &after_first[end + 3..];
+    if let Some(stripped) = body.strip_prefix("\r\n") {
+        body = stripped;
+    } else if let Some(stripped) = body.strip_prefix('\n') {
+        body = stripped;
+    }
+    Some(body)
+}
+
+impl KnowledgeEntry {
     /// Build a complete Markdown file: front matter + body.
     pub fn to_markdown(&self, body: &str) -> Result<String, serde_yaml::Error> {
         let yaml = self.to_yaml()?;
@@ -304,6 +409,8 @@ mod tests {
             source_hash: Some("abc123".into()),
             tags: vec!["http".into(), "networking".into()],
             level: EntryLevel::L1,
+            entry_type: Some(EntryType::Concept),
+            confidence: Some(EntryConfidence::High),
             contradictions: vec![],
             related: vec!["wiki/it/http1.md".into()],
             aggregated_from: vec![],
@@ -313,6 +420,7 @@ mod tests {
             version: 1,
             created: Utc::now(),
             updated: Utc::now(),
+            last_validated: None,
         };
 
         let yaml = entry.to_yaml().unwrap();
@@ -320,6 +428,30 @@ mod tests {
         assert_eq!(parsed.title, "HTTP/2 多路复用");
         assert_eq!(parsed.domain, "IT");
         assert_eq!(parsed.tags, vec!["http", "networking"]);
+    }
+
+    #[test]
+    fn test_extract_markdown_body_preserves_horizontal_rules() {
+        let md = r#"---
+title: "HR"
+domain: "IT"
+tags: [a]
+level: l1
+status: compiled
+quality_score: 0.5
+created: 2026-01-01T00:00:00Z
+updated: 2026-01-01T00:00:00Z
+---
+
+# Section
+
+---
+
+More content."#;
+        let body = extract_markdown_body(md).expect("body");
+        assert!(body.contains("# Section"));
+        assert!(body.contains("---"));
+        assert!(body.contains("More content"));
     }
 
     #[test]

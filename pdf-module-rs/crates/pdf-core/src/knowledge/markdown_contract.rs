@@ -41,6 +41,27 @@ pub fn analyze_markdown_body(body: &str) -> MarkdownStructure {
     MarkdownStructure { heading_count, wikilink_count, fenced_code_blocks }
 }
 
+/// Extract `[[target]]` paths from markdown body (no front matter).
+pub fn extract_wikilink_targets(body: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    for line in body.lines() {
+        let mut rest = line;
+        while let Some(start) = rest.find("[[") {
+            let after = &rest[start + 2..];
+            if let Some(end) = after.find("]]") {
+                let target = after[..end].trim().to_string();
+                if !target.is_empty() {
+                    targets.push(target);
+                }
+                rest = &after[end + 2..];
+            } else {
+                break;
+            }
+        }
+    }
+    targets
+}
+
 fn count_wikilinks(line: &str) -> usize {
     let mut count = 0usize;
     let mut rest = line;

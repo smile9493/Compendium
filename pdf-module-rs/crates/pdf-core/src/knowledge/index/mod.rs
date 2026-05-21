@@ -23,13 +23,13 @@ pub mod vector;
 pub use cache::{IndexCache, KbIndexes};
 pub use community::{Community, detect_communities};
 pub use facade::{
-    RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, graph, rebuild_all,
-    rebuild_vectors, reindex_entry, search, search_with_mode, search_with_options,
-    search_with_options_ft, wiki_dir,
+    RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, default_search_mode,
+    graph, rebuild_all, rebuild_all_with_policy, rebuild_vectors, reindex_entry, search,
+    search_with_mode, search_with_options, search_with_options_ft, wiki_dir,
 };
 pub use fulltext::FulltextIndex;
 pub use fulltext_shard::FulltextShardManager;
-pub use graph::GraphIndex;
+pub use graph::{GraphIndex, LoadBearingEntry, ProtectionLevel};
 pub use graph_partition::GraphPartitionStore;
 pub use lazy_loader::LazyLoadingCoordinator;
 pub use metadata_store::{MetadataStore, extract_domain};

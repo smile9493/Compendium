@@ -14,10 +14,15 @@
   - [extrude_to_server_wiki](#extrude_to_server_wiki)
   - [extrude_to_agent_payload](#extrude_to_agent_payload)
 - [知识编译工具](#知识编译工具)
+  - [init_knowledge_base](#init_knowledge_base)
   - [compile_to_wiki](#compile_to_wiki)
   - [incremental_compile](#incremental_compile)
+  - [save_wiki_entry](#save_wiki_entry)
+  - [complete_compile_job](#complete_compile_job)
   - [recompile_entry](#recompile_entry)
   - [aggregate_entries](#aggregate_entries)
+  - [lint_wiki](#lint_wiki)
+  - [archive_answer](#archive_answer)
   - [check_quality](#check_quality)
   - [micro_compile](#micro_compile)
   - [hypothesis_test](#hypothesis_test)
@@ -25,6 +30,10 @@
   - [search_knowledge](#search_knowledge)
   - [rebuild_index](#rebuild_index)
   - [get_entry_context](#get_entry_context)
+  - [get_agent_context](#get_agent_context)
+  - [get_compilation_context](#get_compilation_context)
+  - [preview_wiki_patch](#preview_wiki_patch)
+  - [patch_wiki_entry](#patch_wiki_entry)
   - [find_orphans](#find_orphans)
   - [suggest_links](#suggest_links)
   - [export_concept_map](#export_concept_map)
@@ -38,6 +47,7 @@
   - [fix_suggest](#fix_suggest)
   - [apply_quality_gate](#apply_quality_gate)
   - [show_wiki_browser](#show_wiki_browser)
+  - [compile_uploaded_pdf](#compile_uploaded_pdf)
 
 ---
 
@@ -218,6 +228,38 @@
 
 ## 知识编译工具
 
+### init_knowledge_base
+
+初始化一个空的 Karpathy 风格知识库。创建 `schema/`、`wiki/`、`raw/` 目录结构并填充模板文件。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"knowledge_base\": \"/kb\",\n  \"created_files\": [\n    \"schema/AGENTS.md\",\n    \"schema/CLAUDE.md\",\n    \"wiki/index.md\",\n    \"wiki/log.md\",\n    \"raw/.gitkeep\"\n  ],\n  \"skipped_files\": []\n}"
+    }
+  ]
+}
+```
+
+**工作流程**
+
+1. 检查目标路径是否为空（非空跳过）
+2. 创建 `schema/`、`wiki/`、`raw/` 目录
+3. 写入模板文件
+4. 初始 `index.md` 和空的 `log.md`
+
+---
+
 ### compile_to_wiki
 
 将 PDF 编译到知识库，这是 Karpathy 编译器模式的核心入口。
@@ -283,6 +325,67 @@
 
 ---
 
+### save_wiki_entry
+
+创建或更新 wiki 知识条目，支持 YAML front matter（含 `entry_type` / `confidence`）。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+| `entry_path` | string | 是 | 条目相对路径 (如 `it/concept.md`) |
+| `body` | string | 是 | Markdown 正文 |
+| `entry_type` | string | 否 | 条目类型：concept / entity / source-summary / comparison / overview |
+| `confidence` | string | 否 | 置信度：high / medium / low |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"path\": \"kb/wiki/it/concept.md\",\n  \"entry_type\": \"concept\",\n  \"confidence\": \"high\"\n}"
+    }
+  ]
+}
+```
+
+**自动操作**
+
+- 自动附加 YAML front matter
+- 调用 `sync_nervous_system` 更新 `index.md` + `log.md`
+
+---
+
+### complete_compile_job
+
+完成编译 job：重建索引、施放质量门禁、生成人类可读综述。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+| `stage` | string | 是 | 当前阶段：compile / quality / index / done |
+| `gate_decision` | string | 否 | quality gate 决策：pass / warn / block |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"stage\": \"done\",\n  \"human_review_summary\": \"编译完成。本 job 处理了 3 个 PDF、生成了 12 个 L1 条目和 1 个 L2 聚合。索引已重建。\",\n  \"quality_issues\": 0,\n  \"index_built\": true\n}"
+    }
+  ]
+}
+```
+
+---
+
 ### recompile_entry
 
 重新编译单个知识条目，用于质量漂移修正。
@@ -343,6 +446,74 @@
 - 基于标签共现 (Jaccard ≥ 0.3)
 - 同领域内聚类
 - 最小簇大小为 2
+
+---
+
+### lint_wiki
+
+Karpathy 聚合 lint：同时对知识库进行多项质量检查并返回统一报告。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"orphans\": [\"wiki/unlinked_concept.md\"],\n  \"broken_wikilinks\": [{\"source\": \"wiki/it/nginx.md\", \"target\": \"wiki/unknown.md\"}],\n  \"contradictions\": [{\"entry_a\": \"wiki/it/a.md\", \"entry_b\": \"wiki/it/b.md\"}],\n  \"drift_hints\": [],\n  \"missing_concept_hints\": [{\"entry\": \"wiki/it/http3.md\", \"missing\": [\"QUIC\"]}],\n  \"recommended_research\": [\"QUIC\"]\n}"
+    }
+  ]
+}
+```
+
+**检查项目**
+
+- **孤儿条目**: 没有任何入边链接的条目
+- **断链**: 引用了不存在的 `[[wikilink]]` 目标
+- **矛盾**: 声明相悖的条目对
+- **漂移**: 内容一致性显著偏差的条目
+- **缺页概念**: 被高频引用但自身不存在的概念
+
+---
+
+### archive_answer
+
+将 AI Agent 的问答对话结果回写为知识库的 overview 页面。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+| `question` | string | 是 | 用户原始提问 |
+| `answer` | string | 是 | AI 回答正文 |
+| `references` | string[] | 否 | 引用的 wiki 条目路径列表 |
+| `domain` | string | 否 | 领域分类 |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"path\": \"kb/wiki/tmp/qa_2026-05-21_http2-explained.md\",\n  \"entry_type\": \"overview\",\n  \"confidence\": \"medium\"\n}"
+    }
+  ]
+}
+```
+
+**使用场景**
+
+- LLM 在对话中回答了复杂问题
+- 用户希望将优质 QA 持久化到知识库
+- 从 `search_knowledge` 结果中生成综述
 
 ---
 
@@ -445,7 +616,7 @@
 
 ### search_knowledge
 
-Tantivy 全文搜索知识库。
+多模态搜索知识库，支持 keyword / semantic / hybrid / wiki_first 四种模式。
 
 **参数**
 
@@ -453,7 +624,17 @@ Tantivy 全文搜索知识库。
 |------|------|------|------|
 | `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
 | `query` | string | 是 | 搜索查询 |
+| `mode` | string | 否 | 搜索模式：keyword / semantic / hybrid / wiki_first |
 | `limit` | number | 否 | 结果数量限制，默认 10 |
+
+**搜索模式**
+
+| 模式 | 说明 |
+|------|------|
+| `keyword` | Tantivy 全文检索，CJK n-gram 分词 |
+| `semantic` | TF-IDF 向量嵌入相似度检索 |
+| `hybrid` | 混合检索（keyword + semantic RRF 融合），默认模式 |
+| `wiki_first` | 读取 `index.md` + 图遍历，优先走 wiki 内部链接 |
 
 **返回值**
 
@@ -470,8 +651,10 @@ Tantivy 全文搜索知识库。
 
 **搜索特性**
 
+- 四种模式：keyword / semantic / hybrid / wiki_first
 - CJK n-gram 分词
 - 搜索 title/body/tags/domain
+- wiki_first 模式：解析 `index.md` 符号表 + 图邻居排序
 - 自动重建空索引
 
 ---
@@ -863,6 +1046,33 @@ Tantivy 全文搜索知识库。
     {
       "type": "text",
       "text": "{\n  \"type\": \"resource\",\n  \"uri\": \"ui://wiki/browser\",\n  \"message\": \"Wiki browser opened. The client should render ui://wiki/browser as an MCP App iframe.\"\n}"
+    }
+  ]
+}
+```
+
+---
+
+### compile_uploaded_pdf
+
+编译通过上传 API 提交的 PDF 文件到知识库。
+
+**参数**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `upload_id` | string | 是 | 上传 API 返回的文件 ID |
+| `knowledge_base` | string | 是 | 知识库根目录的绝对路径 |
+| `domain` | string | 否 | 领域分类 |
+
+**返回值**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"raw_path\": \"/kb/raw/uploaded_paper.md\",\n  \"entries\": [...],\n  \"source_hash\": \"...\",\n  \"page_count\": 30\n}"
     }
   ]
 }

@@ -42,7 +42,7 @@
  * @property {string} [domain]
  */
 
-/** @typedef {'keyword' | 'semantic' | 'hybrid'} SearchMode */
+/** @typedef {'keyword' | 'semantic' | 'hybrid' | 'wiki_first'} SearchMode */
 
 /** @typedef {object} ExtractionHealth */
 /**

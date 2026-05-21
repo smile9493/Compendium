@@ -6,6 +6,7 @@ mod json;
 mod knowledge;
 mod management;
 pub mod mcp_extraction;
+mod meta_tools;
 mod platform;
 pub mod post_compile;
 mod resources;
@@ -14,6 +15,7 @@ pub use extract::*;
 pub use index::*;
 pub use knowledge::*;
 pub use management::*;
+pub use meta_tools::*;
 pub use platform::*;
 pub use resources::*;
 
@@ -81,7 +83,11 @@ pub fn all_tool_definitions() -> Vec<ToolDefinition> {
     if code_mode::is_code_mode() {
         return code_mode::tool_definitions();
     }
-    pdf_mcp_contracts::all_tool_specs().into_iter().map(ToolDefinition::from).collect()
+    pdf_mcp_contracts::all_tool_specs()
+        .into_iter()
+        .filter(|s| pdf_mcp_contracts::listed_in_default_manifest(&s.name))
+        .map(ToolDefinition::from)
+        .collect()
 }
 
 pub fn mcp_mode_label() -> &'static str {
@@ -112,6 +118,20 @@ pub async fn dispatch_api_tool(
     tool_name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
+    if !pdf_mcp_contracts::direct_call_allowed(tool_name) {
+        anyhow::bail!(
+            "tool '{tool_name}' is CodeOnly — use COMPENDIUM_MCP_MODE=code with execute_compendium, or set COMPENDIUM_UNLOCK_CODE_TOOLS=1"
+        );
+    }
+    dispatch_api_tool_inner(ctx, tool_name, args).await
+}
+
+/// Dispatch without tier guard (Code Mode `execute_compendium` batches).
+pub async fn dispatch_api_tool_inner(
+    ctx: &ToolContext,
+    tool_name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<Content>> {
     match tool_name {
         "extract_text" => handle_extract_text(ctx, args).await,
         "extract_structured" => handle_extract_structured(ctx, args).await,
@@ -121,8 +141,14 @@ pub async fn dispatch_api_tool(
         "extrude_to_agent_payload" => handle_extrude_to_agent_payload(ctx, args).await,
         "init_knowledge_base" => handle_init_knowledge_base(args).await,
         "lint_wiki" => handle_lint_wiki(args).await,
+        "detect_stale_entries" => handle_detect_stale_entries(&ctx.workspace_registry, args).await,
+        "ingest" => handle_meta_ingest(ctx, args).await,
+        "query" => handle_meta_query(ctx, args).await,
+        "lint" => handle_meta_lint(ctx, args).await,
+        "load_tools" => handle_load_tools(args).await,
         "archive_answer" => handle_archive_answer(args).await,
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
+        "compile_image" => handle_compile_image(ctx, args).await,
         "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
         "incremental_compile" => handle_incremental_compile(ctx, args).await,
         "search_knowledge" => handle_search_knowledge(ctx, args).await,

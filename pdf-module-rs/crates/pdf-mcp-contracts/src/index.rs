@@ -42,6 +42,16 @@ pub struct SearchMetaOut {
 pub struct RebuildIndexInput {
     #[serde(flatten)]
     pub kb: KbPathInput,
+    #[serde(default)]
+    pub dry_run: bool,
+    #[serde(default = "default_auto_write")]
+    pub auto_write: bool,
+    #[serde(default)]
+    pub propagation_depth: Option<u8>,
+}
+
+fn default_auto_write() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

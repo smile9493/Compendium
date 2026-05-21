@@ -1,7 +1,7 @@
 //! Code Mode MCP tools — search + execute batch over the full tool dispatch table.
 
 use crate::protocol::Content;
-use crate::tools::{ToolContext, dispatch_api_tool};
+use crate::tools::{ToolContext, dispatch_api_tool_inner};
 use pdf_mcp_contracts::{
     CompendiumCallResult, CompendiumMcpMode, ExecuteCompendiumInput, ExecuteCompendiumOutput,
     SearchCompendiumApiInput, SearchCompendiumApiOutput, allowed_tool_names, code_mode_tool_specs,
@@ -109,7 +109,7 @@ pub async fn handle_execute_compendium(
             continue;
         }
 
-        match dispatch_api_tool(ctx, &call.method, &call.args).await {
+        match dispatch_api_tool_inner(ctx, &call.method, &call.args).await {
             Ok(content) => {
                 let data = content_to_json(&content);
                 let (data, was_truncated) = truncate_result_value(data, max_result_chars);
@@ -145,7 +145,7 @@ pub async fn handle_execute_compendium(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::{create_test_tool_context, dispatch_api_tool};
+    use crate::tools::create_test_tool_context;
 
     #[test]
     fn typescript_sdk_embedded() {
@@ -166,7 +166,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_api_list_workspaces() {
         let ctx = create_test_tool_context();
-        let content = dispatch_api_tool(&ctx, "list_workspaces", &serde_json::json!({}))
+        let content = dispatch_api_tool_inner(&ctx, "list_workspaces", &serde_json::json!({}))
             .await
             .expect("list_workspaces");
         assert!(!content.is_empty());

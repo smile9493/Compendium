@@ -7,7 +7,6 @@
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};
-use pdf_core::knowledge::index::FulltextIndex;
 use pdf_core::management::{ConfigManager, HealthReporter};
 use pdf_core::{GraphIndex, KnowledgeEngine, McpPdfPipeline, ServerConfig};
 use serde_json::Value;
@@ -227,23 +226,21 @@ pub fn remove_config(kb_path: &Path, key: &str) -> Result<Value> {
     }))
 }
 
-/// Rebuild fulltext and graph indexes.
-pub fn rebuild_index(kb_path: &Path) -> Result<Value> {
-    let wiki_dir = kb_path.join("wiki");
-    if !wiki_dir.exists() {
-        anyhow::bail!("Wiki directory not found: {}", wiki_dir.display());
-    }
-
-    let ft_idx = FulltextIndex::open_or_create(kb_path)?;
-    let ft_count = ft_idx.rebuild(&wiki_dir)?;
-
-    let mut g_idx = GraphIndex::new();
-    let g_count = g_idx.rebuild(&wiki_dir)?;
-
+/// Rebuild fulltext, graph, vector indexes; run confidence propagation (auto-write unless dry-run).
+pub fn rebuild_index(kb_path: &Path, dry_run: bool) -> Result<Value> {
+    let policy = pdf_core::knowledge::PropagationPolicy {
+        auto_write: !dry_run,
+        dry_run,
+        propagation_depth: 2,
+    };
+    let (stats, propagation) = pdf_core::knowledge::rebuild_all_with_policy(kb_path, &policy)?;
     Ok(serde_json::json!({
-        "fulltext_entries_indexed": ft_count,
-        "graph_nodes": g_count,
-        "graph_edges": g_idx.edge_count(),
+        "fulltext_entries_indexed": stats.fulltext_entries_indexed,
+        "graph_nodes": stats.graph_nodes,
+        "graph_edges": stats.graph_edges,
+        "vector_entries_indexed": stats.vector_entries_indexed,
+        "confidence_propagation": propagation,
+        "dry_run": dry_run,
     }))
 }
 
