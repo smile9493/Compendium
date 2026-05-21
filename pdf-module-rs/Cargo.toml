@@ -75,6 +75,9 @@ regex = "1"
 # Testing utilities
 tempfile = "3"
 
+# Archive creation for knowledge base export/import
+flate2 = "1.0"
+tar = "0.4"
 # Stable hashing for deterministic feature hashing
 fnv = "1.0"
 
