@@ -57,6 +57,9 @@ test_mcp_*.py
 test_raw_response*.py
 test_nginx_wiki.py
 
+# ─── MkDocs build output ────────────────────────
+site/
+
 # ─── Generated Docs / Reports ───────────────────
 RUST_ARCHITECTURE_REVIEW.md
 RUST_DEEP_DIVE_REVIEW.md

@@ -391,13 +391,16 @@ mod tests {
         use pdf_core::knowledge::IndexCache;
         use pdf_core::{McpPdfPipeline, ServerConfig};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static REGISTRY_ID: AtomicU64 = AtomicU64::new(0);
+        let id = REGISTRY_ID.fetch_add(1, Ordering::Relaxed);
+        let registry_path =
+            std::env::temp_dir().join(format!("rsut_index_test_workspaces_{id}.toml"));
 
         let pipeline = Arc::new(McpPdfPipeline::new(&ServerConfig::default()).unwrap());
         let registry = Arc::new(
-            pdf_core::management::WorkspaceRegistry::load(
-                &std::env::temp_dir().join("rsut_index_test_workspaces.toml"),
-            )
-            .expect("registry"),
+            pdf_core::management::WorkspaceRegistry::load(&registry_path).expect("registry"),
         );
         crate::tools::ToolContext::new(pipeline, registry, Arc::new(IndexCache::new()))
     }

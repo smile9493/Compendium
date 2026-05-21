@@ -1,0 +1,33 @@
+name: Setup PDFium (Linux x64)
+description: Restore or download PDFium binaries and export link/runtime env vars
+
+inputs:
+  chromium-version:
+    description: PDFium chromium release tag (bblanchon/pdfium-binaries)
+    required: false
+    default: "7825"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache PDFium libraries
+      id: pdfium-cache
+      uses: actions/cache@v4
+      with:
+        path: lib
+        key: pdfium-${{ inputs.chromium-version }}-linux-x64
+
+    - name: Download PDFium
+      if: steps.pdfium-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -fsSL -o pdfium.tgz \
+          "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${{ inputs.chromium-version }}/pdfium-linux-x64.tgz"
+        tar -xzf pdfium.tgz
+        rm -f pdfium.tgz
+
+    - name: Export PDFium environment
+      shell: bash
+      run: |
+        echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> "${GITHUB_ENV}"
+        echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/lib:${LD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
