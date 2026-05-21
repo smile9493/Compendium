@@ -95,7 +95,15 @@ jobs:
         run: |
           cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
           npx playwright install --with-deps chromium
+          # Start the preview server in the background, wait until ready, run tests, then kill
+          npx vite preview --port 5173 --host 127.0.0.1 --strictPort &
+          VITE_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5173/app/ > /dev/null 2>&1 && break
+            sleep 1
+          done
           npm run test:e2e
+          kill $VITE_PID 2>/dev/null || true
 
       - name: Run clippy (pdf-module-rs)
         run: |
