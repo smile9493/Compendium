@@ -1,0 +1,23 @@
+# cargo-deny configuration for pdf-mcp-installer
+#
+# Usage:
+#   cargo deny check advisories
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+unmaintained = "workspace"
+unsound = "all"
+yanked = "warn"
+ignore = [
+    # Transitive via indicatif 0.17; no maintained alternative available in that dep tree.
+    { id = "RUSTSEC-2025-0119", reason = "number_prefix via indicatif; no workspace upgrade path" },
+    # Transitive via reqwest 0.11 → rustls 0.21; reqwest 0.12 migration tracked separately.
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile via reqwest; upgrade blocked by reqwest 0.11" },
+    # Transitive via reqwest 0.11 → rustls 0.21; reqwest 0.12 migration tracked separately.
+    { id = "RUSTSEC-2026-0098", reason = "rustls-webpki via reqwest; upgrade blocked by reqwest 0.11" },
+    # Same as RUSTSEC-2026-0098 — same dep chain.
+    { id = "RUSTSEC-2026-0099", reason = "rustls-webpki via reqwest; upgrade blocked by reqwest 0.11" },
+    # Same as RUSTSEC-2026-0098 — same dep chain.
+    { id = "RUSTSEC-2026-0104", reason = "rustls-webpki via reqwest; upgrade blocked by reqwest 0.11" },
+]
