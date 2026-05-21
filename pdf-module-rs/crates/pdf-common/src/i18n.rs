@@ -145,7 +145,8 @@ mod tests {
         let msg = t.get("hello-world", Some(&[("name", "World")])).unwrap();
         // Fluent wraps interpolated values in Unicode bidi isolation markers.
         // Strip them for comparison.
-        let stripped: String = msg.chars().filter(|c| !matches!(c, '\u{2068}' | '\u{2069}')).collect();
+        let stripped: String =
+            msg.chars().filter(|c| !matches!(c, '\u{2068}' | '\u{2069}')).collect();
         assert_eq!(stripped, "Hello, World!");
     }
 
