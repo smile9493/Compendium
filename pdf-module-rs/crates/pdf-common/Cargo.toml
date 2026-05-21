@@ -33,3 +33,4 @@ i18n = ["fluent", "unic-langid", "intl-memoizer"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
+tempfile = { workspace = true }
