@@ -8,6 +8,8 @@
 
 [English](./README.en.md) | 简体中文
 
+📖 **在线文档**：[smile9493.github.io/Compendium](https://smile9493.github.io/Compendium/)（MkDocs，见 [docs/PUBLISHING_DOCS.md](docs/PUBLISHING_DOCS.md)）
+
 ## ✨ 特性
 
 - 🔥 **Karpathy 编译器模式** — PDF 预编译为结构化 Markdown，知识可累积、可解释，支持 L0→L1→L2→L3 知识金字塔

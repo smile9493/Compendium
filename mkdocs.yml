@@ -1,0 +1,77 @@
+site_name: Compendium 文档
+site_description: AI 原生 PDF 知识编译引擎 — 用户与集成指南
+site_url: https://smile9493.github.io/Compendium/
+repo_url: https://github.com/smile9493/Compendium
+repo_name: smile9493/Compendium
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - scheme: default
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: 深色模式
+    - scheme: slate
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: 浅色模式
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - 首页: index.md
+  - 快速开始:
+      - Karpathy 模式: KARPATHY_QUICKSTART.md
+      - AI 客户端配置: AI_AGENT_SETUP_GUIDE.md
+      - 客户端安装: CLIENT_SETUP_GUIDE.md
+  - 使用指南:
+      - 知识编译: KNOWLEDGE_COMPILATION_GUIDE.md
+      - Code Mode: CODE_MODE.md
+      - VLM 集成: VLM_INTEGRATION.md
+      - WASM 部署: wasm-deployment-guide.md
+  - 参考:
+      - MCP API: API_REFERENCE.md
+  - 设计与规划:
+      - 改进设计: improvement-design.md
+      - 设计评审: design-review-report.md
+      - 改进方向: compendium_improvement_directions.md
+      - ADR 模板: adr/0000-template.md
+  - 发布文档站:
+      - GitHub Pages 通用教程: GITHUB_PAGES_STATIC_DOCS.md
+      - 本仓库发布说明: PUBLISHING_DOCS.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/smile9493/Compendium

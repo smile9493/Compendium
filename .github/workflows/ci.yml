@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  PDFIUM_CHROMIUM_VERSION: "7825"
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
@@ -18,6 +19,9 @@ jobs:
   check:
     name: Check (fmt + compile)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +32,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -40,6 +45,46 @@ jobs:
         run: cargo check --workspace --no-default-features
 
   # ═══════════════════════════════════════════════════════════════
+  # Release binaries — link + optimize path (PDFium)
+  # ═══════════════════════════════════════════════════════════════
+
+  release-build:
+    name: Release binaries (Linux)
+    runs-on: ubuntu-latest
+    needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
+
+      - name: Setup PDFium
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Build release binaries
+        run: cargo build --release --bin pdf-mcp --bin pdf-cli
+
+      - name: Verify release artifacts
+        run: |
+          test -x target/release/pdf-mcp
+          test -x target/release/pdf-cli
+          file target/release/pdf-mcp target/release/pdf-cli
+          ls -lh target/release/pdf-mcp target/release/pdf-cli
+
+  # ═══════════════════════════════════════════════════════════════
   # Clippy strict lint — deny all warnings
   # ═══════════════════════════════════════════════════════════════
 
@@ -47,6 +92,9 @@ jobs:
     name: Clippy (strict)
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +105,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Run clippy (all targets, all features)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -70,14 +119,17 @@ jobs:
     name: Test (${{ matrix.toolchain }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        toolchain: [stable, "1.91.0"]          # MSRV = 1.91.0
+        toolchain: [stable, "1.91.0"]
         include:
           - os: ubuntu-latest
-            toolchain: nightly                  # nightly only on ubuntu
+            toolchain: nightly
     continue-on-error: ${{ matrix.toolchain == 'nightly' }}
     steps:
       - uses: actions/checkout@v4
@@ -89,28 +141,27 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci-${{ matrix.os }}-${{ matrix.toolchain }}
 
-      # Ubuntu can run the full PDFium-dependent tests
+      - name: Setup PDFium
+        if: matrix.os == 'ubuntu-latest'
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
+
       - name: Run tests (ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: |
-          cd pdf-module-rs
-          cargo test --workspace --all-features --verbose
+        run: cargo test --workspace --all-features --verbose
 
-      # macOS cannot link PDFium, so skip PDFium-dependent tests
       - name: Run tests (macOS — skip PDFium)
         if: matrix.os == 'macos-latest'
         run: |
-          cd pdf-module-rs
           cargo test --workspace --no-default-features --verbose || true
           cargo test --workspace --all-features --verbose || true
 
-      # Doc tests
       - name: Run doc tests
-        run: |
-          cd pdf-module-rs
-          cargo test --doc --all-features --verbose
+        run: cargo test --doc --all-features --verbose
 
   # ═══════════════════════════════════════════════════════════════
   # Feature matrix: verify no feature combination breaks
@@ -120,6 +171,9 @@ jobs:
     name: Feature Matrix
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     strategy:
       fail-fast: false
       matrix:
@@ -141,22 +195,25 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Check compilation (${{ matrix.feature-set }})
         run: |
-          cd pdf-module-rs
           cargo hack check --workspace --each-feature --optional-deps 2>/dev/null || \
           cargo check --workspace ${{ matrix.feature-set }}
 
   # ═══════════════════════════════════════════════════════════════
-  # Documentation
+  # Documentation (rustdoc)
   # ═══════════════════════════════════════════════════════════════
 
   doc:
     name: Documentation
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -165,7 +222,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Build documentation (all features)
         run: cargo doc --no-deps --document-private-items --workspace --all-features
@@ -178,6 +236,9 @@ jobs:
     name: WASM Check
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -188,7 +249,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Check WASM compilation
         run: cargo check --target wasm32-unknown-unknown --package pdf-wasm
@@ -201,6 +263,9 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -209,7 +274,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -228,6 +294,7 @@ jobs:
         with:
           fail-on-severity: medium
           deny-unaudited: false
+          manifest-path: pdf-module-rs/Cargo.toml
 
   # ═══════════════════════════════════════════════════════════════
   # Minimal versions: verify Cargo.toml declares correct minimum deps
@@ -237,6 +304,9 @@ jobs:
     name: Minimal Versions
     runs-on: ubuntu-latest
     needs: check
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -245,17 +315,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Update to minimum compatible versions
-        run: |
-          cd pdf-module-rs
-          cargo +nightly update -Z direct-minimal-versions
+        run: cargo +nightly update -Z direct-minimal-versions
 
       - name: Check compilation with minimal deps
-        run: |
-          cd pdf-module-rs
-          cargo +nightly check --workspace --all-targets
+        run: cargo +nightly check --workspace --all-targets
 
   # ═══════════════════════════════════════════════════════════════
   # Code coverage
@@ -264,7 +331,10 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: [clippy, test]
+    needs: [clippy, test, release-build]
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -278,12 +348,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
+
+      - name: Setup PDFium
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
       - name: Generate coverage
-        run: |
-          cd pdf-module-rs
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
@@ -301,6 +375,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: pdf-module-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -309,11 +386,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: ci
 
       - name: Run benchmarks
         run: |
-          cd pdf-module-rs
           cargo bench --bench extractor_bench -- \
             --output-format bencher 2>/dev/null \
             | tee bench_results.txt

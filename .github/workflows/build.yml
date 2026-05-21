@@ -7,6 +7,7 @@ on:
       - 'pdf-module-rs/**'
       - 'pdf-mcp-installer/**'
       - '.github/workflows/build.yml'
+      - '.github/actions/setup-pdfium/**'
       - 'install.sh'
       - 'deploy.sh'
     tags:
@@ -17,6 +18,7 @@ on:
       - 'pdf-module-rs/**'
       - 'pdf-mcp-installer/**'
       - '.github/workflows/build.yml'
+      - '.github/actions/setup-pdfium/**'
       - 'install.sh'
       - 'deploy.sh'
   workflow_dispatch:
@@ -45,14 +47,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: release
 
-      - name: Download PDFium
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/lib:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+      - name: Setup PDFium
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
       - name: Run doc tests (pdf-module-rs)
         run: |
@@ -161,14 +162,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: release
 
-      - name: Download PDFium
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/lib:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+      - name: Setup PDFium
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
       - name: Generate coverage
         run: |
@@ -195,7 +195,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: release
 
       - name: Build WASM (pdf-wasm)
         run: |
@@ -221,18 +222,18 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "pdf-module-rs -> target"
+          workspaces: pdf-module-rs -> target
+          shared-key: release
+
+      - name: Setup PDFium
+        uses: ./.github/actions/setup-pdfium
+        with:
+          chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
-
-      - name: Download PDFium
-        run: |
-          curl -L -o pdfium.tgz "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_CHROMIUM_VERSION}/pdfium-linux-x64.tgz"
-          tar -xzf pdfium.tgz
-          echo "PDFIUM_LIB_PATH=${GITHUB_WORKSPACE}/lib/libpdfium.so" >> $GITHUB_ENV
 
       - name: Build MCP Server
         run: |
@@ -243,6 +244,11 @@ jobs:
         run: |
           cd pdf-module-rs
           cargo build --release --bin pdf-cli
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pdf-mcp-installer -> target
+          shared-key: release-installer
 
       - name: Build pdf-mcp-cli (installer)
         run: |
