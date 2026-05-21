@@ -13,11 +13,12 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::KnowledgeEntry;
+use crate::knowledge::entry::{KnowledgeEntry, extract_markdown_body};
 use crate::knowledge::index::fulltext::SearchHit;
 use crate::knowledge::index::vector::{VectorHit, VectorIndex};
 use crate::knowledge::index::{FulltextIndex, GraphIndex};
 use crate::knowledge::publish_gate::{GateConfig, is_searchable};
+use crate::management::config_manager::ConfigManager;
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
@@ -34,6 +35,8 @@ pub enum SearchMode {
     /// Reciprocal Rank Fusion of keyword + semantic (default).
     #[default]
     Hybrid,
+    /// Karpathy-style: index.md + graph neighbors, no Tantivy/vector.
+    WikiFirst,
 }
 
 impl SearchMode {
@@ -41,6 +44,8 @@ impl SearchMode {
         match s.to_lowercase().as_str() {
             "keyword" | "fulltext" => Self::Keyword,
             "semantic" | "vector" => Self::Semantic,
+            "wiki_first" | "wiki-first" | "wiki" => Self::WikiFirst,
+            "hybrid" => Self::Hybrid,
             _ => Self::Hybrid,
         }
     }
@@ -158,6 +163,9 @@ pub fn search_with_options_ft(
     }
 
     let (hits, index_empty, used_fallback) = match mode {
+        SearchMode::WikiFirst => {
+            (search_wiki_first(knowledge_base, &wd, query, limit)?, false, false)
+        }
         SearchMode::Keyword => {
             let kr = search_keyword(knowledge_base, &wd, query, limit, &opts, ft_override)?;
             (kr.hits, kr.index_empty, kr.used_fallback)
@@ -189,7 +197,132 @@ pub fn search_with_options_ft(
     };
 
     let hits = filter_searchable(knowledge_base, &wd, hits, limit);
+    let hits = crate::knowledge::cognitive_diversity::deduplicate_search_hits(hits, knowledge_base);
     Ok(SearchResponse { hits, meta: SearchMeta { index_empty, used_fallback, mode: mode_str } })
+}
+
+/// Resolve default search mode from `retrieval_mode` in kb config (`wiki_first` | `hybrid`).
+pub fn default_search_mode(knowledge_base: &Path) -> SearchMode {
+    let mut cm = ConfigManager::new(knowledge_base);
+    if cm.load().is_ok()
+        && let Some(mode) = cm.get("retrieval_mode")
+        && mode.eq_ignore_ascii_case("wiki_first")
+    {
+        return SearchMode::WikiFirst;
+    }
+    SearchMode::Hybrid
+}
+
+fn search_wiki_first(
+    knowledge_base: &Path,
+    wiki_dir: &Path,
+    query: &str,
+    limit: usize,
+) -> PdfResult<Vec<SearchHit>> {
+    let q = query.to_lowercase();
+    let mut hits = Vec::new();
+    let index_path = wiki_dir.join("index.md");
+    if index_path.exists()
+        && let Ok(index_text) = fs::read_to_string(&index_path)
+    {
+        for line in index_text.lines() {
+            if line.contains('|') && line.contains("[[") {
+                let lower = line.to_lowercase();
+                if lower.contains(&q)
+                    && let Some(start) = line.find("[[")
+                    && let Some(end) = line[start + 2..].find("]]")
+                {
+                    let path = line[start + 2..start + 2 + end].trim().to_string();
+                    push_wiki_first_hit(wiki_dir, &path, query, 1.0, &mut hits);
+                }
+            }
+        }
+    }
+
+    let mut graph = GraphIndex::new();
+    let _ = graph.rebuild(wiki_dir);
+    for entry_path in collect_wiki_paths(wiki_dir)? {
+        let full = wiki_dir.join(&entry_path);
+        let Ok(content) = fs::read_to_string(&full) else {
+            continue;
+        };
+        let body = extract_markdown_body(&content).unwrap_or(&content);
+        let title = KnowledgeEntry::from_markdown(&content).map(|e| e.title).unwrap_or_default();
+        let searchable = format!("{} {}", title, body).to_lowercase();
+        if searchable.contains(&q) {
+            let score = if title.to_lowercase().contains(&q) { 0.95 } else { 0.75 };
+            push_wiki_first_hit(wiki_dir, &entry_path, query, score, &mut hits);
+        }
+    }
+
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    hits.dedup_by(|a, b| a.path == b.path);
+    if hits.len() > limit {
+        hits.truncate(limit);
+    }
+
+    if hits.is_empty() && graph.node_count() > 0 {
+        for path in graph.find_orphans().into_iter().take(3) {
+            push_wiki_first_hit(wiki_dir, &path, query, 0.1, &mut hits);
+        }
+    }
+
+    let _ = knowledge_base;
+    Ok(hits)
+}
+
+fn push_wiki_first_hit(
+    wiki_dir: &Path,
+    path: &str,
+    query: &str,
+    score: f32,
+    hits: &mut Vec<SearchHit>,
+) {
+    let full = wiki_dir.join(path);
+    let (title, domain, snippet) = if let Ok(content) = fs::read_to_string(&full) {
+        let entry = KnowledgeEntry::from_markdown(&content);
+        let title = entry.as_ref().map(|e| e.title.clone()).unwrap_or_else(|| path.to_string());
+        let domain = entry.as_ref().map(|e| e.domain.clone()).unwrap_or_default();
+        let body = extract_markdown_body(&content).unwrap_or(&content);
+        let snip = body.chars().take(200).collect::<String>();
+        (title, domain, snip)
+    } else {
+        (path.to_string(), String::new(), String::new())
+    };
+    if hits.iter().any(|h| h.path == path) {
+        return;
+    }
+    hits.push(SearchHit { path: path.to_string(), title, domain, score, snippet });
+    let _ = query;
+}
+
+fn collect_wiki_paths(wiki_dir: &Path) -> PdfResult<Vec<String>> {
+    let mut paths = Vec::new();
+    collect_wiki_paths_rec(wiki_dir, wiki_dir, &mut paths)?;
+    Ok(paths)
+}
+
+fn collect_wiki_paths_rec(base: &Path, dir: &Path, out: &mut Vec<String>) -> PdfResult<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir).map_err(|e| PdfModuleError::Storage(e.to_string()))? {
+        let entry = entry.map_err(|e| PdfModuleError::Storage(e.to_string()))?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') || name == "index.md" || name == "log.md" {
+            continue;
+        }
+        if path.is_dir() {
+            if name != ".versions" {
+                collect_wiki_paths_rec(base, &path, out)?;
+            }
+        } else if path.extension().map(|e| e == "md").unwrap_or(false) {
+            let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
+            out.push(rel.replace('\\', "/"));
+        }
+    }
+    Ok(())
 }
 
 fn filter_searchable(
@@ -384,16 +517,34 @@ pub fn graph(knowledge_base: &Path) -> PdfResult<GraphIndex> {
     Ok(g)
 }
 
-/// Rebuild fulltext, graph, and vector indexes from `wiki/`.
+/// Rebuild fulltext, graph, and vector indexes from `wiki/` (default propagation policy).
 pub fn rebuild_all(knowledge_base: &Path) -> PdfResult<RebuildStats> {
+    rebuild_all_with_policy(
+        knowledge_base,
+        &crate::knowledge::confidence_propagation::PropagationPolicy::default(),
+    )
+    .map(|(stats, _)| stats)
+}
+
+/// Rebuild indexes and run confidence propagation with the given policy.
+pub fn rebuild_all_with_policy(
+    knowledge_base: &Path,
+    propagation_policy: &crate::knowledge::confidence_propagation::PropagationPolicy,
+) -> PdfResult<(
+    RebuildStats,
+    Option<crate::knowledge::confidence_propagation::ConfidencePropagationReport>,
+)> {
     let wd = wiki_dir(knowledge_base);
     if !wd.exists() {
-        return Ok(RebuildStats {
-            fulltext_entries_indexed: 0,
-            graph_nodes: 0,
-            graph_edges: 0,
-            vector_entries_indexed: 0,
-        });
+        return Ok((
+            RebuildStats {
+                fulltext_entries_indexed: 0,
+                graph_nodes: 0,
+                graph_edges: 0,
+                vector_entries_indexed: 0,
+            },
+            None,
+        ));
     }
 
     let ft_idx = FulltextIndex::open_or_create(knowledge_base)?;
@@ -405,12 +556,21 @@ pub fn rebuild_all(knowledge_base: &Path) -> PdfResult<RebuildStats> {
 
     let vector_count = rebuild_vectors(knowledge_base)?;
 
-    Ok(RebuildStats {
-        fulltext_entries_indexed: ft_count,
-        graph_nodes: g_count,
-        graph_edges: g_idx.edge_count(),
-        vector_entries_indexed: vector_count,
-    })
+    let propagation_report = Some(crate::knowledge::confidence_propagation::run_propagation(
+        knowledge_base,
+        &g_idx,
+        propagation_policy,
+    )?);
+
+    Ok((
+        RebuildStats {
+            fulltext_entries_indexed: ft_count,
+            graph_nodes: g_count,
+            graph_edges: g_idx.edge_count(),
+            vector_entries_indexed: vector_count,
+        },
+        propagation_report,
+    ))
 }
 
 /// Rebuild the TF-IDF vector index from all wiki entries.
@@ -462,7 +622,7 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
         .map_err(|e| PdfModuleError::Storage(format!("Failed to read entry: {e}")))?;
     let entry = KnowledgeEntry::from_markdown(&content)
         .ok_or_else(|| PdfModuleError::Storage("Failed to parse front matter".to_string()))?;
-    let body = content.split("---").nth(2).unwrap_or("").to_string();
+    let body = extract_markdown_body(&content).unwrap_or("").to_string();
 
     let mut v_idx = {
         let idx = load_vector_index(knowledge_base)
@@ -529,7 +689,7 @@ fn scan_wiki_for_embedding(
                     continue;
                 }
                 let rel = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
-                let body = content.split("---").nth(2).unwrap_or("").to_string();
+                let body = extract_markdown_body(&content).unwrap_or("").to_string();
                 out.push((rel, entry.title, entry.domain, body));
             }
         }

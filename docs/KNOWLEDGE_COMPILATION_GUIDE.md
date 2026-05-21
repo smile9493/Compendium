@@ -4,6 +4,8 @@
 
 ---
 
+> **配置说明**：仓库根目录 [`CLAUDE.md`](../CLAUDE.md) 面向 Compendium **Rust 开发**；每个知识库的 Wiki 维护规范在 `knowledge_base/schema/AGENTS.md`（Karpathy 三口令：ingest / query / lint）。快速上手见 [KARPATHY_QUICKSTART.md](./KARPATHY_QUICKSTART.md)。
+
 ## 一、核心概念
 
 ### 1.1 什么是知识编译？
@@ -69,8 +71,9 @@ knowledge_base/
 │       ├── http2_multiplex.md
 │       └── http2_header.md
 │
-├── schema/                     # 编译指令 (可选)
-│   └── CLAUDE.md              # AI Agent 规范
+├── schema/                     # 编译指令 (schema)
+│   ├── AGENTS.md              # AI Agent 三口令 (ingest / query / lint)
+│   └── CLAUDE.md              # 指向 AGENTS.md 的别名
 │
 ├── .hash_cache                 # 增量编译缓存
 │
@@ -88,6 +91,8 @@ knowledge_base/
 
 ```yaml
 ---
+entry_type: concept       # concept | entity | source-summary | comparison | overview
+confidence: high          # high | medium | low
 title: "HTTP/2 多路复用"
 domain: "IT"
 category: "networking/protocols"
@@ -129,6 +134,8 @@ updated: 2026-05-04T10:00:00Z
 | `contradictions` | ❌ | 矛盾条目路径列表 |
 | `related` | ❌ | 相关条目路径列表 |
 | `aggregated_from` | ❌ | L2 条目来源 L1 列表 |
+| `entry_type` | ❌ | `concept` / `entity` / `source-summary` / `comparison` / `overview` |
+| `confidence` | ❌ | 论断可信度：`high` / `medium` / `low` |
 
 ### 3.3 命名规范
 

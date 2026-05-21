@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::KnowledgeEntry;
+use crate::knowledge::entry::{KnowledgeEntry, extract_markdown_body};
+use crate::knowledge::markdown_contract::extract_wikilink_targets;
 
 /// Metadata stored at each graph node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub enum EdgeKind {
     Related,
     Contradiction,
     TagCooccurrence,
+    Wikilink,
 }
 
 /// Result of a neighbor query.
@@ -45,6 +47,34 @@ pub struct NeighborInfo {
     pub domain: String,
     pub hops: u32,
     pub edge_kind: String,
+}
+
+/// Protection tier for heavily referenced (load-bearing) entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProtectionLevel {
+    Normal,
+    Protected,
+    Critical,
+}
+
+/// Load-bearing node metadata (memory gravity).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LoadBearingEntry {
+    pub path: String,
+    pub title: String,
+    pub in_degree: usize,
+    pub protection_level: ProtectionLevel,
+}
+
+fn protection_level(in_degree: usize, min_refs: usize) -> ProtectionLevel {
+    if in_degree >= min_refs.saturating_mul(3) {
+        ProtectionLevel::Critical
+    } else if in_degree >= min_refs.saturating_mul(2) {
+        ProtectionLevel::Protected
+    } else {
+        ProtectionLevel::Normal
+    }
 }
 
 /// Result of a link suggestion.
@@ -239,6 +269,22 @@ impl GraphIndex {
                     self.graph.add_edge(from_idx, to_idx, EdgeKind::Contradiction);
                 }
             }
+
+            if let Ok(content) = fs::read_to_string(path) {
+                let body = extract_markdown_body(&content).unwrap_or(&content);
+                for link in extract_wikilink_targets(body) {
+                    let normalized =
+                        link.strip_prefix("wiki/").unwrap_or(link.as_str()).to_lowercase();
+                    if let Some(to_idx) = self
+                        .path_to_node
+                        .iter()
+                        .find(|(k, _)| k.to_lowercase() == normalized)
+                        .map(|(_, &v)| v)
+                    {
+                        self.graph.add_edge(from_idx, to_idx, EdgeKind::Wikilink);
+                    }
+                }
+            }
         }
 
         // Add tag co-occurrence edges (weak relations)
@@ -293,6 +339,7 @@ impl GraphIndex {
                         EdgeKind::Related => "related",
                         EdgeKind::Contradiction => "contradiction",
                         EdgeKind::TagCooccurrence => "tag_cooccurrence",
+                        EdgeKind::Wikilink => "wikilink",
                     };
                     result.push(NeighborInfo {
                         path: meta.path.clone(),
@@ -307,6 +354,69 @@ impl GraphIndex {
         }
 
         result
+    }
+
+    /// Adaptive hub threshold: cold start (&lt;50 nodes) uses fixed fallback; else `ceil(2×avg_in)` clamped [3, 20].
+    pub fn compute_hub_threshold(&self, cold_start_fallback: usize) -> usize {
+        let n = self.node_count();
+        if n == 0 || n < 50 {
+            return cold_start_fallback;
+        }
+        let edges = self.edge_count();
+        let avg = edges as f64 / n as f64;
+        let threshold = (avg * 2.0).ceil() as usize;
+        threshold.clamp(3, 20)
+    }
+
+    /// Count incoming reference edges (related, contradiction, wikilink).
+    pub fn reference_in_degree(&self, path: &str) -> usize {
+        let Some(&node) = self.path_to_node.get(path) else {
+            return 0;
+        };
+        self.graph
+            .edges_directed(node, petgraph::Direction::Incoming)
+            .filter(|e| {
+                matches!(
+                    e.weight(),
+                    EdgeKind::Related | EdgeKind::Contradiction | EdgeKind::Wikilink
+                )
+            })
+            .count()
+    }
+
+    /// Entries referenced by at least `min_refs` other pages (load-bearing / memory gravity).
+    pub fn load_bearing_entries(&self, min_refs: usize) -> Vec<LoadBearingEntry> {
+        if min_refs == 0 {
+            return Vec::new();
+        }
+        let mut out: Vec<LoadBearingEntry> = self
+            .graph
+            .node_indices()
+            .filter_map(|idx| {
+                let in_deg = self
+                    .graph
+                    .edges_directed(idx, petgraph::Direction::Incoming)
+                    .filter(|e| {
+                        matches!(
+                            e.weight(),
+                            EdgeKind::Related | EdgeKind::Contradiction | EdgeKind::Wikilink
+                        )
+                    })
+                    .count();
+                if in_deg < min_refs {
+                    return None;
+                }
+                let meta = &self.graph[idx];
+                Some(LoadBearingEntry {
+                    path: meta.path.clone(),
+                    title: meta.title.clone(),
+                    in_degree: in_deg,
+                    protection_level: protection_level(in_deg, min_refs),
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| b.in_degree.cmp(&a.in_degree).then_with(|| a.path.cmp(&b.path)));
+        out
     }
 
     /// Find orphan entries (no incoming or outgoing edges of type Related or Contradiction).
@@ -443,6 +553,7 @@ impl GraphIndex {
                     EdgeKind::Related => "relates",
                     EdgeKind::Contradiction => "contradicts",
                     EdgeKind::TagCooccurrence => "co-tags",
+                    EdgeKind::Wikilink => "wikilink",
                 };
                 edges.push((node, target, kind));
                 if is_new {
@@ -457,6 +568,7 @@ impl GraphIndex {
                     EdgeKind::Related => "relates",
                     EdgeKind::Contradiction => "contradicts",
                     EdgeKind::TagCooccurrence => "co-tags",
+                    EdgeKind::Wikilink => "wikilink",
                 };
                 edges.push((source, node, kind));
                 if is_new {
@@ -606,6 +718,12 @@ Body B"#;
         let mut graph = GraphIndex::new();
         graph.rebuild(dir.path().join("wiki").as_path()).unwrap();
         (dir, graph)
+    }
+
+    #[test]
+    fn test_compute_hub_threshold_cold_start() {
+        let graph = GraphIndex::new();
+        assert_eq!(graph.compute_hub_threshold(5), 5);
     }
 
     #[test]

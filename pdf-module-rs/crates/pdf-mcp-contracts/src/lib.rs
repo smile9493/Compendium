@@ -16,6 +16,7 @@ mod knowledge;
 mod management;
 mod platform;
 mod registry;
+mod tool_exposure;
 
 pub use code_mode::{
     ApiMethodEntry, CompendiumCall, CompendiumCallResult, CompendiumMcpMode,
@@ -31,6 +32,10 @@ pub use knowledge::*;
 pub use management::*;
 pub use platform::*;
 pub use registry::{McpToolSpec, all_tool_specs, manifest_sha256, tool_count};
+pub use tool_exposure::{
+    ToolExposureTier, code_only_tools_unlocked, direct_call_allowed, listed_in_default_manifest,
+    progressive_tool_index, tool_exposure_tier, tools_in_tier,
+};
 
 pub fn schema_for<T: schemars::JsonSchema>() -> serde_json::Value {
     serde_json::to_value(schemars::schema_for!(T)).expect("schema serializes to JSON")

@@ -2,17 +2,42 @@ use crate::tools::json::json_content;
 use crate::tools::{ToolContext, attach_compile_sampling, parse_kb_path};
 use pdf_core::KnowledgeEngine;
 use pdf_core::dto::ExtractOptions;
-use pdf_core::knowledge::entry::{CompileStatus, KnowledgeEntry};
-use pdf_core::knowledge::{CompilePlanStore, run_incremental_extract, run_single_pdf_extract};
+use pdf_core::knowledge::entry::{
+    CompileStatus, EntryConfidence, EntryLevel, EntryType, KnowledgeEntry, extract_markdown_body,
+};
+use pdf_core::knowledge::{
+    CompilePlanStore, DEFAULT_STALE_DAYS, detect_stale_entries, init_knowledge_base, lint_wiki,
+    run_incremental_extract, run_single_pdf_extract,
+};
 use pdf_core::management::CompileJobStore;
 use pdf_mcp_contracts::{
-    AggregateEntriesOutput, CompileToWikiOutput, CompileUploadedPdfOutput,
-    CompleteCompileJobOutput, GenerateCompilePlanOutput, GetCompilePlanOutput,
-    HypothesisTestOutput, IncrementalCompileOutput, MarkPlanTaskDoneOutput, MicroCompileOutput,
-    RecompileEntryOutput, SaveWikiEntryOutput,
+    AggregateEntriesOutput, ArchiveAnswerOutput, CompileImageOutput, CompileToWikiOutput,
+    CompileUploadedPdfOutput, CompleteCompileJobOutput, DetectStaleEntriesOutput,
+    GenerateCompilePlanOutput, GetCompilePlanOutput, HypothesisTestOutput,
+    IncrementalCompileOutput, InitKnowledgeBaseOutput, LintWikiOutput, MarkPlanTaskDoneOutput,
+    MicroCompileOutput, RecompileEntryOutput, SaveWikiEntryOutput,
 };
 use std::sync::Arc;
 use tracing::instrument;
+
+#[instrument(skip(ctx, args))]
+pub async fn handle_compile_image(
+    ctx: &ToolContext,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let image_path =
+        args["image_path"].as_str().ok_or_else(|| anyhow::anyhow!("Missing image_path"))?;
+    let path = std::path::Path::new(image_path);
+    let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    let domain = args["domain"].as_str();
+
+    pdf_core::FileValidator::validate_path_safety(path, &ctx.path_config)
+        .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
+
+    let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
+    let result = engine.compile_image(path, domain).await?;
+    json_content(&CompileImageOutput { result: serde_json::json!({ "compile_result": result }) })
+}
 
 #[instrument(skip(ctx, args))]
 pub async fn handle_compile_to_wiki(
@@ -328,7 +353,7 @@ pub async fn handle_save_wiki_entry(
     {
         entry.status = CompileStatus::Compiled;
         entry.touch();
-        let body = content.split("---").nth(2).unwrap_or("").trim_start();
+        let body = extract_markdown_body(content).unwrap_or("").trim_start();
         final_content = entry.to_markdown(body)?;
     }
 
@@ -344,6 +369,14 @@ pub async fn handle_save_wiki_entry(
     }
 
     let _ = pdf_core::knowledge::reindex_entry(&kb_path, entry_path);
+
+    let _ = pdf_core::wiki::sync_nervous_system(
+        &kb_path,
+        pdf_core::wiki::NervousEvent::new(
+            pdf_core::wiki::NervousEventKind::Save,
+            format!("path={entry_path}"),
+        ),
+    );
 
     let relative_path = entry_path.to_string();
     json_content(&SaveWikiEntryOutput {
@@ -366,7 +399,8 @@ pub async fn handle_complete_compile_job(
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let job_id = args["job_id"].as_str().ok_or_else(|| anyhow::anyhow!("Missing job_id"))?;
     let force = args["force"].as_bool().unwrap_or(false);
-    let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force)?;
+    let policy = pdf_core::knowledge::PropagationPolicy::from_json_args(args);
+    let result = pdf_core::knowledge::complete_compile_job(&kb_path, job_id, force, Some(policy))?;
     ctx.index_cache.invalidate(&kb_path);
     json_content(&CompleteCompileJobOutput { result: serde_json::to_value(&result)? })
 }
@@ -414,6 +448,133 @@ pub async fn handle_mark_plan_task_done(
             "status": "ok",
             "task_id": task_id,
             "remaining_pending": plan.tasks.iter().filter(|t| t.status == pdf_core::knowledge::PlanTaskStatus::Pending).count(),
+        }),
+    })
+}
+
+#[instrument(skip(args))]
+pub async fn handle_init_knowledge_base(
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path =
+        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
+    let result = init_knowledge_base(kb_path)?;
+    json_content(&InitKnowledgeBaseOutput {
+        result: serde_json::json!({
+            "knowledge_base": result.knowledge_base,
+            "created_files": result.created_files,
+            "skipped_files": result.skipped_files,
+        }),
+    })
+}
+
+#[instrument(skip(args))]
+pub async fn handle_lint_wiki(
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path =
+        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
+    let report = lint_wiki(std::path::Path::new(kb_path))?;
+    json_content(&LintWikiOutput { result: serde_json::to_value(&report)? })
+}
+
+#[instrument(skip(registry, args))]
+pub async fn handle_detect_stale_entries(
+    registry: &pdf_core::management::WorkspaceRegistry,
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path = crate::tools::parse_kb_path(registry, args)?;
+    let max_age =
+        args.get("max_age_days").and_then(|v| v.as_u64()).unwrap_or(DEFAULT_STALE_DAYS as u64)
+            as u32;
+    let stale = detect_stale_entries(&kb_path, max_age)?;
+    json_content(&DetectStaleEntriesOutput {
+        result: serde_json::json!({
+            "max_age_days": max_age,
+            "count": stale.len(),
+            "entries": stale
+        }),
+    })
+}
+
+fn parse_entry_type(s: &str) -> EntryType {
+    match s.to_lowercase().replace('_', "-").as_str() {
+        "entity" => EntryType::Entity,
+        "source-summary" => EntryType::SourceSummary,
+        "comparison" => EntryType::Comparison,
+        "overview" => EntryType::Overview,
+        _ => EntryType::Concept,
+    }
+}
+
+fn parse_confidence(s: &str) -> EntryConfidence {
+    match s.to_lowercase().as_str() {
+        "high" => EntryConfidence::High,
+        "low" => EntryConfidence::Low,
+        _ => EntryConfidence::Medium,
+    }
+}
+
+#[instrument(skip(args))]
+pub async fn handle_archive_answer(
+    args: &serde_json::Value,
+) -> anyhow::Result<Vec<crate::protocol::Content>> {
+    let kb_path =
+        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
+    let title = args["title"].as_str().ok_or_else(|| anyhow::anyhow!("Missing title"))?;
+    let body =
+        args["body_markdown"].as_str().ok_or_else(|| anyhow::anyhow!("Missing body_markdown"))?;
+    let domain = args["domain"].as_str().unwrap_or("未分类");
+
+    let entry_type =
+        args["entry_type"].as_str().map(parse_entry_type).unwrap_or(EntryType::Overview);
+    let confidence =
+        args["confidence"].as_str().map(parse_confidence).unwrap_or(EntryConfidence::Medium);
+
+    let mut entry = KnowledgeEntry::new(title, domain);
+    entry.level = EntryLevel::L2;
+    entry.entry_type = Some(entry_type);
+    entry.confidence = Some(confidence);
+    entry.status = CompileStatus::Compiled;
+    if let Some(related) = args.get("related").and_then(|v| v.as_array()) {
+        entry.related = related.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+    }
+    if let Some(sources) = args.get("sources").and_then(|v| v.as_array())
+        && let Some(first) = sources.first().and_then(|v| v.as_str())
+    {
+        entry.source = Some(first.to_string());
+    }
+
+    let entry_path = args["entry_path"]
+        .as_str()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| entry.relative_path().to_string_lossy().to_string());
+
+    if entry_path.contains("..") || !entry_path.ends_with(".md") {
+        return Err(anyhow::anyhow!("entry_path must be a relative .md path under wiki/"));
+    }
+
+    let wiki_dir = std::path::Path::new(kb_path).join("wiki");
+    let target = wiki_dir.join(&entry_path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = entry.to_markdown(body)?;
+    std::fs::write(&target, &content)?;
+    let _ = pdf_core::knowledge::reindex_entry(std::path::Path::new(kb_path), &entry_path);
+    let _ = pdf_core::wiki::sync_nervous_system(
+        kb_path,
+        pdf_core::wiki::NervousEvent::new(
+            pdf_core::wiki::NervousEventKind::Archive,
+            format!("path={entry_path} title={title}"),
+        ),
+    );
+
+    json_content(&ArchiveAnswerOutput {
+        result: serde_json::json!({
+            "status": "success",
+            "path": entry_path,
+            "absolute_path": target.to_string_lossy(),
         }),
     })
 }

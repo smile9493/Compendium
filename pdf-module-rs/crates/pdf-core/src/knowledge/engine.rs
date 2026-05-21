@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 use crate::dto::{ExtractOptions, StructuredExtractionResult};
 use crate::error::{PdfModuleError, PdfResult};
 use crate::extractor::McpPdfPipeline;
-use crate::knowledge::entry::{CompileStatus, EntryLevel, KnowledgeEntry};
+use crate::knowledge::entry::{CompileStatus, EntryLevel, KnowledgeEntry, extract_markdown_body};
 use crate::knowledge::hash_cache::HashCache;
 use crate::knowledge::index::vector::VectorHit;
 use crate::knowledge::index::{GraphIndex, VectorIndex};
@@ -202,13 +202,207 @@ impl KnowledgeEngine {
         })
     }
 
+    /// Compile a user-provided `raw/*.md` clip (no PDF extraction).
+    #[tracing::instrument(skip(self))]
+    pub async fn compile_raw_markdown(
+        &self,
+        md_path: &Path,
+        domain: Option<&str>,
+    ) -> PdfResult<CompileResult> {
+        let content = fs::read_to_string(md_path)
+            .map_err(|e| PdfModuleError::Storage(format!("read raw md: {}", e)))?;
+        let source_name = md_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+        let file_info = crate::dto::FileInfo::from_path(md_path)
+            .map_err(|e| PdfModuleError::Storage(format!("raw md metadata: {}", e)))?;
+        let extraction = StructuredExtractionResult {
+            extracted_text: content.clone(),
+            page_count: 1,
+            pages: Vec::new(),
+            extraction_metadata: None,
+            file_info,
+            metadata: None,
+        };
+        let wiki_result = self.wiki.save_raw(&extraction, md_path, 1.0)?;
+        let source_hash = HashCache::hash_bytes(content.as_bytes());
+        let domain = domain.unwrap_or("未分类");
+        let entry = KnowledgeEntry {
+            title: source_name.to_string(),
+            domain: domain.to_string(),
+            source: Some(format!("raw/{source_name}.md")),
+            source_hash: Some(source_hash.clone()),
+            level: EntryLevel::L0,
+            entry_type: Some(crate::knowledge::entry::EntryType::SourceSummary),
+            status: CompileStatus::Pending,
+            ..KnowledgeEntry::new(source_name, domain)
+        };
+        let prompt = self.build_compile_prompt(&entry, &extraction);
+        let prompt_path =
+            self.knowledge_base.join("raw").join(format!("{source_name}.compile_prompt.md"));
+        tokio::fs::write(&prompt_path, &prompt)
+            .await
+            .map_err(|e| PdfModuleError::Storage(format!("write compile prompt: {}", e)))?;
+        Ok(CompileResult {
+            raw_path: wiki_result.raw_path,
+            entries: vec![CompileEntryResult {
+                title: entry.title.clone(),
+                domain: entry.domain.clone(),
+                path: prompt_path,
+                status: CompileStatus::Pending,
+            }],
+            source: md_path.to_string_lossy().to_string(),
+            source_hash,
+            page_count: 1,
+        })
+    }
+
+    /// Compile a standalone image via built-in VLM when configured, else L0 stub.
+    #[tracing::instrument(skip(self))]
+    pub async fn compile_image(
+        &self,
+        image_path: &Path,
+        domain: Option<&str>,
+    ) -> PdfResult<CompileResult> {
+        #[cfg(feature = "vlm")]
+        if let Some(gateway) = self.pipeline.vlm_gateway() {
+            let extractor = crate::extraction::ImageExtractor::new(gateway);
+            let text = extractor.describe_path(image_path).await.map_err(|e| {
+                PdfModuleError::Extraction(format!("VLM image describe failed: {e}"))
+            })?;
+            return self.compile_image_with_text(image_path, &text, domain).await;
+        }
+        self.stage_raw_image(image_path, domain).await
+    }
+
+    async fn compile_image_with_text(
+        &self,
+        image_path: &Path,
+        extracted_text: &str,
+        domain: Option<&str>,
+    ) -> PdfResult<CompileResult> {
+        let source_name = image_path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+        let file_info = crate::dto::FileInfo::from_path(image_path)
+            .map_err(|e| PdfModuleError::Storage(format!("raw image metadata: {}", e)))?;
+        let extraction = StructuredExtractionResult {
+            extracted_text: extracted_text.to_string(),
+            page_count: 1,
+            pages: Vec::new(),
+            extraction_metadata: None,
+            file_info,
+            metadata: Some(serde_json::json!({ "method": "vlm_image", "format": "image" })),
+        };
+        let wiki_result = self.wiki.save_raw(&extraction, image_path, 1.0)?;
+        let source_hash = HashCache::hash_bytes(extracted_text.as_bytes());
+        let domain = domain.unwrap_or("未分类");
+        let entry = KnowledgeEntry {
+            title: source_name.to_string(),
+            domain: domain.to_string(),
+            source: Some(format!(
+                "raw/{source_name}{}",
+                image_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| format!(".{e}"))
+                    .unwrap_or_default()
+            )),
+            source_hash: Some(source_hash.clone()),
+            level: EntryLevel::L0,
+            entry_type: Some(crate::knowledge::entry::EntryType::SourceSummary),
+            confidence: Some(crate::knowledge::entry::EntryConfidence::Medium),
+            status: CompileStatus::Pending,
+            ..KnowledgeEntry::new(source_name, domain)
+        };
+        let prompt = self.build_compile_prompt(&entry, &extraction);
+        let prompt_path =
+            self.knowledge_base.join("raw").join(format!("{source_name}.compile_prompt.md"));
+        tokio::fs::write(&prompt_path, &prompt)
+            .await
+            .map_err(|e| PdfModuleError::Storage(format!("write image compile prompt: {}", e)))?;
+        Ok(CompileResult {
+            raw_path: wiki_result.raw_path,
+            entries: vec![CompileEntryResult {
+                title: entry.title.clone(),
+                domain: entry.domain.clone(),
+                path: prompt_path,
+                status: CompileStatus::Pending,
+            }],
+            source: image_path.to_string_lossy().to_string(),
+            source_hash,
+            page_count: 1,
+        })
+    }
+
+    /// Stage a raster image in `raw/` when VLM is unavailable (L0 stub).
+    #[tracing::instrument(skip(self))]
+    pub async fn stage_raw_image(
+        &self,
+        image_path: &Path,
+        domain: Option<&str>,
+    ) -> PdfResult<CompileResult> {
+        let source_name = image_path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+        let stub = format!(
+            "# Image source: {name}\n\n> VLM not configured or describe failed. Set VLM env vars or use `compile_image` after gateway is up.\n\nPath: {path}\n",
+            name = source_name,
+            path = image_path.display()
+        );
+        let file_info = crate::dto::FileInfo::from_path(image_path)
+            .map_err(|e| PdfModuleError::Storage(format!("raw image metadata: {}", e)))?;
+        let extraction = StructuredExtractionResult {
+            extracted_text: stub,
+            page_count: 1,
+            pages: Vec::new(),
+            extraction_metadata: None,
+            file_info,
+            metadata: None,
+        };
+        let wiki_result = self.wiki.save_raw(&extraction, image_path, 1.0)?;
+        let source_hash = HashCache::hash_bytes(image_path.to_string_lossy().as_bytes());
+        let domain = domain.unwrap_or("未分类");
+        let entry = KnowledgeEntry {
+            title: source_name.to_string(),
+            domain: domain.to_string(),
+            source: Some(format!(
+                "raw/{source_name}{}",
+                image_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| format!(".{e}"))
+                    .unwrap_or_default()
+            )),
+            source_hash: Some(source_hash.clone()),
+            level: EntryLevel::L0,
+            entry_type: Some(crate::knowledge::entry::EntryType::SourceSummary),
+            confidence: Some(crate::knowledge::entry::EntryConfidence::Low),
+            status: CompileStatus::Pending,
+            ..KnowledgeEntry::new(source_name, domain)
+        };
+        let prompt = self.build_compile_prompt(&entry, &extraction);
+        let prompt_path =
+            self.knowledge_base.join("raw").join(format!("{source_name}.compile_prompt.md"));
+        tokio::fs::write(&prompt_path, &prompt)
+            .await
+            .map_err(|e| PdfModuleError::Storage(format!("write image compile prompt: {}", e)))?;
+        Ok(CompileResult {
+            raw_path: wiki_result.raw_path,
+            entries: vec![CompileEntryResult {
+                title: entry.title.clone(),
+                domain: entry.domain.clone(),
+                path: prompt_path,
+                status: CompileStatus::Pending,
+            }],
+            source: image_path.to_string_lossy().to_string(),
+            source_hash,
+            page_count: 1,
+        })
+    }
+
     /// Incremental compilation: scan raw/ for new or changed PDFs and compile only those.
     #[tracing::instrument(skip(self))]
     pub async fn incremental_compile(&self, raw_dir: &Path) -> PdfResult<IncrementalResult> {
         let mut cache = HashCache::load_or_create(&self.knowledge_base)?;
 
-        // Find all PDF files in the raw directory
         let mut pdf_files = Vec::new();
+        let mut md_files = Vec::new();
+        let mut image_files = Vec::new();
         if raw_dir.exists() {
             for entry in fs::read_dir(raw_dir)
                 .map_err(|e| PdfModuleError::Storage(format!("Failed to read raw dir: {}", e)))?
@@ -216,13 +410,22 @@ impl KnowledgeEngine {
                 let entry = entry
                     .map_err(|e| PdfModuleError::Storage(format!("Failed to read entry: {}", e)))?;
                 let path = entry.path();
-                if path.extension().map(|e| e == "pdf").unwrap_or(false) {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') {
+                    continue;
+                }
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if ext == "pdf" {
                     pdf_files.push(path);
+                } else if ext == "md" && !name.ends_with(".compile_prompt.md") {
+                    md_files.push(path);
+                } else if matches!(ext, "png" | "jpg" | "jpeg" | "webp" | "gif") {
+                    image_files.push(path);
                 }
             }
         }
 
-        let total = pdf_files.len();
+        let total = pdf_files.len() + md_files.len() + image_files.len();
         let mut compiled = 0usize;
         let mut skipped = 0usize;
         let mut results = Vec::new();
@@ -247,6 +450,50 @@ impl KnowledgeEngine {
                 }
             } else {
                 debug!(source = ?pdf_path, "Skipping unchanged PDF");
+                skipped += 1;
+            }
+        }
+
+        for image_path in image_files {
+            if cache.needs_compile(&image_path)? {
+                match self.compile_image(&image_path, None).await {
+                    Ok(result) => {
+                        let entry_paths: Vec<String> = result
+                            .entries
+                            .iter()
+                            .map(|e| e.path.to_string_lossy().to_string())
+                            .collect();
+                        cache.record_compile(&result.raw_path, entry_paths)?;
+                        compiled += 1;
+                        results.push(result);
+                    }
+                    Err(e) => {
+                        warn!(source = ?image_path, error = %e, "Failed to stage raw image");
+                    }
+                }
+            } else {
+                skipped += 1;
+            }
+        }
+
+        for md_path in md_files {
+            if cache.needs_compile(&md_path)? {
+                match self.compile_raw_markdown(&md_path, None).await {
+                    Ok(result) => {
+                        let entry_paths: Vec<String> = result
+                            .entries
+                            .iter()
+                            .map(|e| e.path.to_string_lossy().to_string())
+                            .collect();
+                        cache.record_compile(&result.raw_path, entry_paths)?;
+                        compiled += 1;
+                        results.push(result);
+                    }
+                    Err(e) => {
+                        warn!(source = ?md_path, error = %e, "Failed to compile raw markdown");
+                    }
+                }
+            } else {
                 skipped += 1;
             }
         }
@@ -312,6 +559,8 @@ domain: "{}"
 source: "raw/xxx.pdf"
 page: 3
 tags: ["tag1", "tag2"]
+entry_type: concept
+confidence: medium
 level: L1
 status: compiled
 quality_score: 0.85
@@ -457,7 +706,7 @@ related: ["wiki/other/concept.md"]
         }
 
         // Write back updated front matter
-        let body = content.split("---").nth(2).unwrap_or("").trim_start();
+        let body = extract_markdown_body(&content).unwrap_or("").trim_start();
         let new_content = entry.to_markdown(body)?;
 
         // Back up old version
@@ -711,7 +960,7 @@ related: ["wiki/other/concept.md"]
             PdfModuleError::Storage("Failed to parse front matter from entry".to_string())
         })?;
 
-        let body = content.split("---").nth(2).unwrap_or("").to_string();
+        let body = extract_markdown_body(&content).unwrap_or("").to_string();
         let rel_path =
             full_path.strip_prefix(&wiki_dir).unwrap_or(&full_path).to_string_lossy().to_string();
 
@@ -799,7 +1048,7 @@ related: ["wiki/other/concept.md"]
                 if let Ok(content) = fs::read_to_string(&path)
                     && let Some(entry) = KnowledgeEntry::from_markdown(&content)
                 {
-                    let body = content.split("---").nth(2).unwrap_or("").to_string();
+                    let body = extract_markdown_body(&content).unwrap_or("").to_string();
                     docs.push(format!("{} {}", entry.title, body));
                 }
             }
@@ -833,7 +1082,7 @@ related: ["wiki/other/concept.md"]
                 if let Ok(content) = fs::read_to_string(&path)
                     && let Some(entry) = KnowledgeEntry::from_markdown(&content)
                 {
-                    let body = content.split("---").nth(2).unwrap_or("").to_string();
+                    let body = extract_markdown_body(&content).unwrap_or("").to_string();
                     let rel =
                         path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
                     results.push((rel, entry.title, entry.domain, body));

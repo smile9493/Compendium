@@ -61,6 +61,12 @@ impl McpPdfPipeline {
         &self.extraction_router
     }
 
+    /// VLM gateway when configured (for image compilation and layout escalation).
+    #[cfg(feature = "vlm")]
+    pub fn vlm_gateway(&self) -> Option<Arc<VlmGateway>> {
+        self.vlm_gateway.clone()
+    }
+
     /// Attach remote extraction plugins to the router (keeps VLM + Pdfium).
     pub fn reconfigure_extraction_router(
         &mut self,

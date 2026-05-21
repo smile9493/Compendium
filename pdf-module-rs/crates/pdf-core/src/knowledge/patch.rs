@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::{CompileStatus, EntryLevel, KnowledgeEntry};
+use crate::knowledge::entry::{CompileStatus, EntryLevel, KnowledgeEntry, extract_markdown_body};
 
 fn status_yaml(s: &CompileStatus) -> &'static str {
     match s {
@@ -260,7 +260,7 @@ fn merge_front_matter(
     }
     lines.push("---".to_string());
 
-    let body = content.split("---").nth(2).unwrap_or("");
+    let body = extract_markdown_body(content).unwrap_or("");
     Ok(format!("{}\n{}", lines.join("\n"), body.trim_start_matches('\n')))
 }
 

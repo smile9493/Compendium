@@ -16,7 +16,7 @@ English | [简体中文](./README.md)
 - 🔄 **Incremental Compilation** — Merkle hash detection, only compile changed PDFs
 - 🖼️ **VLM Visual Understanding** — Conditional OCR fallback for scanned/image-based PDFs
 - 🌐 **Dual-Protocol Server** — stdio (MCP) + HTTP (Wiki browsing), oneshot signal startup
-- 🎯 **23 MCP Tools** — Covering PDF extraction, knowledge compilation, cognitive indexing, and resources
+- 🎯 **53 MCP Tools** — Covering PDF extraction, knowledge compilation (incl. `init_knowledge_base` / `lint_wiki` / `archive_answer`), cognitive indexing, management, and resources
 
 ## 📦 Installation
 
@@ -71,7 +71,13 @@ cargo build --release --bin pdf-mcp
 }
 ```
 
-### 2. Compile PDF to Knowledge Base
+### 2. Initialize Knowledge Base (Karpathy Template)
+
+```bash
+compendium kb init ~/my-kb
+```
+
+### 3. Compile PDF to Knowledge Base
 
 ```
 User: Compile /path/to/paper.pdf into the knowledge base
@@ -95,7 +101,7 @@ Found 3 related entries:
 3. [Network] HTTP/2 vs HTTP/1.1 Comparison (score: 0.78)
 ```
 
-## 🛠️ MCP Tools (23)
+## 🛠️ MCP Tools (53)
 
 ### PDF Extraction (6)
 
@@ -108,30 +114,41 @@ Found 3 related entries:
 | `extrude_to_server_wiki` | Extract to server-side Wiki |
 | `extrude_to_agent_payload` | Return Markdown payload to conversation |
 
-### Knowledge Compilation (7)
+### Knowledge Compilation (12)
 
 | Tool | Description |
 |------|-------------|
+| `init_knowledge_base` | Initialize empty KB (Karpathy template) |
 | `compile_to_wiki` | PDF → knowledge base compilation entry point |
 | `incremental_compile` | Incremental compilation (Merkle hash detection) |
+| `save_wiki_entry` | Create or update a wiki entry (YAML front matter) |
+| `complete_compile_job` | Complete compile job: rebuild index + quality gate |
+| `lint_wiki` | Karpathy lint: contradictions/orphans/broken links/drift |
+| `archive_answer` | Persist QA session results as overview page |
 | `recompile_entry` | Single entry recompilation + version backup |
 | `aggregate_entries` | L1→L2 aggregation candidate discovery |
 | `check_quality` | Wiki quality scan (drift/contradiction detection) |
 | `micro_compile` | On-demand extraction (not persisted) |
 | `hypothesis_test` | Contradiction discovery + debate framework generation |
 
-### Cognitive Index (6)
+### Cognitive Index (12)
 
 | Tool | Description |
 |------|-------------|
-| `search_knowledge` | Tantivy full-text search (CJK tokenizer) |
+| `search_knowledge` | Multi-mode search (keyword/semantic/hybrid/wiki_first) |
 | `rebuild_index` | Rebuild all indexes |
 | `get_entry_context` | N-hop neighbor discovery (graph traversal) |
+| `get_agent_context` | Agent context bundle (body + neighbors + related) |
+| `get_compilation_context` | Compile job context (stages, prompts, suggested tools) |
+| `preview_wiki_patch` / `patch_wiki_entry` | Structured patch + single reindex |
 | `find_orphans` | Orphan entry detection |
 | `suggest_links` | Link suggestions (Jaccard similarity) |
 | `export_concept_map` | Mermaid.js concept map export |
+| `generate_compile_plan` | Generate compile plan JSON |
+| `get_compile_plan` | Read compile plan & task status |
+| `mark_plan_task_done` | Mark compile plan task complete |
 
-### Management (5)
+### Management (16)
 
 | Tool | Description |
 |------|-------------|
@@ -140,7 +157,17 @@ Found 3 related entries:
 | `get_health_report` | System health report (engine/index/cache status) |
 | `trigger_incremental_compile` | Trigger batch incremental compilation |
 | `get_compile_status` | Query compilation task status |
+| `list_quality_issues` | List pending quality issues |
+| `fix_suggest` | Generate quality issue fix suggestions |
+| `apply_quality_gate` | Apply quality gate (block/downgrade/warn) |
 | `show_wiki_browser` | Show Wiki browser entry point |
+| `list_workspaces` | List all workspaces |
+| `set_active_workspace` | Set current workspace |
+| `register_workspace` | Register a new workspace |
+| `sync_push` / `sync_pull` / `sync_status` | Git-style sync |
+| `submit_patch_proposal` / `list_patch_proposals` | Patch proposal system |
+| `list_extraction_plugins` / `probe_extraction` | Plugin management & probing |
+| `compile_uploaded_pdf` | Compile PDF submitted via upload API |
 
 ### Resources (2)
 
@@ -154,7 +181,7 @@ Found 3 related entries:
 ```
 ┌──────────────────────────────────────────────────┐
 │            AI Client (Claude / Cursor)            │
-│               23 MCP tools via JSON-RPC           │
+│               53 MCP tools via JSON-RPC           │
 └──────────────┬───────────────┬───────────────────┘
                │ stdio         │ HTTP
                ▼               ▼
@@ -211,6 +238,8 @@ knowledge_base/
 
 ```yaml
 ---
+entry_type: concept       # concept | entity | source-summary | comparison | overview
+confidence: high          # high | medium | low
 title: "HTTP/2 Multiplexing"
 domain: "IT"
 source: "raw/rfc7540.pdf"

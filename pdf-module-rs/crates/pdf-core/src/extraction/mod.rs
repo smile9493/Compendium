@@ -1,5 +1,7 @@
 //! Pluggable PDF extraction backends and priority routing.
 
+#[cfg(feature = "vlm")]
+pub mod image_extractor;
 pub mod remote;
 #[cfg(feature = "vlm")]
 pub mod vlm;
@@ -167,6 +169,8 @@ impl ExtractionRouter {
     }
 }
 
+#[cfg(feature = "vlm")]
+pub use image_extractor::{ImageExtractor, image_mime_from_path};
 pub use remote::{RemoteExtractionBackend, RemoteExtractionConfig};
 #[cfg(feature = "vlm")]
 pub use vlm::VlmExtractionBackend;

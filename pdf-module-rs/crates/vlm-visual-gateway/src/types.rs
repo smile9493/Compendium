@@ -315,18 +315,17 @@ pub struct VlmPayload {
 }
 
 impl VlmPayload {
-    /// Convert to OpenAI-compatible chat completions request
-    /// Enables thinking mode and function calling for GLM-4.6V series
-    pub(crate) fn to_chat_request(
+    pub(crate) fn to_chat_request_mime(
         &self,
         system_prompt: &str,
         enable_thinking: bool,
         enable_function_call: bool,
+        image_mime: &str,
     ) -> VlmChatRequest {
         let mut content = Vec::new();
 
         content.push(ChatMessageContentPart::ImageUrl {
-            image_url: ImageUrlObject { url: format!("data:image/png;base64,{}", self.image) },
+            image_url: ImageUrlObject { url: format!("data:{image_mime};base64,{}", self.image) },
         });
 
         let mut text = String::new();

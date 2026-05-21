@@ -50,9 +50,14 @@ pub use config::ServerConfig;
 pub use extraction::{ExtractionBackend, ExtractionRouter, RemoteExtractionConfig};
 pub use extractor::McpPdfPipeline;
 #[cfg(feature = "knowledge")]
-pub use knowledge::{FulltextIndex, GraphIndex, KnowledgeEngine, WikiRenderer};
+pub use knowledge::{
+    FulltextIndex, GraphIndex, InitKnowledgeBaseResult, KnowledgeEngine, WikiRenderer,
+    extract_front_matter_yaml, extract_markdown_body, init_knowledge_base, lint_wiki,
+};
 pub use tracing_setup::{
     LogFormat, TracingConfig, init_compact, init_development, init_production, init_with_config,
     request_span,
 };
 pub use validator::{FileValidator, PathValidationConfig};
+#[cfg(feature = "knowledge")]
+pub use wiki::{NervousEvent, NervousEventKind, WikiStorage, sync_nervous_system};

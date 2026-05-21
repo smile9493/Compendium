@@ -13,7 +13,7 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Term, doc};
 use tracing::{debug, info};
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::KnowledgeEntry;
+use crate::knowledge::entry::{KnowledgeEntry, extract_markdown_body};
 use crate::knowledge::index::tokenizer;
 use crate::knowledge::publish_gate::{GateConfig, is_searchable};
 
@@ -171,13 +171,13 @@ impl FulltextIndex {
                     debug!(path = %rel_path, "Skipped non-searchable entry (removed from index)");
                     return Ok(());
                 }
-                let body = content.split("---").nth(2).unwrap_or(&content).to_string();
+                let body = extract_markdown_body(&content).unwrap_or(&content).to_string();
                 (entry.title, entry.domain, entry.tags.join(" "), body)
             } else {
                 let filename = full_path.file_name().and_then(|n| n.to_str()).unwrap_or("entry");
                 let title = filename.replace(".md", "").replace('_', " ");
                 let body = if content.starts_with("---") {
-                    content.split("---").nth(2).unwrap_or(&content).to_string()
+                    extract_markdown_body(&content).unwrap_or(&content).to_string()
                 } else {
                     content.clone()
                 };
@@ -333,23 +333,24 @@ impl FulltextIndex {
                     let rel =
                         path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
 
-                    let (title, domain, tags, body) =
-                        if let Some(entry) = KnowledgeEntry::from_markdown(&content) {
-                            if !is_searchable(&entry, gate_config.quality_min_score) {
-                                continue;
-                            }
-                            let body = content.split("---").nth(2).unwrap_or(&content).to_string();
-                            (entry.title, entry.domain, entry.tags.join(" "), body)
+                    let (title, domain, tags, body) = if let Some(entry) =
+                        KnowledgeEntry::from_markdown(&content)
+                    {
+                        if !is_searchable(&entry, gate_config.quality_min_score) {
+                            continue;
+                        }
+                        let body = extract_markdown_body(&content).unwrap_or(&content).to_string();
+                        (entry.title, entry.domain, entry.tags.join(" "), body)
+                    } else {
+                        // Fallback: use filename as title, extract body after front matter
+                        let title = filename.replace(".md", "").replace('_', " ");
+                        let body = if content.starts_with("---") {
+                            extract_markdown_body(&content).unwrap_or(&content).to_string()
                         } else {
-                            // Fallback: use filename as title, extract body after front matter
-                            let title = filename.replace(".md", "").replace('_', " ");
-                            let body = if content.starts_with("---") {
-                                content.split("---").nth(2).unwrap_or(&content).to_string()
-                            } else {
-                                content.clone()
-                            };
-                            (title, String::new(), String::new(), body)
+                            content.clone()
                         };
+                        (title, String::new(), String::new(), body)
+                    };
 
                     let path_field = schema.get_field(FIELD_PATH).expect("field exists");
                     let title_field = schema.get_field(FIELD_TITLE).expect("field exists");

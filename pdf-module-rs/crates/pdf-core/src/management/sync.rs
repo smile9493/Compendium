@@ -96,11 +96,40 @@ pub struct SyncStatus {
     pub remote_objects: usize,
 }
 
+/// How to resolve path-level hash conflicts during push/pull.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncConflictResolution {
+    /// Stop before writing; return `conflicts` for agent review.
+    #[default]
+    Abort,
+    /// Keep local file bytes on conflict.
+    PreferLocal,
+    /// Keep remote file bytes on conflict.
+    PreferRemote,
+    /// Use newer filesystem mtime when hashes differ.
+    PreferNewest,
+}
+
+/// A single path where local and remote manifests disagree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncConflict {
+    pub path: String,
+    pub local_hash: Option<String>,
+    pub remote_hash: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncReport {
     pub pushed: usize,
     pub pulled: usize,
     pub rebuilt_index_recommended: bool,
+    #[serde(default)]
+    pub conflicts: Vec<SyncConflict>,
+    #[serde(default)]
+    pub resolved: usize,
+    #[serde(default)]
+    pub aborted: bool,
 }
 
 pub fn sync_dir(knowledge_base: &Path) -> PathBuf {
@@ -138,42 +167,242 @@ pub fn sync_status(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<
     })
 }
 
-pub fn sync_push(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<SyncReport> {
-    let manifest = build_local_manifest(knowledge_base)?;
+pub fn sync_push(
+    knowledge_base: &Path,
+    remote: &dyn SyncRemote,
+    resolution: SyncConflictResolution,
+) -> PdfResult<SyncReport> {
+    let local = build_local_manifest(knowledge_base)?;
+    let remote_manifest = load_remote_head(remote)?;
+    let conflicts = detect_push_conflicts(knowledge_base, &local, remote_manifest.as_ref())?;
+
+    if !conflicts.is_empty() && resolution == SyncConflictResolution::Abort {
+        return Ok(SyncReport {
+            pushed: 0,
+            pulled: 0,
+            rebuilt_index_recommended: false,
+            conflicts,
+            resolved: 0,
+            aborted: true,
+        });
+    }
+
     let mut pushed = 0usize;
-    for (rel, hash) in &manifest.objects {
+    let mut resolved = 0usize;
+    let conflict_paths: std::collections::HashSet<_> =
+        conflicts.iter().map(|c| c.path.as_str()).collect();
+
+    for (rel, hash) in &local.objects {
         let key = object_key(hash);
+        let is_conflict = conflict_paths.contains(rel.as_str());
+        if is_conflict {
+            match resolution {
+                SyncConflictResolution::PreferLocal | SyncConflictResolution::PreferNewest => {
+                    if resolution == SyncConflictResolution::PreferNewest
+                        && !local_wins_mtime(knowledge_base, rel, remote)?
+                    {
+                        continue;
+                    }
+                    let data = fs::read(knowledge_base.join(rel)).map_err(storage_err)?;
+                    remote.put_object(&key, &data)?;
+                    pushed += 1;
+                    resolved += 1;
+                }
+                SyncConflictResolution::PreferRemote => {
+                    // Keep remote object; skip uploading local bytes for this path.
+                    resolved += 1;
+                }
+                SyncConflictResolution::Abort => {}
+            }
+            continue;
+        }
         if !remote.has_object(&key)? {
             let data = fs::read(knowledge_base.join(rel)).map_err(storage_err)?;
             remote.put_object(&key, &data)?;
             pushed += 1;
         }
     }
-    let raw = serde_json::to_vec(&manifest).map_err(|e| storage_err(e.to_string()))?;
+    let raw = serde_json::to_vec(&local).map_err(|e| storage_err(e.to_string()))?;
     remote.put_manifest("HEAD", &raw)?;
-    persist_local_head(knowledge_base, &manifest)?;
-    Ok(SyncReport { pushed, pulled: 0, rebuilt_index_recommended: false })
+    persist_local_head(knowledge_base, &local)?;
+    Ok(SyncReport {
+        pushed,
+        pulled: 0,
+        rebuilt_index_recommended: false,
+        conflicts,
+        resolved,
+        aborted: false,
+    })
 }
 
-pub fn sync_pull(knowledge_base: &Path, remote: &dyn SyncRemote) -> PdfResult<SyncReport> {
+pub fn sync_pull(
+    knowledge_base: &Path,
+    remote: &dyn SyncRemote,
+    resolution: SyncConflictResolution,
+) -> PdfResult<SyncReport> {
     let Some(raw) = remote.get_manifest("HEAD")? else {
         return Err(PdfModuleError::Storage("remote has no HEAD manifest".into()));
     };
-    let manifest: SyncManifest =
+    let remote_manifest: SyncManifest =
         serde_json::from_slice(&raw).map_err(|e| storage_err(e.to_string()))?;
+    let local = build_local_manifest(knowledge_base).ok();
+    let conflicts = detect_pull_conflicts(knowledge_base, local.as_ref(), &remote_manifest)?;
+
+    if !conflicts.is_empty() && resolution == SyncConflictResolution::Abort {
+        return Ok(SyncReport {
+            pushed: 0,
+            pulled: 0,
+            rebuilt_index_recommended: false,
+            conflicts,
+            resolved: 0,
+            aborted: true,
+        });
+    }
+
     let mut pulled = 0usize;
-    for (rel, hash) in &manifest.objects {
+    let mut resolved = 0usize;
+    let conflict_by_path: std::collections::HashMap<_, _> =
+        conflicts.iter().map(|c| (c.path.as_str(), c)).collect();
+
+    for (rel, hash) in &remote_manifest.objects {
         let dest = knowledge_base.join(rel);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(storage_err)?;
         }
         let key = object_key(hash);
+        if conflict_by_path.contains_key(rel.as_str()) {
+            match resolution {
+                SyncConflictResolution::PreferLocal => {
+                    resolved += 1;
+                    continue;
+                }
+                SyncConflictResolution::PreferRemote => {
+                    let data = remote.get_object(&key)?;
+                    fs::write(&dest, &data).map_err(storage_err)?;
+                    pulled += 1;
+                    resolved += 1;
+                }
+                SyncConflictResolution::PreferNewest => {
+                    if local_wins_mtime(knowledge_base, rel, remote)? {
+                        resolved += 1;
+                        continue;
+                    }
+                    let data = remote.get_object(&key)?;
+                    fs::write(&dest, &data).map_err(storage_err)?;
+                    pulled += 1;
+                    resolved += 1;
+                }
+                SyncConflictResolution::Abort => {}
+            }
+            continue;
+        }
         let data = remote.get_object(&key)?;
         fs::write(&dest, &data).map_err(storage_err)?;
+        record_remote_mtime(knowledge_base, rel)?;
         pulled += 1;
     }
-    persist_local_head(knowledge_base, &manifest)?;
-    Ok(SyncReport { pushed: 0, pulled, rebuilt_index_recommended: true })
+    persist_local_head(knowledge_base, &remote_manifest)?;
+    Ok(SyncReport {
+        pushed: 0,
+        pulled,
+        rebuilt_index_recommended: true,
+        conflicts,
+        resolved,
+        aborted: false,
+    })
+}
+
+fn load_remote_head(remote: &dyn SyncRemote) -> PdfResult<Option<SyncManifest>> {
+    remote
+        .get_manifest("HEAD")?
+        .map(|b| serde_json::from_slice::<SyncManifest>(&b))
+        .transpose()
+        .map_err(|e| storage_err(e.to_string()))
+}
+
+fn detect_push_conflicts(
+    _knowledge_base: &Path,
+    local: &SyncManifest,
+    remote: Option<&SyncManifest>,
+) -> PdfResult<Vec<SyncConflict>> {
+    let Some(remote) = remote else {
+        return Ok(Vec::new());
+    };
+    if remote.root_hash == local.root_hash {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for (rel, local_hash) in &local.objects {
+        if let Some(remote_hash) = remote.objects.get(rel)
+            && remote_hash != local_hash
+        {
+            out.push(SyncConflict {
+                path: rel.clone(),
+                local_hash: Some(local_hash.clone()),
+                remote_hash: remote_hash.clone(),
+            });
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+fn detect_pull_conflicts(
+    knowledge_base: &Path,
+    local: Option<&SyncManifest>,
+    remote: &SyncManifest,
+) -> PdfResult<Vec<SyncConflict>> {
+    let Some(local) = local else {
+        return Ok(Vec::new());
+    };
+    if remote.root_hash == local.root_hash {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for (rel, remote_hash) in &remote.objects {
+        let local_path = knowledge_base.join(rel);
+        if !local_path.is_file() {
+            continue;
+        }
+        let local_hash = local
+            .objects
+            .get(rel)
+            .cloned()
+            .or_else(|| fs::read(&local_path).ok().map(|b| hex_hash(&b)));
+        if local_hash.as_ref() != Some(remote_hash) {
+            out.push(SyncConflict {
+                path: rel.clone(),
+                local_hash,
+                remote_hash: remote_hash.clone(),
+            });
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+fn local_wins_mtime(knowledge_base: &Path, rel: &str, _remote: &dyn SyncRemote) -> PdfResult<bool> {
+    let local_path = knowledge_base.join(rel);
+    let local_mtime = fs::metadata(&local_path).and_then(|m| m.modified()).ok();
+    let sync_mtime_path = sync_dir(knowledge_base).join("remote_mtime").join(rel);
+    let remote_mtime = fs::metadata(&sync_mtime_path).and_then(|m| m.modified()).ok();
+    match (local_mtime, remote_mtime) {
+        (Some(l), Some(r)) => Ok(l > r),
+        (Some(_), None) => Ok(true),
+        _ => Ok(true),
+    }
+}
+
+fn record_remote_mtime(knowledge_base: &Path, rel: &str) -> PdfResult<()> {
+    let src = knowledge_base.join(rel);
+    let dest = sync_dir(knowledge_base).join("remote_mtime").join(rel);
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(storage_err)?;
+    }
+    if src.is_file() {
+        fs::copy(&src, &dest).map_err(storage_err)?;
+    }
+    Ok(())
 }
 
 fn persist_local_head(knowledge_base: &Path, manifest: &SyncManifest) -> PdfResult<()> {
@@ -230,4 +459,85 @@ fn object_key(hash: &str) -> String {
 
 fn storage_err(e: impl std::fmt::Display) -> PdfModuleError {
     PdfModuleError::Storage(e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_sync_dirs(test_name: &str) -> (PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!("sync_{test_name}_{}", std::process::id()));
+        (base.join("kb"), base.join("remote"))
+    }
+
+    #[test]
+    fn pull_detects_local_remote_hash_conflict() {
+        let (kb, remote_base) = temp_sync_dirs("pull_abort");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+        fs::create_dir_all(kb.join("wiki")).unwrap();
+        fs::write(kb.join("wiki/a.md"), "local v1").unwrap();
+        let remote = FileSyncRemote::new(&remote_base);
+        let local_manifest = build_local_manifest(&kb).unwrap();
+        let raw = serde_json::to_vec(&local_manifest).unwrap();
+        remote.put_manifest("HEAD", &raw).unwrap();
+        for (rel, hash) in &local_manifest.objects {
+            let data = fs::read(kb.join(rel)).unwrap();
+            remote.put_object(&object_key(hash), &data).unwrap();
+        }
+        fs::write(kb.join("wiki/a.md"), "local v2").unwrap();
+        let report = sync_pull(&kb, &remote, SyncConflictResolution::Abort).unwrap();
+        assert!(report.aborted);
+        assert!(!report.conflicts.is_empty());
+        assert_eq!(fs::read_to_string(kb.join("wiki/a.md")).unwrap(), "local v2");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+    }
+
+    #[test]
+    fn push_prefer_remote_skips_conflict_paths() {
+        let (kb, remote_base) = temp_sync_dirs("push_prefer_remote");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+        fs::create_dir_all(kb.join("wiki")).unwrap();
+        fs::write(kb.join("wiki/c.md"), "local v1").unwrap();
+        let remote = FileSyncRemote::new(&remote_base);
+        let local_manifest = build_local_manifest(&kb).unwrap();
+        remote.put_manifest("HEAD", &serde_json::to_vec(&local_manifest).unwrap()).unwrap();
+        for (rel, hash) in &local_manifest.objects {
+            let data = fs::read(kb.join(rel)).unwrap();
+            remote.put_object(&object_key(hash), &data).unwrap();
+        }
+        fs::write(kb.join("wiki/c.md"), "local v2").unwrap();
+        let report = sync_push(&kb, &remote, SyncConflictResolution::PreferRemote).unwrap();
+        assert!(!report.aborted);
+        assert!(!report.conflicts.is_empty());
+        assert!(report.resolved >= 1);
+        assert_eq!(fs::read_to_string(kb.join("wiki/c.md")).unwrap(), "local v2");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+    }
+
+    #[test]
+    fn pull_prefer_remote_resolves_conflict() {
+        let (kb, remote_base) = temp_sync_dirs("pull_prefer_remote");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+        fs::create_dir_all(kb.join("wiki")).unwrap();
+        fs::write(kb.join("wiki/b.md"), "local").unwrap();
+        let remote = FileSyncRemote::new(&remote_base);
+        fs::write(kb.join("wiki/b.md"), "remote-wins").unwrap();
+        let manifest = build_local_manifest(&kb).unwrap();
+        remote.put_manifest("HEAD", &serde_json::to_vec(&manifest).unwrap()).unwrap();
+        for (rel, hash) in &manifest.objects {
+            let data = fs::read(kb.join(rel)).unwrap();
+            remote.put_object(&object_key(hash), &data).unwrap();
+        }
+        fs::write(kb.join("wiki/b.md"), "local").unwrap();
+        let report = sync_pull(&kb, &remote, SyncConflictResolution::PreferRemote).unwrap();
+        assert!(!report.aborted);
+        assert_eq!(fs::read_to_string(kb.join("wiki/b.md")).unwrap(), "remote-wins");
+        let _ = fs::remove_dir_all(&kb);
+        let _ = fs::remove_dir_all(&remote_base);
+    }
 }

@@ -324,12 +324,15 @@ fn handle_initialize(stats: &Arc<ToolStats>, request: &JsonRpcRequest) -> JsonRp
     let tool_count = if mode == "code" {
         pdf_mcp_contracts::code_mode_tool_count()
     } else {
-        pdf_mcp_contracts::tool_count()
+        pdf_mcp_contracts::all_tool_specs()
+            .iter()
+            .filter(|s| pdf_mcp_contracts::listed_in_default_manifest(&s.name))
+            .count()
     };
     let instructions = if mode == "code" {
         pdf_mcp_contracts::code_mode_instructions()
     } else {
-        "Knowledge engine (contract 1.1.0). FIRST read schema/AGENTS.md in the knowledge base. Three commands: ingest → compile_to_wiki/incremental_compile → save_wiki_entry → complete_compile_job; query → read wiki/index.md then get_agent_context or search_knowledge (mode wiki_first); lint → lint_wiki. Also: init_knowledge_base, archive_answer for query write-back. Wiki: patch_wiki_entry, search_knowledge. PDF: extract_*."
+        "Knowledge engine (contract 1.1.0). FIRST read schema/AGENTS.md. Meta tools: ingest, query, lint (Karpathy commands). Atomic: compile_to_wiki, incremental_compile, save_wiki_entry, complete_compile_job, search_knowledge (wiki_first), lint_wiki, detect_stale_entries, archive_answer. PDF: extract_*."
     };
     let result = serde_json::json!({
         "protocolVersion": "2024-11-05",

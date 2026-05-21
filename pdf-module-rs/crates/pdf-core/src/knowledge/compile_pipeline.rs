@@ -5,8 +5,9 @@ use std::path::Path;
 use tracing::warn;
 
 use crate::error::PdfResult;
+use crate::knowledge::confidence_propagation::PropagationPolicy;
 use crate::knowledge::engine::{CompileResult, IncrementalResult, KnowledgeEngine};
-use crate::knowledge::index::rebuild_all;
+use crate::knowledge::index::rebuild_all_with_policy;
 use crate::knowledge::quality::analyze_wiki;
 use crate::management::compile_job::{
     CompileJobStore, CompileStage, CompileTrigger, PipelineStatus,
@@ -14,6 +15,7 @@ use crate::management::compile_job::{
 use crate::management::quality_snapshot::refresh_quality_snapshot;
 
 use crate::knowledge::publish_gate::apply_publish_gate;
+use crate::wiki::{NervousEvent, NervousEventKind, sync_nervous_system};
 
 /// Run extract + prompt stages for a single PDF; leaves job awaiting Agent.
 pub async fn run_single_pdf_extract(
@@ -88,6 +90,7 @@ pub struct CompleteCompileJobResult {
     pub quality_gate: serde_json::Value,
     pub entries_saved: usize,
     pub entries_blocked: usize,
+    pub human_review_summary: String,
 }
 
 /// Run index rebuild and quality gate stages, then mark the job complete.
@@ -95,7 +98,9 @@ pub fn complete_compile_job(
     knowledge_base: &Path,
     job_id: &str,
     force: bool,
+    propagation_policy: Option<PropagationPolicy>,
 ) -> PdfResult<CompleteCompileJobResult> {
+    let propagation_policy = propagation_policy.unwrap_or_default();
     let store = CompileJobStore::new(knowledge_base);
     let job = store.load_job(job_id)?;
 
@@ -110,18 +115,20 @@ pub fn complete_compile_job(
             quality_gate: serde_json::json!({"skipped": true}),
             entries_saved: job.stats.entries_saved,
             entries_blocked: job.stats.entries_blocked,
+            human_review_summary: "skipped: job already completed".to_string(),
         });
     }
 
     store.start_stage(job_id, CompileStage::IndexRebuild)?;
-    let index_stats = match rebuild_all(knowledge_base) {
-        Ok(stats) => {
+    let index_stats = match rebuild_all_with_policy(knowledge_base, &propagation_policy) {
+        Ok((stats, propagation)) => {
             store.succeed_stage(job_id, CompileStage::IndexRebuild)?;
             serde_json::json!({
                 "fulltext_entries_indexed": stats.fulltext_entries_indexed,
                 "graph_nodes": stats.graph_nodes,
                 "graph_edges": stats.graph_edges,
                 "vector_entries_indexed": stats.vector_entries_indexed,
+                "confidence_propagation": propagation,
             })
         }
         Err(e) => {
@@ -179,6 +186,14 @@ pub fn complete_compile_job(
     )?;
 
     let final_job = store.load_job(job_id)?;
+    let human_review_summary = format!(
+        "job={job_id} saved={} blocked={} outcome={outcome}",
+        final_job.stats.entries_saved, final_job.stats.entries_blocked
+    );
+    let _ = sync_nervous_system(
+        knowledge_base,
+        NervousEvent::new(NervousEventKind::CompileComplete, human_review_summary.clone()),
+    );
     Ok(CompleteCompileJobResult {
         job_id: job_id.to_string(),
         pipeline_status: outcome.to_string(),
@@ -186,5 +201,6 @@ pub fn complete_compile_job(
         quality_gate: gate_result,
         entries_saved: final_job.stats.entries_saved,
         entries_blocked: final_job.stats.entries_blocked,
+        human_review_summary,
     })
 }

@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::KnowledgeEntry;
+use crate::knowledge::entry::{KnowledgeEntry, extract_markdown_body};
 use crate::knowledge::index::vector::{EmbeddingModel, TfidfModel, cosine_similarity};
 
 /// Severity level for quality issues.
@@ -309,7 +309,7 @@ fn detect_drift(wiki_dir: &Path, entries: &[(PathBuf, KnowledgeEntry)]) -> Vec<D
         .iter()
         .map(|(path, entry)| {
             let body = fs::read_to_string(path).unwrap_or_default();
-            let body_text = body.split("---").nth(2).unwrap_or("").to_string();
+            let body_text = extract_markdown_body(&body).unwrap_or("").to_string();
             format!("{} {}", entry.title, body_text)
         })
         .collect();

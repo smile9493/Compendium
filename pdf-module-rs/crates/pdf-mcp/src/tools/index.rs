@@ -5,7 +5,7 @@ use crate::tools::parse_kb_path;
 use pdf_core::knowledge::patch::{WikiPatchRequest, apply_patch, preview_patch};
 use pdf_core::knowledge::quality::build_next_actions;
 use pdf_core::knowledge::{
-    KnowledgeEntry, SearchMode, SearchOptions, graph, rebuild_all, reindex_entry,
+    KnowledgeEntry, SearchMode, SearchOptions, extract_markdown_body, graph, reindex_entry,
     search_with_options, wiki_dir,
 };
 use pdf_core::management::WorkspaceRegistry;
@@ -25,7 +25,10 @@ pub async fn handle_search_knowledge(
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let query = args["query"].as_str().ok_or_else(|| anyhow::anyhow!("Missing query"))?;
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
-    let mode = args["mode"].as_str().map(SearchMode::parse).unwrap_or(SearchMode::Hybrid);
+    let mode = args["mode"]
+        .as_str()
+        .map(SearchMode::parse)
+        .unwrap_or_else(|| pdf_core::knowledge::index::default_search_mode(&kb_path));
 
     let mut opts = SearchOptions::for_api();
     if let Some(d) = args["domain"].as_str() {
@@ -46,7 +49,8 @@ pub async fn handle_rebuild_index(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
-    let stats = rebuild_all(&kb_path)?;
+    let policy = pdf_core::knowledge::PropagationPolicy::from_json_args(args);
+    let (stats, propagation) = pdf_core::knowledge::rebuild_all_with_policy(&kb_path, &policy)?;
     ctx.index_cache.invalidate(&kb_path);
 
     let result = serde_json::json!({
@@ -55,6 +59,7 @@ pub async fn handle_rebuild_index(
         "graph_nodes": stats.graph_nodes,
         "graph_edges": stats.graph_edges,
         "vector_entries_indexed": stats.vector_entries_indexed,
+        "confidence_propagation": propagation,
         "message": "All indexes rebuilt from wiki/ files."
     });
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
@@ -160,6 +165,11 @@ pub async fn handle_check_quality(
     let next_actions = build_next_actions(&report, &kb_str);
     let issues = pdf_core::knowledge::list_quality_issues(&wiki_dir, None, 50)?;
 
+    let graph = graph(&kb_path)?;
+    let hub = pdf_core::knowledge::hub_threshold_for_kb(&kb_path, &graph)?;
+    let diversity = pdf_core::knowledge::analyze_cognitive_diversity(&kb_path, &graph, hub)?;
+    let propagation = pdf_core::knowledge::compute_propagation(&kb_path, &graph, 2)?;
+
     let result = serde_json::json!({
         "total_entries": report.total_entries,
         "avg_quality_score": format!("{:.1}%", report.avg_quality_score * 100.0),
@@ -169,6 +179,8 @@ pub async fn handle_check_quality(
         "orphan_count": report.orphan_entries.len(),
         "broken_links_count": report.broken_links.len(),
         "drift_pairs_count": report.drift_pairs.len(),
+        "cognitive_diversity": diversity,
+        "confidence_propagation": propagation,
         "report_markdown": report.to_markdown(),
         "has_errors": report.has_errors(),
         "has_warnings": report.has_warnings(),
@@ -196,7 +208,7 @@ pub async fn handle_get_agent_context(
 
     let entry = KnowledgeEntry::from_markdown(&content)
         .ok_or_else(|| anyhow::anyhow!("Invalid front matter in {}", rel))?;
-    let body = content.split("---").nth(2).unwrap_or("");
+    let body = extract_markdown_body(&content).unwrap_or("");
     let body_truncated = truncate_chars(body, max_body_chars);
 
     let graph = graph(&kb_path)?;
@@ -287,7 +299,13 @@ pub async fn handle_patch_wiki_entry(
     let request = parse_patch_request(args)?;
     let result = apply_patch(&kb_path, &request)?;
     reindex_entry(&kb_path, &request.entry_path)?;
-    // Note: cache invalidation happens on full rebuild; single-entry reindex reloads on next search.
+    let _ = pdf_core::wiki::sync_nervous_system(
+        &kb_path,
+        pdf_core::wiki::NervousEvent::new(
+            pdf_core::wiki::NervousEventKind::Patch,
+            format!("path={}", request.entry_path),
+        ),
+    );
     Ok(vec![Content::text(serde_json::to_string_pretty(&result)?)])
 }
 

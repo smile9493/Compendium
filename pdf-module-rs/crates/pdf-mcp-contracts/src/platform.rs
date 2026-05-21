@@ -78,6 +78,9 @@ pub struct SyncPushInput {
     pub remote_url: String,
     #[serde(flatten)]
     pub kb: KbPathInput,
+    /// `abort` | `prefer_local` | `prefer_remote` | `prefer_newest`
+    #[serde(default)]
+    pub conflict_resolution: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -93,6 +96,8 @@ pub struct SyncPullInput {
     pub kb: KbPathInput,
     #[serde(default)]
     pub rebuild_index: bool,
+    #[serde(default)]
+    pub conflict_resolution: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

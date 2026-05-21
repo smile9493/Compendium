@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 use pdf_core::management::{
-    FileSyncRemote, WorkspaceEntry, WorkspaceRegistry, sync_pull, sync_push, sync_status,
+    FileSyncRemote, SyncConflictResolution, WorkspaceEntry, WorkspaceRegistry, sync_pull,
+    sync_push, sync_status,
 };
 
 use super::{CmdResult, Mode};
@@ -114,13 +115,13 @@ pub fn run_sync(
         SyncAction::Push { remote_url, knowledge_base, kb_id } => {
             let kb = resolve_kb(config, kb_id.as_deref(), knowledge_base.as_ref())?;
             let remote = FileSyncRemote::from_url(&remote_url)?;
-            let report = sync_push(&kb, &remote)?;
+            let report = sync_push(&kb, &remote, SyncConflictResolution::Abort)?;
             serde_json::to_value(report)?
         }
         SyncAction::Pull { remote_url, knowledge_base, kb_id, rebuild_index } => {
             let kb = resolve_kb(config, kb_id.as_deref(), knowledge_base.as_ref())?;
             let remote = FileSyncRemote::from_url(&remote_url)?;
-            let report = sync_pull(&kb, &remote)?;
+            let report = sync_pull(&kb, &remote, SyncConflictResolution::Abort)?;
             if rebuild_index {
                 pdf_core::knowledge::rebuild_all(&kb)?;
             }

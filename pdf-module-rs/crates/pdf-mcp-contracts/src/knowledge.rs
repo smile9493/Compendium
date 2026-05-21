@@ -1,4 +1,4 @@
-//! Knowledge / compile tool contracts (12 tools).
+//! Knowledge / compile tool contracts.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -114,6 +114,27 @@ pub struct CompleteCompileJobInput {
     pub kb: KbPathInput,
     #[serde(default)]
     pub force: bool,
+    #[serde(default)]
+    pub dry_run: bool,
+    #[serde(default = "default_true")]
+    pub auto_write: bool,
+    #[serde(default)]
+    pub propagation_depth: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CompileImageInput {
+    pub image_path: String,
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CompileImageOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -174,8 +195,178 @@ pub struct CompileUploadedPdfOutput {
     pub result: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct InitKnowledgeBaseInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct InitKnowledgeBaseOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LintWikiInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LintWikiOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ArchiveAnswerInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    pub title: String,
+    pub body_markdown: String,
+    #[serde(default)]
+    pub domain: Option<String>,
+    #[serde(default)]
+    pub entry_path: Option<String>,
+    #[serde(default)]
+    pub related: Option<Vec<String>>,
+    #[serde(default)]
+    pub entry_type: Option<String>,
+    #[serde(default)]
+    pub confidence: Option<String>,
+    #[serde(default)]
+    pub sources: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ArchiveAnswerOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DetectStaleEntriesInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub max_age_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DetectStaleEntriesOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaIngestInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub pdf_path: Option<String>,
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaIngestOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaQueryInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub entry_path: Option<String>,
+    #[serde(default)]
+    pub limit: Option<u64>,
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaQueryOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaLintInput {
+    #[serde(flatten)]
+    pub kb: KbPathInput,
+    #[serde(default)]
+    pub max_age_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MetaLintOutput {
+    #[schemars(with = "serde_json::Value")]
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LoadToolsInput {
+    /// `core` | `deferred` | `code_only` | `all` (index only)
+    #[serde(default = "default_load_tier")]
+    pub tier: String,
+    #[serde(default = "default_load_limit")]
+    pub limit: u32,
+}
+
+fn default_load_tier() -> String {
+    "deferred".to_string()
+}
+
+fn default_load_limit() -> u32 {
+    30
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LoadToolsOutput {
+    pub tier: String,
+    pub tools: Vec<serde_json::Value>,
+    pub progressive_index: serde_json::Value,
+}
+
 pub fn tool_specs() -> Vec<McpToolSpec> {
     vec![
+        McpToolSpec::new::<InitKnowledgeBaseInput, InitKnowledgeBaseOutput>(
+            "init_knowledge_base",
+            "Initialize a new knowledge base from Karpathy-style templates (schema, index, log)",
+        ),
+        McpToolSpec::new::<LintWikiInput, LintWikiOutput>(
+            "lint_wiki",
+            "Karpathy lint: orphans, broken links, contradictions, drift, missing concepts, stale entries",
+        ),
+        McpToolSpec::new::<DetectStaleEntriesInput, DetectStaleEntriesOutput>(
+            "detect_stale_entries",
+            "List wiki entries not updated or validated within max_age_days",
+        ),
+        McpToolSpec::new::<MetaIngestInput, MetaIngestOutput>(
+            "ingest",
+            "Karpathy ingest: compile_to_wiki or incremental_compile plus index context",
+        ),
+        McpToolSpec::new::<MetaQueryInput, MetaQueryOutput>(
+            "query",
+            "Karpathy query: search_knowledge plus optional entry context and index excerpt",
+        ),
+        McpToolSpec::new::<MetaLintInput, MetaLintOutput>(
+            "lint",
+            "Karpathy lint: lint_wiki, check_quality, find_orphans, detect_stale_entries, load-bearing",
+        ),
+        McpToolSpec::new::<LoadToolsInput, LoadToolsOutput>(
+            "load_tools",
+            "Progressive tool discovery: list deferred/code_only tools by tier (hybrid manifest)",
+        ),
+        McpToolSpec::new::<ArchiveAnswerInput, ArchiveAnswerOutput>(
+            "archive_answer",
+            "Write a query answer back to the wiki as an overview page",
+        ),
         McpToolSpec::new::<CompileToWikiInput, CompileToWikiOutput>(
             "compile_to_wiki",
             "Compile a PDF into the knowledge base (Karpathy compiler pattern)",
@@ -223,6 +414,10 @@ pub fn tool_specs() -> Vec<McpToolSpec> {
         McpToolSpec::new::<CompileUploadedPdfInput, CompileUploadedPdfOutput>(
             "compile_uploaded_pdf",
             "Compile an uploaded PDF by file_id from POST /api/upload",
+        ),
+        McpToolSpec::new::<CompileImageInput, CompileImageOutput>(
+            "compile_image",
+            "Compile a standalone image via built-in VLM (PNG/JPEG/WebP) into raw/ compile prompts",
         ),
     ]
 }

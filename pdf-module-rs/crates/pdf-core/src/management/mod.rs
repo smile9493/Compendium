@@ -33,8 +33,8 @@ pub use quality_snapshot::{
 };
 #[cfg(feature = "knowledge")]
 pub use sync::{
-    FileSyncRemote, SyncManifest, SyncRemote, SyncReport, SyncStatus, build_local_manifest,
-    sync_dir, sync_pull, sync_push, sync_status,
+    FileSyncRemote, SyncConflict, SyncConflictResolution, SyncManifest, SyncRemote, SyncReport,
+    SyncStatus, build_local_manifest, sync_dir, sync_pull, sync_push, sync_status,
 };
 pub use types::{CompileStatusRecord, HealthReport};
 pub use workspace::{WorkspaceEntry, WorkspaceId, WorkspaceRegistry};

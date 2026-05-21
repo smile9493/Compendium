@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
-use crate::knowledge::entry::{CompileStatus, KnowledgeEntry, PublishStatus};
+use crate::knowledge::entry::{
+    CompileStatus, KnowledgeEntry, PublishStatus, extract_markdown_body,
+};
 use crate::knowledge::quality::{IssueSeverity, QualityReport, analyze_wiki};
 use crate::management::config_manager::ConfigManager;
 
@@ -133,7 +135,7 @@ fn scan_and_apply(
             if new_status != meta.publish_status {
                 meta.publish_status = new_status;
                 meta.touch();
-                let body = content.split("---").nth(2).unwrap_or("").trim_start();
+                let body = extract_markdown_body(&content).unwrap_or("").trim_start();
                 let new_content = meta.to_markdown(body)?;
                 fs::write(&path, new_content)
                     .map_err(|e| PdfModuleError::Storage(e.to_string()))?;

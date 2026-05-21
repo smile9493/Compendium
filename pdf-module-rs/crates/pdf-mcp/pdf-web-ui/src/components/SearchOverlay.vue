@@ -21,6 +21,14 @@
             >
               关键词
             </button>
+            <button
+              type="button"
+              class="search-facet-btn"
+              :class="{ active: searchStore.searchMode === 'wiki_first' }"
+              @click="setMode('wiki_first')"
+            >
+              索引
+            </button>
           </div>
         </div>
         <div class="search-toolbar-right">

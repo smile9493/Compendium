@@ -141,6 +141,18 @@ enum Commands {
         #[command(subcommand)]
         action: commands::platform::SyncAction,
     },
+
+    /// Knowledge base utilities
+    Kb {
+        #[command(subcommand)]
+        action: KbAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum KbAction {
+    /// Initialize a new knowledge base (Karpathy templates)
+    Init(commands::kb::KbInitArgs),
 }
 
 #[derive(Subcommand)]
@@ -170,6 +182,9 @@ enum IndexAction {
         /// Knowledge base path
         #[arg(long)]
         knowledge_base: Option<String>,
+        /// Confidence propagation report only (no wiki writes)
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -250,6 +265,12 @@ async fn main() -> Result<()> {
         Commands::Sync { action } => {
             Ok(commands::platform::run_sync(&cfg, mode, action.clone(), format)?)
         }
+        Commands::Kb { action } => match action {
+            KbAction::Init(args) => Ok(CmdResult::new(
+                "Knowledge Base Initialized",
+                commands::kb::run_init(args.clone())?,
+            )),
+        },
     }?;
 
     result.print(format);
@@ -364,13 +385,13 @@ fn cmd_health(config: &config::CliConfig, mode: Mode, kb_path: Option<&str>) -> 
 /// Index management
 fn cmd_index(config: &config::CliConfig, mode: Mode, action: &IndexAction) -> Result<CmdResult> {
     match action {
-        IndexAction::Rebuild { knowledge_base } => match mode {
+        IndexAction::Rebuild { knowledge_base, dry_run } => match mode {
             Mode::Local => {
                 let kb = commands::resolve_kb_path(
                     config,
                     knowledge_base.as_ref().map(PathBuf::from).as_deref(),
                 );
-                let result = local::rebuild_index(&kb)?;
+                let result = local::rebuild_index(&kb, *dry_run)?;
                 Ok(CmdResult::new("Index Rebuild", result))
             }
             Mode::Remote => {
