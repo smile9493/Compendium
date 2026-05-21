@@ -47,18 +47,16 @@ impl ToolContext {
         workspace_registry: Arc<WorkspaceRegistry>,
         index_cache: Arc<IndexCache>,
     ) -> Self {
-        Self {
-            pipeline,
-            path_config: default_path_config(),
-            upload_store: None,
-            workspace_registry,
-            index_cache,
-            sampling: None,
-        }
+        Self::new_with_upload_store(pipeline, None, workspace_registry, index_cache)
     }
 
     pub fn with_sampling(mut self, sampling: Arc<SamplingClient>) -> Self {
         self.sampling = Some(sampling);
+        self
+    }
+
+    pub fn with_upload_store(mut self, upload_store: Option<Arc<UploadStore>>) -> Self {
+        self.upload_store = upload_store;
         self
     }
 
@@ -139,14 +137,14 @@ pub async fn dispatch_api_tool_inner(
         "search_keywords" => handle_search_keywords(ctx, args).await,
         "extrude_to_server_wiki" => handle_extrude_to_server_wiki(ctx, args).await,
         "extrude_to_agent_payload" => handle_extrude_to_agent_payload(ctx, args).await,
-        "init_knowledge_base" => handle_init_knowledge_base(args).await,
-        "lint_wiki" => handle_lint_wiki(args).await,
+        "init_knowledge_base" => handle_init_knowledge_base(&ctx.workspace_registry, args).await,
+        "lint_wiki" => handle_lint_wiki(&ctx.workspace_registry, args).await,
         "detect_stale_entries" => handle_detect_stale_entries(&ctx.workspace_registry, args).await,
         "ingest" => handle_meta_ingest(ctx, args).await,
         "query" => handle_meta_query(ctx, args).await,
         "lint" => handle_meta_lint(ctx, args).await,
         "load_tools" => handle_load_tools(args).await,
-        "archive_answer" => handle_archive_answer(args).await,
+        "archive_answer" => handle_archive_answer(&ctx.workspace_registry, args).await,
         "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
         "compile_image" => handle_compile_image(ctx, args).await,
         "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,

@@ -452,13 +452,13 @@ pub async fn handle_mark_plan_task_done(
     })
 }
 
-#[instrument(skip(args))]
+#[instrument(skip(registry, args))]
 pub async fn handle_init_knowledge_base(
+    registry: &pdf_core::management::WorkspaceRegistry,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
-    let kb_path =
-        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
-    let result = init_knowledge_base(kb_path)?;
+    let kb_path = crate::tools::parse_kb_path(registry, args)?;
+    let result = init_knowledge_base(&kb_path)?;
     json_content(&InitKnowledgeBaseOutput {
         result: serde_json::json!({
             "knowledge_base": result.knowledge_base,
@@ -468,13 +468,13 @@ pub async fn handle_init_knowledge_base(
     })
 }
 
-#[instrument(skip(args))]
+#[instrument(skip(registry, args))]
 pub async fn handle_lint_wiki(
+    registry: &pdf_core::management::WorkspaceRegistry,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
-    let kb_path =
-        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
-    let report = lint_wiki(std::path::Path::new(kb_path))?;
+    let kb_path = crate::tools::parse_kb_path(registry, args)?;
+    let report = lint_wiki(&kb_path)?;
     json_content(&LintWikiOutput { result: serde_json::to_value(&report)? })
 }
 
@@ -515,12 +515,12 @@ fn parse_confidence(s: &str) -> EntryConfidence {
     }
 }
 
-#[instrument(skip(args))]
+#[instrument(skip(registry, args))]
 pub async fn handle_archive_answer(
+    registry: &pdf_core::management::WorkspaceRegistry,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
-    let kb_path =
-        args["knowledge_base"].as_str().ok_or_else(|| anyhow::anyhow!("Missing knowledge_base"))?;
+    let kb_path = crate::tools::parse_kb_path(registry, args)?;
     let title = args["title"].as_str().ok_or_else(|| anyhow::anyhow!("Missing title"))?;
     let body =
         args["body_markdown"].as_str().ok_or_else(|| anyhow::anyhow!("Missing body_markdown"))?;
@@ -554,16 +554,16 @@ pub async fn handle_archive_answer(
         return Err(anyhow::anyhow!("entry_path must be a relative .md path under wiki/"));
     }
 
-    let wiki_dir = std::path::Path::new(kb_path).join("wiki");
+    let wiki_dir = kb_path.join("wiki");
     let target = wiki_dir.join(&entry_path);
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let content = entry.to_markdown(body)?;
     std::fs::write(&target, &content)?;
-    let _ = pdf_core::knowledge::reindex_entry(std::path::Path::new(kb_path), &entry_path);
+    let _ = pdf_core::knowledge::reindex_entry(&kb_path, &entry_path);
     let _ = pdf_core::wiki::sync_nervous_system(
-        kb_path,
+        &kb_path,
         pdf_core::wiki::NervousEvent::new(
             pdf_core::wiki::NervousEventKind::Archive,
             format!("path={entry_path} title={title}"),
