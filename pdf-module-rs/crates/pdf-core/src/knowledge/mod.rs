@@ -20,8 +20,10 @@ pub mod compile_plan;
 pub mod confidence_propagation;
 pub mod engine;
 pub mod entry;
+pub mod export;
 pub mod hash_cache;
 pub mod hub_threshold;
+pub mod import;
 pub mod index;
 pub mod kb_init;
 pub mod knowledge_decay;
@@ -55,8 +57,10 @@ pub use entry::{
     CompileStatus, EntryConfidence, EntryLevel, EntryType, KnowledgeEntry, PublishStatus,
     extract_front_matter_yaml, extract_markdown_body,
 };
+pub use export::{ExportOptions, ExportResult, export_knowledge_base};
 pub use hash_cache::HashCache;
 pub use hub_threshold::{KEY_HUB_IN_DEGREE, hub_threshold_for_kb};
+pub use import::{ImportOptions, ImportResult, import_knowledge_base};
 pub use index::{
     Community, FulltextIndex, GraphIndex, IndexCache, LoadBearingEntry, ProtectionLevel,
     RebuildStats, SearchMeta, SearchMode, SearchOptions, SearchResponse, VectorIndex,

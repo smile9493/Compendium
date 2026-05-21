@@ -1,6 +1,7 @@
 import router from '@/router'
 import { useSearchStore } from '@/stores/search'
 import { normalizeWikiPath } from '@/utils/path'
+import { pushRecentPath } from '@/composables/useRecentEntries'
 
 /**
  * Navigate to a wiki entry (URL is the source of truth).
@@ -12,6 +13,7 @@ export function openEntry(path) {
 
   const searchStore = useSearchStore()
   searchStore.close()
+  pushRecentPath(normalized)
 
   router.push({ name: 'entry', params: { path: normalized } })
 }

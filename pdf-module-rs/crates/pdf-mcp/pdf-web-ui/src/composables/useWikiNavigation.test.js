@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { openEntry } from '@/composables/useWikiNavigation'
 
-const push = vi.fn()
+const { push } = vi.hoisted(() => ({
+  push: vi.fn(),
+}))
 
 vi.mock('@/router', () => ({
   default: { push },
@@ -10,6 +12,10 @@ vi.mock('@/router', () => ({
 
 vi.mock('@/stores/search', () => ({
   useSearchStore: () => ({ close: vi.fn() }),
+}))
+
+vi.mock('@/composables/useRecentEntries', () => ({
+  pushRecentPath: vi.fn(),
 }))
 
 describe('useWikiNavigation', () => {

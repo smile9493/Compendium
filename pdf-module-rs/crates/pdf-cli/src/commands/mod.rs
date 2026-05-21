@@ -4,6 +4,8 @@
 //! Every function takes `mode: Mode` and dispatches accordingly.
 
 pub mod compile;
+pub mod export;
+pub mod import;
 pub mod kb;
 pub mod platform;
 pub mod query;

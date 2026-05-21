@@ -153,6 +153,10 @@ enum Commands {
 enum KbAction {
     /// Initialize a new knowledge base (Karpathy templates)
     Init(commands::kb::KbInitArgs),
+    /// Export a knowledge base to a portable archive
+    Export(commands::export::KbExportArgs),
+    /// Import a knowledge base from a portable archive
+    Import(commands::import::KbImportArgs),
 }
 
 #[derive(Subcommand)]
@@ -269,6 +273,14 @@ async fn main() -> Result<()> {
             KbAction::Init(args) => Ok(CmdResult::new(
                 "Knowledge Base Initialized",
                 commands::kb::run_init(args.clone())?,
+            )),
+            KbAction::Export(args) => Ok(CmdResult::new(
+                "Knowledge Base Exported",
+                commands::export::run_export(args.clone())?,
+            )),
+            KbAction::Import(args) => Ok(CmdResult::new(
+                "Knowledge Base Imported",
+                commands::import::run_import(args.clone())?,
             )),
         },
     }?;

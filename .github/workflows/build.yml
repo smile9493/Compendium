@@ -55,16 +55,6 @@ jobs:
         with:
           chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
-      - name: Run doc tests (pdf-module-rs)
-        run: |
-          cd pdf-module-rs
-          cargo test --doc --all-features
-
-      - name: Run tests (pdf-module-rs)
-        run: |
-          cd pdf-module-rs
-          cargo test --all-targets --all-features
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -72,19 +62,33 @@ jobs:
           cache: npm
           cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
 
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
+      - name: Run doc tests (pdf-module-rs)
+        run: |
+          cd pdf-module-rs
+          cargo test --doc --workspace --all-features --exclude pdf-wasm
+
+      - name: Run tests (pdf-module-rs)
+        run: |
+          cd pdf-module-rs
+          cargo test --all-targets --workspace --all-features --exclude pdf-wasm
+
       - name: Verify OpenAPI fixture and generated types
         run: |
           cd pdf-module-rs
           cargo test -p pdf-mcp api_doc::tests::openapi_fixture_matches_code
           cd crates/pdf-mcp/pdf-web-ui
-          npm ci
           npm run generate:api
           git diff --exit-code ../tests/fixtures/openapi.json src/api/generated.d.ts
 
       - name: Build and test pdf-web-ui
         run: |
           cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
-          npm run build
           npm test
 
       - name: Playwright e2e (pdf-web-ui)
@@ -116,7 +120,7 @@ jobs:
       - name: Check documentation
         run: |
           cd pdf-module-rs
-          cargo doc --no-deps --document-private-items --all-features
+          cargo doc --no-deps --document-private-items --workspace --all-features --exclude pdf-wasm
 
   security-audit:
     name: Security Audit
@@ -170,10 +174,23 @@ jobs:
         with:
           chromium-version: ${{ env.PDFIUM_CHROMIUM_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pdf-module-rs/crates/pdf-mcp/pdf-web-ui/package-lock.json
+
+      - name: Build SPA (pdf-web-ui)
+        run: |
+          cd pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+          npm ci
+          npm run build
+
       - name: Generate coverage
         run: |
           cd pdf-module-rs
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          cargo llvm-cov --all-features --workspace --exclude pdf-wasm --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

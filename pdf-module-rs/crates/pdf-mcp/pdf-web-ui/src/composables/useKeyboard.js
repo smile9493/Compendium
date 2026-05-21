@@ -1,10 +1,8 @@
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useSearchStore } from '@/stores/search'
-import { useWikiStore } from '@/stores/wiki'
 
 export function useKeyboard(searchInputRef) {
   const searchStore = useSearchStore()
-  const wikiStore = useWikiStore()
 
   function onGlobalKeydown(e) {
     if (e.key === 'Escape' && !e.target.closest('.dialog') && !e.target.closest('input, textarea, select')) {

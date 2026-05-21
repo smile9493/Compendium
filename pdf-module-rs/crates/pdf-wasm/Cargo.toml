@@ -40,6 +40,8 @@ optional = true
 [dependencies.talc]
 version = "4"
 optional = true
+default-features = false
+features = ["lock_api"]
 
 [dependencies.tracing-wasm]
 version = "0.2"

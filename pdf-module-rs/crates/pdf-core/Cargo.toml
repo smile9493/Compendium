@@ -51,6 +51,8 @@ uuid = { version = "1", features = ["v4"] }
 
 # Always-required: I/O and parallelism
 memmap2 = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
 rayon = { workspace = true }
 num_cpus = { workspace = true }
 crossbeam-deque = { workspace = true }
