@@ -28,21 +28,34 @@
         <div class="entry-header">
           <h1>{{ wikiStore.currentEntry.title || 'Untitled' }}</h1>
           <div class="meta-inline">
-            <span class="badge badge-domain">{{ wikiStore.currentEntry.domain || '?' }}</span>
-            <span class="badge badge-level">{{ wikiStore.currentEntry.level || 'L1' }}</span>
+            <span class="meta-item">{{ wikiStore.currentEntry.domain || '?' }}</span>
+            <span class="meta-sep">·</span>
+            <span class="meta-item">{{ wikiStore.currentEntry.level || 'L1' }}</span>
+            <span class="meta-sep">·</span>
             <span
-              class="badge badge-status"
-              :class="{ needs_recompile: wikiStore.currentEntry.status === 'needs_recompile' }"
+              class="meta-item"
+              :class="{
+                'meta-warn': wikiStore.currentEntry.status === 'needs_recompile',
+                'meta-error': wikiStore.currentEntry.status === 'error',
+              }"
             >{{ wikiStore.currentEntry.status || '?' }}</span>
-            <span class="badge badge-quality">质量 {{ qualityScore }}</span>
-            <span v-if="wikiStore.currentEntry.version" class="badge badge-version">v{{ wikiStore.currentEntry.version }}</span>
-            <span v-if="wikiStore.currentEntry.source" class="badge badge-source">源: {{ wikiStore.currentEntry.source }}</span>
-            <button type="button" class="btn btn-sm share-link-btn" @click="copyShareLink">
+            <span class="meta-sep">·</span>
+            <span class="meta-item">{{ t('entry.quality', { score: qualityScore }) }}</span>
+            <template v-if="wikiStore.currentEntry.version">
+              <span class="meta-sep">·</span>
+              <span class="meta-item">v{{ wikiStore.currentEntry.version }}</span>
+            </template>
+            <template v-if="wikiStore.currentEntry.source">
+              <span class="meta-sep">·</span>
+              <span class="meta-item">{{ t('entry.source', { name: wikiStore.currentEntry.source }) }}</span>
+            </template>
+            <span class="meta-sep">·</span>
+            <button type="button" class="btn btn-sm share-link-btn meta-share-btn" @click="copyShareLink">
               {{ shareCopied ? $t('share.copied') : $t('share.copyLink') }}
             </button>
           </div>
           <div v-if="hasTags" class="tag-list">
-            <span v-for="tag in wikiStore.currentEntry.tags" :key="tag" class="tag-item">{{ tag }}</span>
+            <span v-for="tag in wikiStore.currentEntry.tags" :key="tag" class="tag-hash">#{{ tag }}</span>
           </div>
         </div>
 
@@ -107,6 +120,7 @@
 <script setup>
 import { computed, watch, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useWikiStore } from '@/stores/wiki'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { api } from '@/api'
@@ -115,6 +129,7 @@ import { openEntry, openHome } from '@/composables/useWikiNavigation'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import ErrorState from '@/components/ErrorState.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const wikiStore = useWikiStore()
 const workspaceStore = useWorkspaceStore()

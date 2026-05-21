@@ -8,6 +8,7 @@ export const useUiStore = defineStore('ui', () => {
   const settingsOpen = ref(false)
   const sidebarCollapsed = ref(false)
   const rightbarCollapsed = ref(false)
+  const mobileNav = ref('browse')
 
   return {
     statsOpen,
@@ -16,5 +17,6 @@ export const useUiStore = defineStore('ui', () => {
     settingsOpen,
     sidebarCollapsed,
     rightbarCollapsed,
+    mobileNav,
   }
 })

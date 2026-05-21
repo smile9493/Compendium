@@ -41,10 +41,11 @@ COPY pdf-module-rs/Cargo.toml pdf-module-rs/Cargo.lock ./
 COPY pdf-module-rs/.cargo ./.cargo
 
 # Copy all crate source
+COPY pdf-module-rs/templates ./templates/
 COPY pdf-module-rs/crates ./crates
 
-# Build pdf-mcp with embedded Vue SPA and pdf-web
-RUN cargo build --release --bin pdf-mcp --bin pdf-web
+# Build pdf-mcp with embedded Vue SPA
+RUN cargo build --release --bin pdf-mcp
 
 # ── Stage 3: Runtime ──
 FROM debian:bookworm-slim AS runtime
@@ -59,11 +60,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy both binaries
+# Copy pdf-mcp binary
 COPY --from=backend-builder /app/target/release/pdf-mcp /usr/local/bin/pdf-mcp
-COPY --from=backend-builder /app/target/release/pdf-web /usr/local/bin/pdf-web
 
-RUN chmod +x /usr/local/bin/pdf-mcp /usr/local/bin/pdf-web && \
+RUN chmod +x /usr/local/bin/pdf-mcp && \
     mkdir -p /app/data /app/knowledge /app/logs /app/cache && \
     chown -R pdfuser:pdfuser /app
 

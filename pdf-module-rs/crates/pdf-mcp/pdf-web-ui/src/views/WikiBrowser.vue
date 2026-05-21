@@ -1,18 +1,43 @@
 <template>
   <div class="content-inner">
     <div class="empty-entry">
-      <div class="icon">📖</div>
-      <h2>知识编译展览</h2>
-      <p>从左侧目录选择条目浏览知识编译成果</p>
-      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0;">按 <span class="kbd">/</span> 快速搜索知识库</p>
+      <div class="icon" aria-hidden="true">📖</div>
+      <h2>{{ t('welcome.title') }}</h2>
+      <p>{{ t('welcome.subtitle') }}</p>
+      <p class="search-hint">
+        {{ t('welcome.searchHint') }}
+        <span class="kbd">/</span>
+      </p>
+
+      <nav v-if="recentPaths.length" class="welcome-recent" :aria-label="t('welcome.recentTitle')">
+        <h3 class="welcome-recent-title">{{ t('welcome.recentTitle') }}</h3>
+        <ul class="welcome-recent-list">
+          <li v-for="item in recentPaths" :key="item.path">
+            <button type="button" class="welcome-recent-link" @click="openEntry(item.path)">
+              {{ item.label }}
+            </button>
+          </li>
+        </ul>
+      </nav>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useWikiStore } from '@/stores/wiki'
+import { openEntry } from '@/composables/useWikiNavigation'
+import { getRecentPaths, resolveRecentLabels } from '@/composables/useRecentEntries'
+
+const { t } = useI18n()
+const wikiStore = useWikiStore()
+
+const recentPaths = computed(() =>
+  resolveRecentLabels(getRecentPaths(), wikiStore.tree),
+)
 
 onMounted(() => {
-  document.title = 'Compendium 知识库'
+  document.title = t('app.title')
 })
 </script>

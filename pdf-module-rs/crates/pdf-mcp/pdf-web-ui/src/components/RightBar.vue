@@ -11,14 +11,21 @@
         :key="idx"
         class="toc-item"
         :class="{ active: activeHeadingIdx === idx }"
-        :style="{ paddingLeft: `calc(14px + ${h.level} * 12px)` }"
+        :style="{ paddingLeft: `calc(12px + ${h.level} * 14px)` }"
         @click="scrollToHeading(idx)"
       >{{ h.text }}</a>
     </div>
     <div class="rb-divider"></div>
-    <div class="rb-section">{{ t('rightbar.conceptGraph') }}</div>
+    <div class="rb-section">{{ t('rightbar.related') }}</div>
     <div class="graph-preview">
-      <div v-if="mermaidPreview" class="graph-mini">{{ mermaidPreview }}</div>
+      <ul v-if="relatedPreview.length" class="graph-relation-list">
+        <li
+          v-for="name in relatedPreview"
+          :key="name"
+          class="graph-relation-item"
+          @click="openEntry(name)"
+        >{{ name }}</li>
+      </ul>
       <span v-else class="rightbar-empty">{{ t('rightbar.selectEntry') }}</span>
     </div>
     <div class="rightbar-back-top" @click="scrollToTop">↑ {{ t('rightbar.backTop') }}</div>
@@ -26,12 +33,13 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useWikiStore } from '@/stores/wiki'
+import { useScrollSpy } from '@/composables/useScrollSpy'
+import { openEntry } from '@/composables/useWikiNavigation'
 
 const { t } = useI18n()
-import { useScrollSpy } from '@/composables/useScrollSpy'
 
 const props = defineProps({
   collapsed: Boolean,
@@ -42,23 +50,22 @@ const wikiStore = useWikiStore()
 const { activeHeadingIdx, setup: setupScrollSpy, reset: resetScrollSpy } = useScrollSpy(props.mainScrollEl)
 
 const headings = ref([])
-const mermaidPreview = ref('')
 let proseObserver = null
 
-function extractMermaidFromMarkdown(md) {
-  if (!md) return ''
-  const m = md.match(/```mermaid\n([\s\S]*?)```/)
-  if (m) {
-    return m[1].split('\n').slice(0, 8).join('\n')
-  }
-  return ''
-}
+const relatedPreview = computed(() => {
+  const entry = wikiStore.currentEntry
+  if (!entry || entry.error) return []
+  const names = [
+    ...(entry.related || []),
+    ...(entry.backlinks || []),
+  ]
+  return [...new Set(names)].slice(0, 8)
+})
 
 function updateFromProse() {
   const prose = document.querySelector('.prose')
   if (!prose) {
     headings.value = []
-    mermaidPreview.value = extractMermaidFromMarkdown(wikiStore.currentEntry?.body_markdown)
     return
   }
 
@@ -67,11 +74,6 @@ function updateFromProse() {
     level: parseInt(el.tagName[1], 10) - 1,
     text: el.textContent.trim().slice(0, 40),
   }))
-
-  const mermaidEl = prose.querySelector('code.language-mermaid')
-  mermaidPreview.value = mermaidEl
-    ? mermaidEl.textContent.split('\n').slice(0, 8).join('\n')
-    : extractMermaidFromMarkdown(wikiStore.currentEntry?.body_markdown)
 
   setupScrollSpy()
 }
@@ -96,7 +98,6 @@ watch(
     resetScrollSpy()
     if (!entry || entry.error) {
       headings.value = []
-      mermaidPreview.value = ''
       if (proseObserver) {
         proseObserver.disconnect()
         proseObserver = null

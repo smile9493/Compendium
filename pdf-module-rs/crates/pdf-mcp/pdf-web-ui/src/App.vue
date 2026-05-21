@@ -35,6 +35,35 @@
     <SearchOverlay />
     <OpsBanner />
 
+    <nav v-if="isMobile" class="mobile-bottom-nav" aria-label="Mobile navigation">
+      <button
+        type="button"
+        class="mobile-nav-btn"
+        :class="{ active: uiStore.mobileNav === 'browse' }"
+        @click="onMobileBrowse"
+      >
+        <BookOpen :size="20" />
+        <span>{{ t('mobile.browse') }}</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" @click="focusSearch()">
+        <Search :size="20" />
+        <span>{{ t('mobile.search') }}</span>
+      </button>
+      <button
+        type="button"
+        class="mobile-nav-btn"
+        :class="{ active: compileStore.isRunning }"
+        @click="compileStore.openDrawer()"
+      >
+        <Hammer :size="20" />
+        <span>{{ t('mobile.compile') }}</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" @click="uiStore.settingsOpen = true">
+        <Settings :size="20" />
+        <span>{{ t('mobile.settings') }}</span>
+      </button>
+    </nav>
+
     <StatsDialog :open="uiStore.statsOpen" @close="uiStore.statsOpen = false" />
     <DomainDialog :open="uiStore.domainOpen" @close="uiStore.domainOpen = false" />
     <GraphDialog v-if="uiStore.graphOpen" :open="uiStore.graphOpen" @close="uiStore.graphOpen = false" />
@@ -66,6 +95,8 @@ import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import RightBar from '@/components/RightBar.vue'
 import SearchOverlay from '@/components/SearchOverlay.vue'
+import { useI18n } from 'vue-i18n'
+import { BookOpen, Search, Hammer, Settings } from 'lucide-vue-next'
 import OpsBanner from '@/components/OpsBanner.vue'
 import StatsDialog from '@/components/StatsDialog.vue'
 import DomainDialog from '@/components/DomainDialog.vue'
@@ -74,23 +105,34 @@ import CompileDrawer from '@/components/CompileDrawer.vue'
 
 const GraphDialog = defineAsyncComponent(() => import('@/components/GraphDialog.vue'))
 
+const { t } = useI18n()
 const wikiStore = useWikiStore()
 const uiStore = useUiStore()
 const compileStore = useCompileStore()
 const workspaceStore = useWorkspaceStore()
 
 const isMcpMode = ref(false)
+const isMobile = ref(false)
 const mainRef = ref(null)
 const headerRef = ref(null)
+const MOBILE_BP = 768
+const TABLET_BP = 1024
 
 const layoutClasses = computed(() => ({
-  'left-collapsed': uiStore.sidebarCollapsed || wikiStore.readingMode,
-  'right-collapsed': uiStore.rightbarCollapsed || wikiStore.readingMode,
+  'left-collapsed': uiStore.sidebarCollapsed || wikiStore.readingMode || isMobile.value,
+  'right-collapsed': uiStore.rightbarCollapsed || wikiStore.readingMode || isMobile.value,
   'reading-mode': wikiStore.readingMode,
   'mcp-mode': isMcpMode.value,
+  'mobile-layout': isMobile.value,
 }))
 
 useKeyboard(() => headerRef.value?.searchInputRef)
+
+function focusSearch() {
+  const input = headerRef.value?.searchInputRef
+  input?.focus()
+  input?.select()
+}
 
 watch(
   () => wikiStore.readingMode,
@@ -102,8 +144,26 @@ watch(
   },
 )
 
+function applyResponsiveLayout() {
+  const w = window.innerWidth
+  isMobile.value = w <= MOBILE_BP
+  if (w <= MOBILE_BP) {
+    uiStore.sidebarCollapsed = true
+    uiStore.rightbarCollapsed = true
+  } else if (w <= TABLET_BP) {
+    uiStore.rightbarCollapsed = true
+  }
+}
+
+function onMobileBrowse() {
+  uiStore.mobileNav = 'browse'
+  if (isMobile.value) uiStore.sidebarCollapsed = !uiStore.sidebarCollapsed
+}
+
 onMounted(async () => {
   wikiStore.initTheme()
+  applyResponsiveLayout()
+  window.addEventListener('resize', applyResponsiveLayout)
   await workspaceStore.fetchWorkspaces()
   if (workspaceStore.activeKbId) {
     setActiveKbId(workspaceStore.activeKbId)
@@ -116,6 +176,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('message', onMcpMessage)
+  window.removeEventListener('resize', applyResponsiveLayout)
 })
 
 function onMcpMessage(event) {

@@ -72,7 +72,8 @@
     "toc": "On this page",
     "backTop": "Back to top",
     "selectEntry": "Select an entry to view",
-    "conceptGraph": "Concept graph"
+    "conceptGraph": "Concept graph",
+    "related": "Related"
   },
   "header": {
     "expandSidebar": "Expand sidebar",
@@ -89,6 +90,20 @@
   },
   "entry": {
     "invalidPath": "Invalid entry path",
-    "noBody": "Entry has no Markdown body"
+    "noBody": "Entry has no Markdown body",
+    "quality": "Quality {score}",
+    "source": "Source: {name}"
+  },
+  "welcome": {
+    "title": "Knowledge compendium",
+    "subtitle": "Choose an entry from the sidebar to read compiled knowledge.",
+    "searchHint": "Press",
+    "recentTitle": "Recently viewed"
+  },
+  "mobile": {
+    "browse": "Browse",
+    "search": "Search",
+    "compile": "Compile",
+    "settings": "Settings"
   }
 }
