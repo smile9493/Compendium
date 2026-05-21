@@ -136,6 +136,11 @@ export const api = {
     return request(withKb('/health'))
   },
 
+  /** MCP mode, tool counts, and Cursor mcp.json snippet (no kb_id required). */
+  getServerInfo() {
+    return request('/server-info')
+  },
+
   /** @returns {Promise<import('./types').CompileStatusRecord>} */
   getCompileStatus() {
     return request(withKb('/compile/status'))

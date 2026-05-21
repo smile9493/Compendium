@@ -1,0 +1,320 @@
+[
+  {
+    "name": "extract_text",
+    "description": "Extract plain text from a PDF file using pdfium engine",
+    "category": "extract",
+    "ts_signature": "extractText(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "extract_structured",
+    "description": "Extract structured data (per-page text + bbox) from PDF",
+    "category": "extract",
+    "ts_signature": "extractStructured(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_page_count",
+    "description": "Get the number of pages in a PDF file",
+    "category": "extract",
+    "ts_signature": "getPageCount(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "search_keywords",
+    "description": "Search for keywords in a PDF file and return matches with page numbers and context",
+    "category": "extract",
+    "ts_signature": "searchKeywords(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "extrude_to_server_wiki",
+    "description": "Extract PDF to server-side wiki raw/ (Karpathy paradigm)",
+    "category": "extract",
+    "ts_signature": "extrudeToServerWiki(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "extrude_to_agent_payload",
+    "description": "Extract PDF and return markdown payload with compilation instructions for AI Agent",
+    "category": "extract",
+    "ts_signature": "extrudeToAgentPayload(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "init_knowledge_base",
+    "description": "Initialize a new knowledge base from Karpathy-style templates (schema, index, log)",
+    "category": "knowledge",
+    "ts_signature": "initKnowledgeBase(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "lint_wiki",
+    "description": "Karpathy lint: orphans, broken links, contradictions, drift, missing concepts",
+    "category": "knowledge",
+    "ts_signature": "lintWiki(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "archive_answer",
+    "description": "Write a query answer back to the wiki as an overview page",
+    "category": "knowledge",
+    "ts_signature": "archiveAnswer(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "compile_to_wiki",
+    "description": "Compile a PDF into the knowledge base (Karpathy compiler pattern)",
+    "category": "knowledge",
+    "ts_signature": "compileToWiki(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "incremental_compile",
+    "description": "Scan raw/ for changed PDFs and compile only those that need it",
+    "category": "knowledge",
+    "ts_signature": "incrementalCompile(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "micro_compile",
+    "description": "On-demand PDF extraction for conversation context (not saved to wiki)",
+    "category": "knowledge",
+    "ts_signature": "microCompile(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "aggregate_entries",
+    "description": "Identify clusters of related L1 entries for L2 synthesis",
+    "category": "knowledge",
+    "ts_signature": "aggregateEntries(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "hypothesis_test",
+    "description": "Find contradicting entry pairs and generate debate framework",
+    "category": "knowledge",
+    "ts_signature": "hypothesisTest(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "recompile_entry",
+    "description": "Recompile a single wiki entry with version bump",
+    "category": "knowledge",
+    "ts_signature": "recompileEntry(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "save_wiki_entry",
+    "description": "Create or update a wiki entry (YAML front matter required)",
+    "category": "knowledge",
+    "ts_signature": "saveWikiEntry(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "complete_compile_job",
+    "description": "Finish a compile job: rebuild indexes and run quality gate",
+    "category": "knowledge",
+    "ts_signature": "completeCompileJob(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "generate_compile_plan",
+    "description": "Generate compile_plan.json with L1/L2/L3 tasks",
+    "category": "knowledge",
+    "ts_signature": "generateCompilePlan(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_compile_plan",
+    "description": "Read the current compile plan and task statuses",
+    "category": "knowledge",
+    "ts_signature": "getCompilePlan(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "mark_plan_task_done",
+    "description": "Mark a compile plan task as done",
+    "category": "knowledge",
+    "ts_signature": "markPlanTaskDone(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "compile_uploaded_pdf",
+    "description": "Compile an uploaded PDF by file_id from POST /api/upload",
+    "category": "knowledge",
+    "ts_signature": "compileUploadedPdf(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "search_knowledge",
+    "description": "Search wiki entries (hybrid Tantivy + TF-IDF RRF)",
+    "category": "index",
+    "ts_signature": "searchKnowledge(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "rebuild_index",
+    "description": "Rebuild Tantivy, petgraph, and TF-IDF indexes from wiki Markdown",
+    "category": "index",
+    "ts_signature": "rebuildIndex(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_entry_context",
+    "description": "Get N-hop neighbors of a knowledge entry",
+    "category": "index",
+    "ts_signature": "getEntryContext(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_agent_context",
+    "description": "Token-efficient context bundle: center body, neighbors, related snippets",
+    "category": "index",
+    "ts_signature": "getAgentContext(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "preview_wiki_patch",
+    "description": "Preview a structured patch (unified diff, no write)",
+    "category": "index",
+    "ts_signature": "previewWikiPatch(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "patch_wiki_entry",
+    "description": "Apply structured patch and reindex entry",
+    "category": "index",
+    "ts_signature": "patchWikiEntry(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "apply_wiki_patch",
+    "description": "Alias for patch_wiki_entry — apply structured patch and reindex",
+    "category": "index",
+    "ts_signature": "applyWikiPatch(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "find_orphans",
+    "description": "Find entries with no related/contradiction links",
+    "category": "index",
+    "ts_signature": "findOrphans(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "suggest_links",
+    "description": "Suggest links based on tag similarity (Jaccard)",
+    "category": "index",
+    "ts_signature": "suggestLinks(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "export_concept_map",
+    "description": "Export local concept map as Mermaid.js text",
+    "category": "index",
+    "ts_signature": "exportConceptMap(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "check_quality",
+    "description": "Analyze wiki quality and return report with next actions",
+    "category": "index",
+    "ts_signature": "checkQuality(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_compilation_context",
+    "description": "Compile-job context for awaiting_agent: stages, artifacts, prompts",
+    "category": "index",
+    "ts_signature": "getCompilationContext(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_config",
+    "description": "Get runtime configuration for a knowledge base",
+    "category": "management",
+    "ts_signature": "getConfig(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "set_config",
+    "description": "Set a runtime configuration value (atomic write)",
+    "category": "management",
+    "ts_signature": "setConfig(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_health_report",
+    "description": "Comprehensive KB health: entries, graph, index, quality, extraction stack",
+    "category": "management",
+    "ts_signature": "getHealthReport(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "trigger_incremental_compile",
+    "description": "Manually trigger incremental compilation",
+    "category": "management",
+    "ts_signature": "triggerIncrementalCompile(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "get_compile_status",
+    "description": "Compile status with stages and quality snapshot",
+    "category": "management",
+    "ts_signature": "getCompileStatus(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "list_quality_issues",
+    "description": "List quality issues with stable issue_id",
+    "category": "management",
+    "ts_signature": "listQualityIssues(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "fix_suggest",
+    "description": "Suggest MCP actions to fix a quality issue",
+    "category": "management",
+    "ts_signature": "fixSuggest(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "apply_quality_gate",
+    "description": "Run publish quality gate on all wiki entries",
+    "category": "management",
+    "ts_signature": "applyQualityGate(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "show_wiki_browser",
+    "description": "Open interactive wiki browser MCP App resource",
+    "category": "management",
+    "ts_signature": "showWikiBrowser(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "list_workspaces",
+    "description": "List registered knowledge base workspaces",
+    "category": "platform",
+    "ts_signature": "listWorkspaces(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "set_active_workspace",
+    "description": "Set the active workspace by kb_id",
+    "category": "platform",
+    "ts_signature": "setActiveWorkspace(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "register_workspace",
+    "description": "Register or update a knowledge base workspace",
+    "category": "platform",
+    "ts_signature": "registerWorkspace(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "list_extraction_plugins",
+    "description": "List extraction backends in the current router",
+    "category": "platform",
+    "ts_signature": "listExtractionPlugins(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "probe_extraction",
+    "description": "Probe which extraction backend would be selected for a PDF",
+    "category": "platform",
+    "ts_signature": "probeExtraction(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "sync_status",
+    "description": "Compare local KB manifest with remote sync store",
+    "category": "platform",
+    "ts_signature": "syncStatus(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "sync_push",
+    "description": "Push local KB objects to remote sync store",
+    "category": "platform",
+    "ts_signature": "syncPush(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "sync_pull",
+    "description": "Pull KB objects from remote sync store",
+    "category": "platform",
+    "ts_signature": "syncPull(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "submit_patch_proposal",
+    "description": "Submit wiki patch proposal without applying",
+    "category": "platform",
+    "ts_signature": "submitPatchProposal(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "apply_patch_proposal",
+    "description": "Apply a pending patch proposal by id",
+    "category": "platform",
+    "ts_signature": "applyPatchProposal(args: Record<string, unknown>): Promise<unknown>"
+  },
+  {
+    "name": "list_patch_proposals",
+    "description": "List pending or filtered patch proposals for a knowledge base",
+    "category": "platform",
+    "ts_signature": "listPatchProposals(args: Record<string, unknown>): Promise<unknown>"
+  }
+]

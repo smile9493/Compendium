@@ -222,6 +222,53 @@
                 <div class="about-desc">知识编译引擎 — 将 PDF 转化为结构化知识图谱</div>
               </div>
             </div>
+            <div class="settings-section-title">{{ t('settings.mcpModeTitle') }}</div>
+            <div v-if="configStore.serverInfo" class="mcp-mode-panel">
+              <div class="mcp-mode-header">
+                <span
+                  class="mcp-mode-badge"
+                  :class="configStore.serverInfo.mcp_mode === 'code' ? 'mcp-mode-code' : 'mcp-mode-full'"
+                >
+                  {{ configStore.serverInfo.mcp_mode === 'code' ? 'Code Mode' : 'Full Mode' }}
+                </span>
+                <span class="mcp-mode-meta mono">
+                  {{ t('settings.mcpTools', { count: configStore.serverInfo.mcp_tool_count }) }}
+                  · API {{ configStore.serverInfo.api_catalog_size }}
+                </span>
+              </div>
+              <p class="mcp-mode-hint">{{ mcpModeHint }}</p>
+              <div class="mcp-mode-detail mono">
+                contract {{ configStore.serverInfo.contract_version }}
+              </div>
+              <pre class="mcp-snippet mono">{{ mcpSnippetText }}</pre>
+              <div class="settings-actions mcp-copy-actions">
+                <button type="button" class="btn btn-sm btn-primary" @click="copyMcpSnippet()">
+                  {{ copyLabel }}
+                </button>
+                <button type="button" class="btn btn-sm" @click="copyMcpSnippet('code')">
+                  {{ t('settings.mcpCopyCode') }}
+                </button>
+                <button type="button" class="btn btn-sm" @click="copyMcpSnippet('full')">
+                  {{ t('settings.mcpCopyFull') }}
+                </button>
+                <a
+                  class="btn btn-sm btn-ghost"
+                  href="https://github.com/smile9493/Compendium/blob/main/docs/CODE_MODE.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ t('settings.mcpModeDoc') }}
+                </a>
+              </div>
+              <p class="compile-hint">{{ t('settings.mcpModeReloadHint') }}</p>
+            </div>
+            <div v-else class="settings-loading">
+              <span class="dots-loading"></span>
+              <span>{{ t('settings.mcpModeLoading') }}</span>
+            </div>
+
+            <div class="settings-divider"></div>
+
             <div class="about-grid">
               <div class="about-item">
                 <div class="about-item-label">架构模式</div>
@@ -279,6 +326,20 @@ const fileInput = ref(null)
 const indexRebuildStats = ref(null)
 const indexRebuildMessage = ref('')
 const indexRebuildError = ref(false)
+const copyLabel = ref('')
+const copyResetTimer = ref(null)
+
+const mcpSnippetText = computed(() => {
+  const snippet = configStore.serverInfo?.mcp_config_snippet
+  if (!snippet) return ''
+  return JSON.stringify(snippet, null, 2)
+})
+
+const mcpModeHint = computed(() => {
+  const mode = configStore.serverInfo?.mcp_mode
+  if (mode === 'code') return t('settings.mcpModeHintCode')
+  return t('settings.mcpModeHintFull')
+})
 
 const compilePipelineStages = computed(
   () => configStore.compileStatus?.job?.stages || []
@@ -299,10 +360,11 @@ const compileStatusText = computed(() => {
 watch(() => props.open, async (val) => {
   if (val) {
     activeTab.value = 'config'
+    copyLabel.value = t('settings.mcpCopySnippet')
     vlmModel.value = ''
     vlmApiKey.value = ''
     vlmEndpoint.value = ''
-    await configStore.loadConfig()
+    await Promise.all([configStore.loadConfig(), configStore.loadServerInfo()])
     vlmModel.value = configStore.configData.vlm_model || ''
     vlmApiKey.value = configStore.configData.vlm_api_key || ''
     vlmEndpoint.value = configStore.configData.vlm_endpoint || ''
@@ -312,7 +374,34 @@ watch(() => props.open, async (val) => {
 watch(activeTab, (tab) => {
   if (tab === 'health' && !configStore.healthData) configStore.loadHealth()
   if (tab === 'compile' && !configStore.compileStatus) configStore.loadCompileStatus()
+  if (tab === 'about' && !configStore.serverInfo) configStore.loadServerInfo()
 })
+
+function mcpSnippetForMode(mode) {
+  const snippet = configStore.serverInfo?.mcp_config_snippet
+  if (!snippet) return ''
+  const clone = JSON.parse(JSON.stringify(snippet))
+  const env = clone?.mcpServers?.['pdf-mcp']?.env
+  if (env && mode) {
+    env.COMPENDIUM_MCP_MODE = mode
+  }
+  return JSON.stringify(clone, null, 2)
+}
+
+async function copyMcpSnippet(mode = null) {
+  const text = mode ? mcpSnippetForMode(mode) : mcpSnippetText.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copyLabel.value = t('settings.mcpCopied')
+    if (copyResetTimer.value) clearTimeout(copyResetTimer.value)
+    copyResetTimer.value = setTimeout(() => {
+      copyLabel.value = t('settings.mcpCopySnippet')
+    }, 2000)
+  } catch (e) {
+    console.error('Copy failed', e)
+  }
+}
 
 async function saveVlmConfig() {
   const updates = [{ key: 'vlm_model', value: vlmModel.value }]

@@ -1735,7 +1735,71 @@
   box-shadow: 0 1px 0 var(--border);
 }
 
-/* ── MCP Mode ── */
+/* ── Settings: MCP mode panel ── */
+.mcp-mode-panel {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.mcp-mode-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.mcp-mode-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.mcp-mode-badge.mcp-mode-code {
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in oklch, var(--primary) 35%, transparent);
+}
+.mcp-mode-badge.mcp-mode-full {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.mcp-mode-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.mcp-mode-hint {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.mcp-mode-detail {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.mcp-snippet {
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mcp-copy-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── MCP embedded wiki (iframe) ── */
 .mcp-mode .app-layout {
   grid-template-columns: 1fr;
 }

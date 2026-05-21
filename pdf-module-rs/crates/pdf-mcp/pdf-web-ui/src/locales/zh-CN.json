@@ -46,7 +46,18 @@
     "rebuildIndex": "重建索引",
     "language": "界面语言",
     "langZh": "简体中文",
-    "langEn": "English"
+    "langEn": "English",
+    "mcpModeTitle": "MCP 连接模式",
+    "mcpTools": "MCP 工具 {count} 个",
+    "mcpModeHintCode": "Agent 通过 execute_compendium 批次调用全部 API；需在 Cursor 中重载 MCP 后生效。",
+    "mcpModeHintFull": "每个 API 单独注册为 MCP 工具；可改为 Code Mode 以降低上下文占用。",
+    "mcpModeDoc": "Code Mode 文档",
+    "mcpModeReloadHint": "切换模式：修改 Cursor mcp.json 中的 COMPENDIUM_MCP_MODE，保存后重载 MCP 服务器（本页无法直接切换）。",
+    "mcpModeLoading": "正在读取服务器模式…",
+    "mcpCopySnippet": "复制当前模式配置",
+    "mcpCopyCode": "复制 Code 配置",
+    "mcpCopyFull": "复制 Full 配置",
+    "mcpCopied": "已复制"
   },
   "ops": {
     "indexEmpty": "搜索索引为空，建议重建全文与图谱索引。",

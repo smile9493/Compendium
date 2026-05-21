@@ -34,6 +34,21 @@ pub struct IndexRebuildHttp {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ServerInfoHttp {
+    /// MCP exposure mode: `code` (2 tools) or `full` (per-tool schemas).
+    pub mcp_mode: String,
+    pub mcp_tool_count: usize,
+    pub api_catalog_size: usize,
+    pub contract_version: String,
+    pub manifest_sha256: String,
+    pub http_running: bool,
+    /// Example path for `KNOWLEDGE_BASE_PATH` in Cursor mcp.json.
+    pub knowledge_base_hint: String,
+    pub mcp_config_snippet: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ErrorBody {
     pub error: String,
 }

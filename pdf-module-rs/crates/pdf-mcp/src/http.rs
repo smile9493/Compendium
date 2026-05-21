@@ -18,6 +18,7 @@
 //! | Method | Path | Description |
 //! |--------|------|-------------|
 //! | GET | `/api/health` | Health report |
+//! | GET | `/api/server-info` | MCP mode and Cursor config snippet |
 //! | GET | `/api/config` | Runtime config |
 //! | POST | `/api/config` | Set config key |
 //! | DELETE | `/api/config/{key}` | Remove config key |
@@ -59,9 +60,12 @@ use pdf_core::management::{
 };
 
 use crate::embed::Assets;
+use crate::http_schemas::ServerInfoHttp;
 use crate::metrics::{self, HttpMetrics, MetricsLayer};
 use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_from_pipeline};
+use crate::tools::mcp_mode_label;
 use crate::upload::UploadStore;
+use pdf_mcp_contracts::{CONTRACT_VERSION, code_mode_tool_count, manifest_sha256, tool_count};
 
 #[derive(Clone)]
 pub struct HttpState {
@@ -124,6 +128,7 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/config", get(api_config_get).post(api_config_set))
         .route("/api/config/{key}", delete(api_config_remove))
         .route("/api/health", get(api_health))
+        .route("/api/server-info", get(api_server_info))
         .route("/api/compile/status", get(api_compile_status))
         .route("/api/compile/incremental", post(api_compile_incremental))
         .route("/api/compile/upload", post(api_compile_upload))
@@ -439,6 +444,44 @@ async fn api_wiki_domains(
 }
 
 // ── Management API handlers ──
+
+fn build_mcp_config_snippet(mode: &str, knowledge_base_hint: &str) -> serde_json::Value {
+    serde_json::json!({
+        "mcpServers": {
+            "pdf-mcp": {
+                "command": "/path/to/pdf-mcp",
+                "env": {
+                    "COMPENDIUM_MCP_MODE": mode,
+                    "KNOWLEDGE_BASE_PATH": knowledge_base_hint,
+                    "PDFIUM_LIB_PATH": "/path/to/libpdfium.so"
+                }
+            }
+        }
+    })
+}
+
+#[instrument(skip(state))]
+async fn api_server_info(State(state): State<Arc<HttpState>>) -> Json<ServerInfoHttp> {
+    let mode = mcp_mode_label();
+    let mcp_tool_count = if mode == "code" { code_mode_tool_count() } else { tool_count() };
+    let knowledge_base_hint = state
+        .kb_path
+        .clone()
+        .or_else(|| state.workspace_registry.resolve_kb(None, None).ok())
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "/path/to/my-kb".to_string());
+
+    Json(ServerInfoHttp {
+        mcp_mode: mode.to_string(),
+        mcp_tool_count,
+        api_catalog_size: tool_count(),
+        contract_version: CONTRACT_VERSION.to_string(),
+        manifest_sha256: manifest_sha256(),
+        http_running: true,
+        knowledge_base_hint: knowledge_base_hint.clone(),
+        mcp_config_snippet: build_mcp_config_snippet(mode, &knowledge_base_hint),
+    })
+}
 
 #[instrument(skip(state))]
 async fn api_health(

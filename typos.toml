@@ -1,6 +1,6 @@
 [default]
 extend-ignore-re = [
-    "[0-9a-f]{40}",             # SHA hashes
+    "[0-9a-f]{7,40}",           # Git short/full commit hashes
     "[0-9a-f]{64}",             # SHA-512 hashes
 ]
 

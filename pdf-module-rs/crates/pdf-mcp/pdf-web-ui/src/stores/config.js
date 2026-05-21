@@ -8,6 +8,7 @@ export const useConfigStore = defineStore('config', () => {
   const saving = ref(false)
   const healthData = ref(null)
   const compileStatus = ref(null)
+  const serverInfo = ref(null)
 
   async function loadConfig() {
     loading.value = true
@@ -25,6 +26,15 @@ export const useConfigStore = defineStore('config', () => {
       healthData.value = await api.getHealth()
     } catch (e) {
       console.error('Failed to load health:', e)
+    }
+  }
+
+  async function loadServerInfo() {
+    try {
+      serverInfo.value = await api.getServerInfo()
+    } catch (e) {
+      console.error('Failed to load server info:', e)
+      serverInfo.value = null
     }
   }
 
@@ -82,8 +92,10 @@ export const useConfigStore = defineStore('config', () => {
     saving,
     healthData,
     compileStatus,
+    serverInfo,
     loadConfig,
     loadHealth,
+    loadServerInfo,
     loadCompileStatus,
     updateConfig,
     deleteConfig,

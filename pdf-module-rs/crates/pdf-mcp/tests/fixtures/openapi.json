@@ -145,6 +145,26 @@
           }
         }
       }
+    },
+    "/api/server-info": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "operationId": "server_info_path",
+        "responses": {
+          "200": {
+            "description": "MCP mode and config snippet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerInfoHttp"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -254,6 +274,47 @@
             "type": "string"
           },
           "vector_entries_indexed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ServerInfoHttp": {
+        "type": "object",
+        "required": [
+          "mcp_mode",
+          "mcp_tool_count",
+          "api_catalog_size",
+          "contract_version",
+          "manifest_sha256",
+          "http_running",
+          "knowledge_base_hint",
+          "mcp_config_snippet"
+        ],
+        "properties": {
+          "api_catalog_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contract_version": {
+            "type": "string"
+          },
+          "http_running": {
+            "type": "boolean"
+          },
+          "knowledge_base_hint": {
+            "type": "string",
+            "description": "Example path for `KNOWLEDGE_BASE_PATH` in Cursor mcp.json."
+          },
+          "manifest_sha256": {
+            "type": "string"
+          },
+          "mcp_config_snippet": {},
+          "mcp_mode": {
+            "type": "string",
+            "description": "MCP exposure mode: `code` (2 tools) or `full` (per-tool schemas)."
+          },
+          "mcp_tool_count": {
             "type": "integer",
             "minimum": 0
           }

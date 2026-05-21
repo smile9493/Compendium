@@ -4,7 +4,9 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::http_schemas::{ErrorBody, ExtractionHealthHttp, HealthReportHttp, IndexRebuildHttp};
+use crate::http_schemas::{
+    ErrorBody, ExtractionHealthHttp, HealthReportHttp, IndexRebuildHttp, ServerInfoHttp,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -24,6 +26,7 @@ use crate::http_schemas::{ErrorBody, ExtractionHealthHttp, HealthReportHttp, Ind
     modifiers(&SecurityAddon),
     paths(
         crate::api_doc::health_path,
+        crate::api_doc::server_info_path,
         crate::api_doc::compile_status_path,
         crate::api_doc::index_rebuild_path,
         crate::api_doc::index_status_path,
@@ -32,6 +35,7 @@ use crate::http_schemas::{ErrorBody, ExtractionHealthHttp, HealthReportHttp, Ind
         HealthReportHttp,
         ExtractionHealthHttp,
         IndexRebuildHttp,
+        ServerInfoHttp,
         ErrorBody,
     )),
 )]
@@ -64,6 +68,17 @@ impl Modify for SecurityAddon {
 )]
 #[allow(dead_code)]
 fn health_path() {}
+
+#[utoipa::path(
+    get,
+    path = "/api/server-info",
+    tag = "management",
+    responses(
+        (status = 200, description = "MCP mode and config snippet", body = ServerInfoHttp),
+    )
+)]
+#[allow(dead_code)]
+fn server_info_path() {}
 
 #[utoipa::path(
     get,
