@@ -207,9 +207,7 @@ impl DiagnosticExt for crate::PdfError {
 /// }
 /// ```
 pub fn install_handler() {
-    let _ = miette::set_hook(Box::new(|_| {
-        Box::new(miette::GraphicalReportHandler::new())
-    }));
+    let _ = miette::set_hook(Box::new(|_| Box::new(miette::GraphicalReportHandler::new())));
 }
 
 #[cfg(test)]
