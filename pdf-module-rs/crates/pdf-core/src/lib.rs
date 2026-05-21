@@ -51,8 +51,10 @@ pub use extraction::{ExtractionBackend, ExtractionRouter, RemoteExtractionConfig
 pub use extractor::McpPdfPipeline;
 #[cfg(feature = "knowledge")]
 pub use knowledge::{
-    FulltextIndex, GraphIndex, InitKnowledgeBaseResult, KnowledgeEngine, WikiRenderer,
-    extract_front_matter_yaml, extract_markdown_body, init_knowledge_base, lint_wiki,
+    ExportOptions, ExportResult, FulltextIndex, GraphIndex, ImportOptions, ImportResult,
+    InitKnowledgeBaseResult, KnowledgeEngine, WikiRenderer, export_knowledge_base,
+    extract_front_matter_yaml, extract_markdown_body, import_knowledge_base, init_knowledge_base,
+    lint_wiki,
 };
 pub use tracing_setup::{
     LogFormat, TracingConfig, init_compact, init_development, init_production, init_with_config,
