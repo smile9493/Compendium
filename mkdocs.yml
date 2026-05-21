@@ -68,8 +68,6 @@ plugins:
       lang:
         - zh
         - en
-      separator: '[\s\-\u3000-\u30FF\u4E00-\u9FFF]+'
-      jieba_dict_path: ""
 
 # ═══════════════════════════════════════════════════════════════
 # Strict link validation — catches broken internal links
