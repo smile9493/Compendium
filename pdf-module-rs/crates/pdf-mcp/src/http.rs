@@ -69,6 +69,9 @@ use crate::tools::ToolContext;
 use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_from_pipeline};
 use crate::tools::mcp_mode_label;
 use crate::upload::UploadStore;
+use crate::version::UpdateCache;
+use crate::version::github::{GithubClient, check_for_updates as github_check};
+use crate::version::{VersionInfo};
 use pdf_mcp_contracts::{CONTRACT_VERSION, code_mode_tool_count, manifest_sha256, tool_count};
 
 #[derive(Clone)]
@@ -79,6 +82,12 @@ pub struct HttpState {
     pub pipeline: Option<Arc<McpPdfPipeline>>,
     pub http_metrics: Option<Arc<HttpMetrics>>,
     pub index_cache: Arc<IndexCache>,
+    /// Current version info (embedded at compile time)
+    pub version_info: VersionInfo,
+    /// GitHub API client for update checking
+    pub github_client: Arc<GithubClient>,
+    /// Server-side cache for update check results (1h TTL)
+    pub update_cache: Arc<UpdateCache>,
 }
 
 fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
@@ -146,6 +155,10 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/share/{token}/wiki/entries/*path", get(api_share_wiki_entry))
         .route("/api/v1/workspaces", get(api_workspaces_list).post(api_workspaces_upsert))
         .route("/api/v1/workspaces/active", post(api_workspaces_set_active))
+        // ── Version & Update ──
+        .route("/api/version", get(api_version))
+        .route("/api/update/check", get(api_update_check))
+        .route("/api/update/prepare", post(api_update_prepare))
         // ── MCP over HTTP (LAN / public — same JSON-RPC as stdio) ──
         .route("/mcp", post(api_mcp_jsonrpc))
         // ── SPA (legacy redirects) ──
@@ -1399,5 +1412,102 @@ async fn api_mcp_jsonrpc(
     match handle_request(&tool_ctx, &stats, request).await {
         Some(response) => Json(response),
         None => Json(JsonRpcResponse::success(None, serde_json::json!({}))),
+    }
+}
+
+// ── Version & Update API handlers ──
+
+/// Return the current version information embedded at compile time.
+#[instrument(skip(state))]
+async fn api_version(State(state): State<Arc<HttpState>>) -> Json<serde_json::Value> {
+    let v = &state.version_info;
+    let version_json = serde_json::json!({
+        "version": v.display,
+        "semver": v.semver,
+        "major": v.major,
+        "minor": v.minor,
+        "build": v.build,
+        "patch": v.patch,
+        "deployment_mode": serde_json::to_value(&v.deployment_mode).unwrap_or_default(),
+    });
+    Json(version_json)
+}
+
+/// Check for updates from GitHub Releases.
+/// Uses server-side cache (1h TTL) to avoid excessive GitHub API calls.
+#[instrument(skip(state))]
+async fn api_update_check(
+    State(state): State<Arc<HttpState>>,
+) -> impl IntoResponse {
+    // Return cached result if still valid
+    if let Some(cached) = state.update_cache.get() {
+        return Json(serde_json::to_value(&cached).unwrap_or_default()).into_response();
+    }
+
+    // Perform the check (runs in spawn_blocking since ureq is sync)
+    let client = Arc::clone(&state.github_client);
+    let version = state.version_info.clone();
+    let cache = Arc::clone(&state.update_cache);
+
+    let result = tokio::task::spawn_blocking(move || {
+        match github_check(&client, &version) {
+            Ok(result) => {
+                cache.set(result.clone());
+                Ok(result)
+            }
+            Err(e) => Err(e),
+        }
+    })
+    .await
+    .map_err(|e| format!("Update check task panicked: {e}"));
+
+    match result {
+        Ok(Ok(check_result)) => {
+            Json(serde_json::to_value(&check_result).unwrap_or_default()).into_response()
+        }
+        Ok(Err(msg)) | Err(msg) => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": msg})),
+        )
+            .into_response(),
+    }
+}
+
+/// Prepare an update: download the latest release asset.
+/// This is a potentially long-running operation.
+#[instrument(skip(state))]
+async fn api_update_prepare(
+    State(state): State<Arc<HttpState>>,
+) -> impl IntoResponse {
+    let client = Arc::clone(&state.github_client);
+    let version = state.version_info.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        crate::version::github::prepare_update(&client, &version, |downloaded, total| {
+            let pct = if total > 0 {
+                (downloaded as f64 / total as f64 * 100.0) as u32
+            } else {
+                0
+            };
+            tracing::info!(
+                downloaded_bytes = downloaded,
+                total_bytes = total,
+                pct,
+                "Update download progress"
+            );
+        })
+    })
+    .await
+    .map_err(|e| format!("Update prepare task panicked: {e}"));
+
+    match result {
+        Ok(prepare_result) => {
+            Json(serde_json::to_value(&prepare_result).unwrap_or_default()).into_response()
+        }
+        Err(msg) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": msg})),
+        )
+            .into_response(),
     }
 }

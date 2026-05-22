@@ -41,3 +41,6 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 toml = { workspace = true }
 parking_lot = { workspace = true }
+
+# Update / version checking
+ureq = { version = "2", features = ["json"] }

@@ -105,5 +105,24 @@
     "search": "Search",
     "compile": "Compile",
     "settings": "Settings"
+  },
+  "update": {
+    "tab": "Updates",
+    "currentVersion": "Current Version",
+    "deploymentMode": "Deployment",
+    "lastChecked": "Last checked",
+    "checkButton": "Check for Updates",
+    "checking": "Checking…",
+    "upToDate": "You're up to date",
+    "updateAvailable": "Update Available",
+    "newVersion": "New Version",
+    "releaseNotes": "Release Notes",
+    "downloadButton": "Download & Prepare Update",
+    "downloading": "Downloading",
+    "ready": "Update Ready",
+    "readyDocker": "Run 'docker-compose pull && docker-compose up -d' to apply the update.",
+    "readyNative": "Restart the server to apply the update.",
+    "error": "Update check failed. Please try again later.",
+    "neverChecked": "Not checked yet"
   }
 }

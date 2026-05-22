@@ -30,6 +30,9 @@
 #![allow(dead_code)]
 #![recursion_limit = "256"]
 
+use crate::version::UpdateCache;
+use crate::version::github::GithubClient;
+use crate::version::{detect_deployment_mode, current_version};
 use pdf_core::ServerConfig;
 use pdf_core::management::WorkspaceRegistry;
 use std::sync::Arc;
@@ -47,6 +50,7 @@ mod sampling;
 mod server;
 mod tools;
 mod upload;
+mod version;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -88,6 +92,18 @@ async fn main() -> anyhow::Result<()> {
 
         let http_metrics = Arc::new(metrics::HttpMetrics::new());
 
+        let deployment_mode = detect_deployment_mode();
+        let version_info = current_version(deployment_mode);
+        let github_client = Arc::new(GithubClient::new());
+        let update_cache = Arc::new(UpdateCache::new(3600)); // 1h TTL
+
+        info!(
+            version = %version_info.display,
+            semver = %version_info.semver,
+            deployment = ?version_info.deployment_mode,
+            "Starting pdf-mcp"
+        );
+
         let http_state = http::HttpState {
             kb_path,
             workspace_registry: Arc::clone(&workspace_registry),
@@ -95,6 +111,9 @@ async fn main() -> anyhow::Result<()> {
             pipeline: Some(Arc::clone(&pipeline)),
             http_metrics: Some(Arc::clone(&http_metrics)),
             index_cache: Arc::clone(&index_cache),
+            version_info,
+            github_client,
+            update_cache,
         };
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 

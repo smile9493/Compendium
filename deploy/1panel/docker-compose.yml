@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # ==================== PDF MCP Server ====================
   pdf-mcp:
-    image: smile9493/pdf-mcp:latest
+    image: pdf-mcp:v0.1.4
     container_name: pdf-mcp-server
     restart: unless-stopped
     ports:
@@ -36,40 +36,40 @@ services:
       - pdf-network
     command: ["pdf-mcp", "serve", "--transport", "sse", "--port", "8001"]
 
-  # ==================== PDF REST Server ====================
-  pdf-rest:
-    image: smile9493/pdf-mcp:latest
-    container_name: pdf-rest-server
-    restart: unless-stopped
-    ports:
-      - "${REST_PORT:-8000}:8000"
-    environment:
-      - RUST_LOG=${LOG_LEVEL:-info}
-      - STORAGE_TYPE=local
-      - STORAGE_LOCAL_DIR=/app/data
-      - CACHE_ENABLED=${CACHE_ENABLED:-true}
-      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
-      - CACHE_TTL_SECONDS=${CACHE_TTL:-3600}
-      - AUDIT_ENABLED=${AUDIT_ENABLED:-true}
-      - AUDIT_LOG_DIR=/app/logs/audit
-      - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-30}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FORMAT=${LOG_FORMAT:-json}
-      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-100}
-      - ALLOWED_EXTENSIONS=pdf
-    volumes:
-      - pdf_data:/app/data
-      - pdf_logs:/app/logs/audit
-      - pdf_cache:/app/cache
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/x2text/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - pdf-network
-    command: ["pdf-rest", "--host", "0.0.0.0", "--port", "8000"]
+  # ==================== PDF REST Server (removed in v0.1.4) ====================
+  # pdf-rest:
+  #   image: pdf-mcp:v0.1.4
+  #   container_name: pdf-rest-server
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${REST_PORT:-8000}:8000"
+  #   environment:
+  #     - RUST_LOG=${LOG_LEVEL:-info}
+  #     - STORAGE_TYPE=local
+  #     - STORAGE_LOCAL_DIR=/app/data
+  #     - CACHE_ENABLED=${CACHE_ENABLED:-true}
+  #     - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+  #     - CACHE_TTL_SECONDS=${CACHE_TTL:-3600}
+  #     - AUDIT_ENABLED=${AUDIT_ENABLED:-true}
+  #     - AUDIT_LOG_DIR=/app/logs/audit
+  #     - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-30}
+  #     - LOG_LEVEL=${LOG_LEVEL:-info}
+  #     - LOG_FORMAT=${LOG_FORMAT:-json}
+  #     - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-100}
+  #     - ALLOWED_EXTENSIONS=pdf
+  #   volumes:
+  #     - pdf_data:/app/data
+  #     - pdf_logs:/app/logs/audit
+  #     - pdf_cache:/app/cache
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/x2text/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 10s
+  #   networks:
+  #     - pdf-network
+  #   command: ["pdf-rest", "--host", "0.0.0.0", "--port", "8000"]
 
 volumes:
   pdf_data:
