@@ -15,3 +15,4 @@ pub mod sampling;
 pub mod server;
 pub mod tools;
 pub mod upload;
+pub mod version;

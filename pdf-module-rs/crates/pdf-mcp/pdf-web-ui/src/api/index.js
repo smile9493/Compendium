@@ -204,4 +204,21 @@ export const api = {
     if (severity) params.set('severity', severity)
     return request(withKb(`/quality/issues?${params}`))
   },
+
+  // ── Version & Update ──
+
+  /** @returns {Promise<import('./types').VersionInfo>} */
+  getVersion() {
+    return request('/version')
+  },
+
+  /** @returns {Promise<import('./types').UpdateCheckResult>} */
+  checkUpdate() {
+    return request('/update/check', { timeout: 20000 })
+  },
+
+  /** @returns {Promise<import('./types').UpdatePrepareResult>} */
+  prepareUpdate() {
+    return request('/update/prepare', { method: 'POST', timeout: 600000 })
+  },
 }

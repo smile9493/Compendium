@@ -202,6 +202,14 @@
 
           <!-- Locale -->
           <div v-if="activeTab === 'locale'" class="settings-section">
+
+          <!-- Updates -->
+          <div v-if="activeTab === 'update'" class="settings-section">
+            <UpdatePanel />
+          </div>
+
+          <!-- Locale -->
+          <div v-if="activeTab === 'locale'" class="settings-section">
             <div class="form-group">
               <label>{{ t('settings.language') }}</label>
               <select :value="locale" @change="onLocaleChange">
@@ -298,19 +306,23 @@ import { useConfigStore } from '@/stores/config'
 import { useWikiStore } from '@/stores/wiki'
 import { api } from '@/api'
 import { formatQuality } from '@/utils/format'
-import { X, Settings, Server, Activity, Upload, Info, Check, Trash2, Plus, RefreshCw, RotateCcw, BookOpen } from 'lucide-vue-next'
+import { X, Settings, Server, Activity, Upload, Info, Check, Trash2, Plus, RefreshCw, RotateCcw, BookOpen, ArrowUp } from 'lucide-vue-next'
 import CompileStageList from '@/components/CompileStageList.vue'
+import UpdatePanel from '@/components/UpdatePanel.vue'
+import { useUpdateStore } from '@/stores/update'
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['close'])
 
 const configStore = useConfigStore()
+const updateStore = useUpdateStore()
 
 const activeTab = ref('config')
 const tabs = [
   { id: 'config', label: '服务器配置', icon: Server },
   { id: 'health', label: '知识库健康', icon: Activity },
   { id: 'compile', label: '编译队列', icon: Upload },
+  { id: 'update', label: '更新', icon: ArrowUp },
   { id: 'about', label: '关于', icon: Info },
   { id: 'locale', label: '语言', icon: Info },
 ]
@@ -375,6 +387,7 @@ watch(activeTab, (tab) => {
   if (tab === 'health' && !configStore.healthData) configStore.loadHealth()
   if (tab === 'compile' && !configStore.compileStatus) configStore.loadCompileStatus()
   if (tab === 'about' && !configStore.serverInfo) configStore.loadServerInfo()
+  if (tab === 'update' && !updateStore.currentVersion) updateStore.fetchVersion()
 })
 
 function mcpSnippetForMode(mode) {

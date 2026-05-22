@@ -122,4 +122,52 @@
  * @property {string} message
  */
 
+/** @typedef {'docker' | 'native' | 'unknown'} DeploymentMode */
+
+/** @typedef {object} VersionInfo */
+/**
+ * @property {string} version
+ * @property {string} semver
+ * @property {number} major
+ * @property {number} minor
+ * @property {number} build
+ * @property {number} patch
+ * @property {DeploymentMode} deployment_mode
+ */
+
+/** @typedef {object} ReleaseAsset */
+/**
+ * @property {string} name
+ * @property {number} size
+ * @property {string} download_url
+ */
+
+/** @typedef {object} ReleaseInfo */
+/**
+ * @property {string} tag_name
+ * @property {string} name
+ * @property {string} body
+ * @property {boolean} prerelease
+ * @property {string} html_url
+ * @property {string} published_at
+ * @property {ReleaseAsset[]} assets
+ */
+
+/** @typedef {object} UpdateCheckResult */
+/**
+ * @property {VersionInfo} current_version
+ * @property {boolean} update_available
+ * @property {ReleaseInfo|null} latest_release
+ * @property {string} checked_at
+ * @property {DeploymentMode} deployment_mode
+ */
+
+/** @typedef {'not_needed' | 'downloading' | 'ready' | 'error'} UpdatePrepareStatus */
+
+/** @typedef {object} UpdatePrepareResult */
+/**
+ * @property {UpdatePrepareStatus} status
+ * @property {string} message
+ */
+
 export {}

@@ -105,5 +105,24 @@
     "search": "搜索",
     "compile": "编译",
     "settings": "设置"
+  },
+  "update": {
+    "tab": "更新",
+    "currentVersion": "当前版本",
+    "deploymentMode": "部署方式",
+    "lastChecked": "上次检查",
+    "checkButton": "检查更新",
+    "checking": "正在检查…",
+    "upToDate": "已是最新版本",
+    "updateAvailable": "发现新版本",
+    "newVersion": "新版本",
+    "releaseNotes": "更新日志",
+    "downloadButton": "下载并准备更新",
+    "downloading": "正在下载",
+    "ready": "更新已就绪",
+    "readyDocker": "运行 'docker-compose pull && docker-compose up -d' 以完成更新。",
+    "readyNative": "重启服务即可应用更新。",
+    "error": "检查更新失败，请稍后重试。",
+    "neverChecked": "尚未检查"
   }
 }
