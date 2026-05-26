@@ -23,6 +23,7 @@ services:
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-100}
       - ALLOWED_EXTENSIONS=pdf
+      - DEPLOYMENT_MODE=docker
     volumes:
       - pdf_data:/app/data
       - pdf_logs:/app/logs/audit
