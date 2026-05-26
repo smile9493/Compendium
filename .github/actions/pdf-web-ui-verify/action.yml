@@ -1,0 +1,38 @@
+name: pdf-web-ui verify
+description: Build, unit test, and Playwright e2e for pdf-web-ui (aligned with build.yml)
+
+inputs:
+  working-directory:
+    description: Path to pdf-web-ui package directory
+    required: true
+    default: pdf-module-rs/crates/pdf-mcp/pdf-web-ui
+
+runs:
+  using: composite
+  steps:
+    - name: Build SPA (pdf-web-ui)
+      shell: bash
+      run: |
+        cd "${{ inputs.working-directory }}"
+        npm ci
+        npm run build
+
+    - name: Unit test (pdf-web-ui)
+      shell: bash
+      run: |
+        cd "${{ inputs.working-directory }}"
+        npm test
+
+    - name: Playwright e2e (pdf-web-ui)
+      shell: bash
+      run: |
+        cd "${{ inputs.working-directory }}"
+        npx playwright install --with-deps chromium
+        npx vite preview --port 5173 --host 127.0.0.1 --strictPort &
+        VITE_PID=$!
+        for i in $(seq 1 30); do
+          curl -sf http://127.0.0.1:5173/app/ > /dev/null 2>&1 && break
+          sleep 1
+        done
+        npm run test:e2e
+        kill $VITE_PID 2>/dev/null || true

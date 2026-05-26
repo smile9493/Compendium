@@ -17,3 +17,9 @@ test('shows welcome home state', async ({ page }) => {
   await expect(page.locator('.empty-entry')).toBeVisible()
   await expect(page.locator('.empty-entry h2')).toBeVisible()
 })
+
+test('focuses search with slash shortcut', async ({ page }) => {
+  await page.goto('/app/')
+  await page.keyboard.press('/')
+  await expect(page.locator('.search-bar')).toBeFocused()
+})

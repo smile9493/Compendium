@@ -34,7 +34,7 @@
         :placeholder="t('app.searchPlaceholder')"
         autocomplete="off"
       />
-      <button v-if="searchStore.query" class="search-clear-btn" @click="clearSearch">
+      <button v-if="searchStore.query" type="button" class="search-clear-btn" @click="clearSearch">
         <X :size="12" />
       </button>
       <span v-else class="search-shortcut"><span class="kbd">/</span></span>

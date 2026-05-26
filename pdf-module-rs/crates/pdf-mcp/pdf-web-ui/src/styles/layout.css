@@ -677,7 +677,7 @@
 }
 
 .mobile-nav-btn:active {
-  transform: scale(var(--anim-press-scale));
+  transform: scale(0.97);
 }
 
 /* ── Responsive breakpoints ── */

@@ -1803,8 +1803,6 @@
   align-items: center;
   gap: 8px;
   font-weight: 500;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .toast.success { border-color: var(--success); }

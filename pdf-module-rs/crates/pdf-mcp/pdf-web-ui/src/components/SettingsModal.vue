@@ -200,9 +200,6 @@
             </div>
           </div>
 
-          <!-- Locale -->
-          <div v-if="activeTab === 'locale'" class="settings-section">
-
           <!-- Updates -->
           <div v-if="activeTab === 'update'" class="settings-section">
             <UpdatePanel />
