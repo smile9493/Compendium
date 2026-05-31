@@ -41,7 +41,8 @@ impl UploadStore {
     /// Store an uploaded file and return its `file_id`.
     pub fn store(&self, data: &[u8], filename: &str) -> Result<String> {
         let file_id = Uuid::new_v4().to_string();
-        let temp_path = self.temp_dir.join(&file_id);
+        // Always use .pdf extension for temp files to avoid extension parsing errors
+        let temp_path = self.temp_dir.join(format!("{}.pdf", file_id));
 
         std::fs::write(&temp_path, data)
             .with_context(|| format!("Failed to write upload to: {}", temp_path.display()))?;

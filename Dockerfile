@@ -40,6 +40,9 @@ COPY --from=frontend-builder /app/dist crates/pdf-mcp/pdf-web-ui/dist/
 COPY pdf-module-rs/Cargo.toml pdf-module-rs/Cargo.lock ./
 COPY pdf-module-rs/.cargo ./.cargo
 
+# Copy VERSION file for compile-time version injection (build.rs reads it)
+COPY VERSION ./
+
 # Copy all crate source
 COPY pdf-module-rs/templates ./templates/
 COPY pdf-module-rs/crates ./crates

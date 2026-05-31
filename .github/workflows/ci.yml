@@ -96,6 +96,89 @@ jobs:
           file target/release/pdf-mcp target/release/pdf-cli
           ls -lh target/release/pdf-mcp target/release/pdf-cli
 
+      - name: Upload pdf-mcp binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-mcp-linux
+          path: pdf-module-rs/target/release/pdf-mcp
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════
+  # MCP Protocol Compliance — verify JSON-RPC conformance
+  # ═══════════════════════════════════════════════════════════════
+
+  protocol-compliance:
+    name: MCP Protocol Compliance
+    needs: release-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download pdf-mcp binary
+        uses: actions/download-artifact@v4
+        with:
+          name: pdf-mcp-linux
+          path: target/release
+
+      - name: Make binary executable
+        run: chmod +x target/release/pdf-mcp
+
+      - name: Test initialize response
+        run: |
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | timeout 10 target/release/pdf-mcp 2>/dev/null || true)
+          echo "$RESPONSE" | python3 -c "
+          import sys, json
+          data = json.loads(sys.stdin.read())
+          assert data.get('jsonrpc') == '2.0', 'Missing jsonrpc field'
+          assert 'result' in data, 'Missing result field'
+          result = data['result']
+          assert 'capabilities' in result, 'Missing capabilities'
+          assert 'serverInfo' in result, 'Missing serverInfo'
+          print('initialize: PASS')
+          "
+
+      - name: Test tools/list response
+        run: |
+          RESPONSE=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' | timeout 10 target/release/pdf-mcp 2>/dev/null || true)
+          # Get the tools/list response (second line)
+          TOOLS_RESPONSE=$(echo "$RESPONSE" | tail -1)
+          echo "$TOOLS_RESPONSE" | python3 -c "
+          import sys, json
+          data = json.loads(sys.stdin.read())
+          assert data.get('jsonrpc') == '2.0'
+          assert 'result' in data
+          tools = data['result'].get('tools', [])
+          assert len(tools) > 0, 'No tools returned'
+          for tool in tools:
+              assert 'name' in tool, f'Tool missing name: {tool}'
+              assert 'description' in tool, f'Tool missing description: {tool}'
+              assert 'inputSchema' in tool, f'Tool missing inputSchema: {tool}'
+          print(f'tools/list: PASS ({len(tools)} tools)')
+          "
+
+      - name: Test tools/call response (schema validation)
+        run: |
+          # Test that tools/call returns valid JSON-RPC with content array
+          INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+          CALL='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_knowledge","arguments":{"query":"test","knowledge_base":"/tmp/kb"}}}'
+          RESPONSE=$(printf '%s\n%s\n' "$INIT" "$CALL" | timeout 15 target/release/pdf-mcp 2>/dev/null || true)
+          CALL_RESPONSE=$(echo "$RESPONSE" | tail -1)
+          echo "$CALL_RESPONSE" | python3 -c "
+          import sys, json
+          data = json.loads(sys.stdin.read())
+          assert data.get('jsonrpc') == '2.0', 'Missing jsonrpc field'
+          assert 'id' in data, 'Missing id field'
+          # tools/call must return either result or error, not both
+          has_result = 'result' in data
+          has_error = 'error' in data
+          assert has_result or has_error, 'Response must have result or error'
+          if has_result:
+              result = data['result']
+              assert 'content' in result, 'Missing content in result'
+              assert isinstance(result['content'], list), 'content must be array'
+          print('tools/call: PASS')
+          "
+
   # ═══════════════════════════════════════════════════════════════
   # Clippy strict lint — deny all warnings
   # ═══════════════════════════════════════════════════════════════
@@ -443,6 +526,7 @@ jobs:
           output-file-path: pdf-module-rs/bench_results.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
-          alert-threshold: '200%'
+          # Fail the PR if any benchmark regresses by more than 20%
+          alert-threshold: '120%'
           comment-on-alert: true
           fail-on-alert: true

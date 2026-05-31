@@ -377,6 +377,34 @@ impl WikiStorage {
         hasher.update(content.as_bytes());
         format!("{:x}", hasher.finalize())
     }
+
+    /// Return the path to the wiki directory.
+    pub fn wiki_dir(&self) -> PathBuf {
+        self.base_path.join("wiki")
+    }
+
+    /// Save a media attachment to the wiki attachments directory.
+    ///
+    /// Creates `wiki/<domain>/<entry_name>_attachments/` if needed,
+    /// then writes `filename` there and returns the full path.
+    pub fn save_attachment(
+        &self,
+        domain: &str,
+        entry_name: &str,
+        filename: &str,
+        data: &[u8],
+    ) -> PdfResult<PathBuf> {
+        let attachments_dir = self
+            .wiki_dir()
+            .join(domain)
+            .join(format!("{entry_name}_attachments"));
+        fs::create_dir_all(&attachments_dir)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to create attachments dir: {e}")))?;
+        let path = attachments_dir.join(filename);
+        fs::write(&path, data)
+            .map_err(|e| PdfModuleError::Storage(format!("Failed to write attachment: {e}")))?;
+        Ok(path)
+    }
 }
 
 struct EntityInfo {

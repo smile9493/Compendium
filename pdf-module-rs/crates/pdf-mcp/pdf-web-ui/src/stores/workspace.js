@@ -12,7 +12,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     try {
       const data = await api.listWorkspaces()
       workspaces.value = data.workspaces ?? []
-      activeKbId.value = data.active_kb_id ?? workspaces.value.find((w) => w.active)?.id ?? null
+      // Auto-select: explicit active_kb_id > workspace with active flag > first workspace
+      activeKbId.value = data.active_kb_id
+        ?? workspaces.value.find((w) => w.active)?.id
+        ?? workspaces.value[0]?.id
+        ?? null
+      if (activeKbId.value) {
+        setActiveKbId(activeKbId.value)
+      }
     } finally {
       loading.value = false
     }

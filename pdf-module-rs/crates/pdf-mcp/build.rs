@@ -15,11 +15,26 @@ fn main() {
     let version_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../VERSION");
     println!("cargo:rerun-if-changed={}", version_path.display());
 
+    let mut found_file = false;
     if let Ok(content) = fs::read_to_string(&version_path) {
         for line in content.lines() {
             if let Some((key, value)) = line.split_once('=') {
                 let env_key = format!("VERSION_{}", key.trim());
                 println!("cargo:rustc-env={}={}", env_key, value.trim());
+            }
+        }
+        found_file = true;
+    }
+
+    // Fallback: read from environment (for Docker builds without VERSION file).
+    // Set PDF_VERSION_MAJOR, PDF_VERSION_MINOR, etc. as build args.
+    if !found_file {
+        for key in &["MAJOR", "MINOR", "BUILD", "PATCH"] {
+            let env_key = format!("VERSION_{}", key);
+            if std::env::var(&env_key).is_err()
+                && let Ok(val) = std::env::var(format!("PDF_VERSION_{}", key))
+            {
+                println!("cargo:rustc-env={}={}", env_key, val);
             }
         }
     }

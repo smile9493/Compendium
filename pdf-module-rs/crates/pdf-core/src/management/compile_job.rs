@@ -37,6 +37,7 @@ pub enum PipelineStatus {
     Completed,
     Failed,
     Partial,
+    Cancelled,
 }
 
 /// Pipeline stages in execution order.
@@ -366,6 +367,21 @@ impl CompileJobStore {
         Ok(job)
     }
 
+    /// Cancel a running or awaiting-agent compile job.
+    pub fn cancel_job(&self, reason: Option<String>) -> PdfResult<Option<CompileJob>> {
+        let Some(id) = self.active_job_id()? else {
+            return Ok(None);
+        };
+        let job = self.load_job(&id)?;
+        if matches!(job.pipeline_status, PipelineStatus::Running | PipelineStatus::AwaitingAgent) {
+            let msg = reason.unwrap_or_else(|| "Cancelled by user".to_string());
+            let job = self.complete_job(&id, PipelineStatus::Cancelled, Some(msg))?;
+            Ok(Some(job))
+        } else {
+            Ok(Some(job))
+        }
+    }
+
     pub fn complete_job(
         &self,
         job_id: &str,
@@ -379,6 +395,7 @@ impl CompileJobStore {
             PipelineStatus::Failed => "error",
             PipelineStatus::AwaitingAgent => "awaiting_agent",
             PipelineStatus::Running => "running",
+            PipelineStatus::Cancelled => "cancelled",
         };
         job.pipeline_status = pipeline_status;
         job.message = message;

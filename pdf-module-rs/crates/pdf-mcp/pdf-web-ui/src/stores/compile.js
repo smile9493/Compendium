@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { api } from '@/api'
 import { useWikiStore } from '@/stores/wiki'
 
+const KNOWN_STAGES = ['extract', 'prompt_gen', 'agent_wiki', 'index_rebuild', 'quality_gate']
+
 export const useCompileStore = defineStore('compile', () => {
   const open = ref(false)
   const activeTab = ref('trigger')
@@ -11,11 +13,16 @@ export const useCompileStore = defineStore('compile', () => {
   const loading = ref(false)
   const error = ref(null)
   const lastFinishedAt = ref(null)
+  const currentStage = ref(null)
+  const progress = ref(null)
 
   let pollTimer = null
   let backgroundTimer = null
   let eventSource = null
   let sseFailed = false
+  let sseReconnectTimer = null
+  let sseReconnectAttempts = 0
+  const SSE_MAX_RECONNECT_DELAY = 30000
 
   const pipelineStatus = computed(
     () => compileStatus.value?.pipeline_status || compileStatus.value?.job?.pipeline_status
@@ -46,10 +53,47 @@ export const useCompileStore = defineStore('compile', () => {
     return '空闲'
   })
 
+  const activeStages = computed(() => {
+    const stages = compileStatus.value?.job?.stages || []
+    const result = []
+    for (const stageId of KNOWN_STAGES) {
+      const match = stages.find(s => s.stage === stageId)
+      if (match) {
+        result.push({ id: stageId, status: match.status, durationMs: match.duration_ms })
+      } else {
+        const stageIdx = KNOWN_STAGES.indexOf(stageId)
+        const activeIdx = match ? KNOWN_STAGES.indexOf(match.stage) : -1
+        result.push({ id: stageId, status: stageIdx < activeIdx ? 'done' : 'pending' })
+      }
+    }
+    return result
+  })
+
+  function handleCompileEvent(data) {
+    if (!data || typeof data !== 'object') return
+    if (data.job_id) {
+      compileStatus.value = { ...compileStatus.value, active_job_id: data.job_id }
+    }
+    if (data.stage) {
+      currentStage.value = data.stage
+    }
+    if (data.status) {
+      compileStatus.value = { ...compileStatus.value, pipeline_status: data.status }
+    }
+    if (data.progress !== undefined) {
+      progress.value = data.progress
+    }
+  }
+
   function applySnapshot(data) {
     if (!data || typeof data !== 'object') return
     compileStatus.value = data
     qualitySnapshot.value = data.quality_snapshot || null
+
+    if (data.job?.stages) {
+      const active = data.job.stages.find(s => s.status === 'running')
+      currentStage.value = active?.stage || null
+    }
   }
 
   function openDrawer(tab = 'trigger') {
@@ -67,35 +111,47 @@ export const useCompileStore = defineStore('compile', () => {
   function startRealtime() {
     if (!sseFailed && typeof EventSource !== 'undefined') {
       stopPolling()
-      startSse()
+      startSSE()
       return
     }
     startPolling()
   }
 
   function stopRealtime() {
-    stopSse()
+    stopSSE()
     stopPolling()
   }
 
-  function startSse() {
-    stopSse()
+  function startSSE() {
+    stopSSE()
     try {
       const url = api.compileEventsUrl()
       eventSource = new EventSource(url)
+
       eventSource.addEventListener('compile-status', (ev) => {
         try {
           const data = JSON.parse(ev.data)
+          handleCompileEvent(data)
           applySnapshot(data)
           handleCompileFinished(data)
+          sseReconnectAttempts = 0
         } catch (e) {
-          console.error('SSE parse failed', e)
+          console.warn('SSE parse error:', e)
         }
       })
+
       eventSource.onerror = () => {
-        stopSse()
-        sseFailed = true
-        if (open.value) startPolling()
+        stopSSE()
+        sseReconnectAttempts++
+        const delay = Math.min(1000 * Math.pow(2, sseReconnectAttempts), SSE_MAX_RECONNECT_DELAY)
+        if (open.value) {
+          sseReconnectTimer = setTimeout(() => {
+            if (open.value) startSSE()
+          }, delay)
+        } else {
+          sseFailed = true
+          startPolling()
+        }
       }
     } catch {
       sseFailed = true
@@ -103,10 +159,14 @@ export const useCompileStore = defineStore('compile', () => {
     }
   }
 
-  function stopSse() {
+  function stopSSE() {
     if (eventSource) {
       eventSource.close()
       eventSource = null
+    }
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer)
+      sseReconnectTimer = null
     }
   }
 
@@ -206,7 +266,11 @@ export const useCompileStore = defineStore('compile', () => {
     isRunning,
     pipelineStatus,
     statusText,
+    currentStage,
+    progress,
+    activeStages,
     applySnapshot,
+    handleCompileEvent,
     openDrawer,
     closeDrawer,
     refreshStatus,
@@ -216,6 +280,8 @@ export const useCompileStore = defineStore('compile', () => {
     triggerIncremental,
     startPolling,
     stopPolling,
+    startSSE,
+    stopSSE,
     startRealtime,
     stopRealtime,
   }

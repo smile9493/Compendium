@@ -30,6 +30,9 @@ pub struct SearchHit {
     pub score: f32,
     /// Matching snippet (up to 300 chars around the match).
     pub snippet: String,
+    /// Optional retrieval debug info (JSON). Only populated when requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieval_debug: Option<serde_json::Value>,
 }
 
 /// Tantivy full-text index for the knowledge wiki.
@@ -293,7 +296,7 @@ impl FulltextIndex {
             // Try to read the file for a snippet
             let snippet = self.extract_snippet(&path, query_str);
 
-            hits.push(SearchHit { path, title, domain, score, snippet });
+            hits.push(SearchHit { path, title, domain, score, snippet, retrieval_debug: None });
         }
 
         Ok(hits)

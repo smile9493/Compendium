@@ -62,6 +62,36 @@ pub enum EntryType {
     Overview,
 }
 
+/// Type of media attachment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaType {
+    Image,
+    Table,
+    Figure,
+    Diagram,
+    Code,
+    Audio,
+    Video,
+}
+
+/// A media attachment associated with a knowledge entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MediaAttachment {
+    /// Type of media.
+    #[serde(rename = "type")]
+    pub media_type: MediaType,
+    /// Relative path to the media file (within wiki directory).
+    pub path: String,
+    /// Human-readable description of the media content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Optional VLM-generated semantic description for accessibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt_text: Option<String>,
+}
+
 /// Confidence in claims on this page (not PDF extraction quality).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -70,6 +100,19 @@ pub enum EntryConfidence {
     #[default]
     Medium,
     Low,
+}
+
+/// A single claim extracted from a knowledge entry, with supporting evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Claim {
+    /// The factual statement being made.
+    pub statement: String,
+    /// Supporting evidence or reference (e.g. "RFC 7540, Section 2").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
+    /// Confidence in this specific claim.
+    #[serde(default)]
+    pub confidence: EntryConfidence,
 }
 
 /// Classification level of a knowledge entry in the compilation pyramid.
@@ -197,6 +240,9 @@ pub struct KnowledgeEntry {
     /// Confidence in synthesized claims on this page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<EntryConfidence>,
+    /// Explicit importance score 0.0–1.0, used for skeleton indexing decisions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub importance: Option<f32>,
 
     // === Linkage ===
     /// Paths to entries this entry explicitly contradicts.
@@ -208,6 +254,12 @@ pub struct KnowledgeEntry {
     /// Paths to entries that this entry was aggregated from (for L2/L3).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aggregated_from: Vec<String>,
+    /// Structured claims with supporting evidence for provenance tracking.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims: Vec<Claim>,
+    /// Media attachments (images, figures, tables) associated with this entry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<MediaAttachment>,
 
     // === Quality & Status ===
     /// Quality score 0.0–1.0, assigned during compilation or quality check.
@@ -289,9 +341,12 @@ impl KnowledgeEntry {
             level: EntryLevel::L1,
             entry_type: Some(EntryType::Concept),
             confidence: Some(EntryConfidence::Medium),
+            importance: None,
             contradictions: Vec::new(),
             related: Vec::new(),
             aggregated_from: Vec::new(),
+            claims: Vec::new(),
+            media: Vec::new(),
             quality_score: 0.0,
             status: CompileStatus::Pending,
             publish_status: PublishStatus::Draft,
@@ -411,9 +466,12 @@ mod tests {
             level: EntryLevel::L1,
             entry_type: Some(EntryType::Concept),
             confidence: Some(EntryConfidence::High),
+            importance: None,
             contradictions: vec![],
             related: vec!["wiki/it/http1.md".into()],
             aggregated_from: vec![],
+            claims: vec![],
+            media: vec![],
             quality_score: 0.85,
             status: CompileStatus::Compiled,
             publish_status: PublishStatus::Published,

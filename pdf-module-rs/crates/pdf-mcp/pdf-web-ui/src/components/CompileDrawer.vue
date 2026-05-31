@@ -110,6 +110,29 @@
                   : t('compile.pollingHint')
               }}
             </div>
+
+            <!-- Stage progress stepper -->
+            <div v-if="compileStore.activeStages.length" class="stage-stepper">
+              <div
+                v-for="(stage, i) in compileStore.activeStages"
+                :key="stage.id"
+                class="stage-step"
+                :class="[
+                  'stage-step--' + stage.status,
+                  { 'stage-step--active': stage.status === 'running' }
+                ]"
+              >
+                <div v-if="i > 0" class="stage-step-connector" :class="{ done: stage.status === 'done' || stage.status === 'running' }"></div>
+                <div class="stage-step-dot">
+                  <Check v-if="stage.status === 'done'" :size="12" />
+                  <Loader2 v-else-if="stage.status === 'running'" :size="12" class="spin" />
+                  <span v-else class="stage-step-num">{{ i + 1 }}</span>
+                </div>
+                <div class="stage-step-label">{{ stageLabel(stage.id) }}</div>
+                <div v-if="stage.durationMs" class="stage-step-dur">{{ stage.durationMs }}ms</div>
+              </div>
+            </div>
+
             <CompileStageList :stages="pipelineStages" />
           </div>
         </div>
@@ -173,8 +196,9 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCompileStore } from '@/stores/compile'
 import { openEntry } from '@/composables/useWikiNavigation'
-import { Hammer, X, Upload, History, Activity, ShieldAlert, Play, Loader2 } from 'lucide-vue-next'
+import { Hammer, X, Upload, History, Activity, ShieldAlert, Play, Loader2, Check } from 'lucide-vue-next'
 import CompileStageList from '@/components/CompileStageList.vue'
+import { stageLabel } from '@/utils/compileStages'
 
 const { t } = useI18n()
 const compileStore = useCompileStore()
@@ -349,4 +373,85 @@ function openIssue(path) {
 .drawer-slide-leave-to { transform: translateX(100%); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Stage stepper ── */
+.stage-stepper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 12px 0 4px;
+  overflow-x: auto;
+}
+.stage-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.stage-step-connector {
+  position: absolute;
+  top: 10px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+.stage-step-connector.done {
+  background: var(--primary);
+}
+.stage-step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  color: var(--text-muted);
+  z-index: 1;
+  flex-shrink: 0;
+}
+.stage-step--done .stage-step-dot {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.stage-step--running .stage-step-dot {
+  background: var(--surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.stage-step--failed .stage-step-dot {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+.stage-step-label {
+  margin-top: 4px;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.stage-step--active .stage-step-label {
+  color: var(--primary);
+  font-weight: 600;
+}
+.stage-step-dur {
+  font-size: 0.5625rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.stage-step-num {
+  line-height: 1;
+}
 </style>

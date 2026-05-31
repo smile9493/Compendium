@@ -171,6 +171,7 @@ pub async fn run_stdio_with_tool_ctx(
     let stats = Arc::new(ToolStats::new());
     let shutdown_token = CancellationToken::new();
     let shutdown_token_clone = shutdown_token.clone();
+    let ctx = ctx.with_cancel(shutdown_token.clone());
 
     tokio::spawn(async move {
         match signal::ctrl_c().await {
@@ -310,7 +311,20 @@ pub async fn handle_request(
     let response = match request.method.as_str() {
         "initialize" => handle_initialize(stats, &request),
         "tools/list" => handle_tools_list(&request),
-        "tools/call" => handle_tools_call(ctx, stats, &request).await,
+        "tools/call" => {
+            // Create a per-request cancellation token as a child of the server's main token.
+            let per_request_token = ctx.cancel.child_token();
+            let request_ctx = tools::ToolContext {
+                pipeline: Arc::clone(&ctx.pipeline),
+                path_config: ctx.path_config.clone(),
+                upload_store: ctx.upload_store.clone(),
+                workspace_registry: Arc::clone(&ctx.workspace_registry),
+                index_cache: Arc::clone(&ctx.index_cache),
+                sampling: ctx.sampling.clone(),
+                cancel: per_request_token,
+            };
+            handle_tools_call(&request_ctx, stats, &request).await
+        }
         "resources/list" => tools::handle_resources_list(&request),
         "resources/read" => tools::handle_resources_read(&request),
         _ => JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(&request.method)),

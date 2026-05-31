@@ -34,6 +34,11 @@ pub async fn handle_compile_image(
     pdf_core::FileValidator::validate_path_safety(path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    if ctx.cancel.is_cancelled() {
+        return json_content(&CompileImageOutput {
+            result: serde_json::json!({"status": "cancelled"}),
+        });
+    }
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let result = engine.compile_image(path, domain).await?;
     json_content(&CompileImageOutput { result: serde_json::json!({ "compile_result": result }) })
@@ -53,6 +58,11 @@ pub async fn handle_compile_to_wiki(
     pdf_core::FileValidator::validate_path_safety(pdf_path, &ctx.path_config)
         .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
 
+    if ctx.cancel.is_cancelled() {
+        return json_content(&CompileToWikiOutput {
+            result: serde_json::json!({"status": "cancelled"}),
+        });
+    }
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let job_store = CompileJobStore::new(&kb_path);
     let (job_id, result) = run_single_pdf_extract(&engine, &job_store, pdf_path, domain).await?;
@@ -73,6 +83,11 @@ pub async fn handle_incremental_compile(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    if ctx.cancel.is_cancelled() {
+        return json_content(&IncrementalCompileOutput {
+            result: serde_json::json!({"status": "cancelled"}),
+        });
+    }
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let job_store = CompileJobStore::new(&kb_path);
     let (job_id, result) = run_incremental_extract(&engine, &job_store).await?;
@@ -199,6 +214,11 @@ pub async fn handle_hypothesis_test(
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
 
+    if ctx.cancel.is_cancelled() {
+        return json_content(&HypothesisTestOutput {
+            result: serde_json::json!({"status": "cancelled"}),
+        });
+    }
     let engine = pdf_core::KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
 
     let contradictions = engine.find_contradictions()?;
@@ -291,6 +311,11 @@ pub async fn handle_compile_uploaded_pdf(
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
     let domain = args["domain"].as_str();
 
+    if ctx.cancel.is_cancelled() {
+        return json_content(&CompileUploadedPdfOutput {
+            result: serde_json::json!({"status": "cancelled"}),
+        });
+    }
     let engine = KnowledgeEngine::new(Arc::clone(&ctx.pipeline), &kb_path)?;
     let job_store = CompileJobStore::new(&kb_path);
     let (job_id, result) =

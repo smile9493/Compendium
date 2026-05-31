@@ -7,6 +7,7 @@
 //! - Link suggestion (Jaccard similarity on tags)
 //! - Concept map export (Mermaid.js format)
 //! - Disk persistence via bincode serialization
+//! - Incremental single-entry update via `update_entry_node`
 
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -313,6 +314,98 @@ impl GraphIndex {
         Ok(count)
     }
 
+    /// Incrementally update a single entry's node metadata and edges.
+    ///
+    /// Unlike `rebuild`, this only touches the specified entry. Returns `true`
+    /// if the node existed and was updated, `false` if the entry is new (caller
+    /// should fall back to a full rebuild or add the node manually).
+    pub fn update_entry_node(
+        &mut self,
+        wiki_dir: &Path,
+        entry: &KnowledgeEntry,
+        rel_path: &str,
+    ) -> PdfResult<bool> {
+        let node_idx = match self.path_to_node.get(rel_path) {
+            Some(idx) => *idx,
+            None => return Ok(false),
+        };
+
+        // Update node metadata in-place.
+        let node = &mut self.graph[node_idx];
+        node.title = entry.title.clone();
+        node.domain = entry.domain.clone();
+        node.tags = entry.tags.clone();
+        node.level = format!("{}", entry.level);
+
+        // Collect and remove all non-TagCooccurrence edges touching this node.
+        let outgoing: Vec<_> = self
+            .graph
+            .edges(node_idx)
+            .filter(|e| *e.weight() != EdgeKind::TagCooccurrence)
+            .map(|e| e.id())
+            .collect();
+        for eid in outgoing {
+            self.graph.remove_edge(eid);
+        }
+        // Also remove incoming reference/wikilink edges so they don't go stale.
+        let incoming: Vec<_> = self
+            .graph
+            .edges_directed(node_idx, petgraph::Direction::Incoming)
+            .filter(|e| *e.weight() != EdgeKind::TagCooccurrence)
+            .map(|e| e.id())
+            .collect();
+        for eid in incoming {
+            self.graph.remove_edge(eid);
+        }
+
+        // Re-add edges from front matter `related`.
+        for related in &entry.related {
+            let related_lower = related.to_lowercase();
+            if let Some(to_idx) = self
+                .path_to_node
+                .iter()
+                .find(|(k, _)| k.to_lowercase() == related_lower)
+                .map(|(_, &v)| v)
+            {
+                self.graph.add_edge(node_idx, to_idx, EdgeKind::Related);
+            }
+        }
+
+        // Re-add edges from front matter `contradictions`.
+        for contra in &entry.contradictions {
+            let contra_lower = contra.to_lowercase();
+            if let Some(to_idx) = self
+                .path_to_node
+                .iter()
+                .find(|(k, _)| k.to_lowercase() == contra_lower)
+                .map(|(_, &v)| v)
+            {
+                self.graph.add_edge(node_idx, to_idx, EdgeKind::Contradiction);
+            }
+        }
+
+        // Re-add wikilink edges from body.
+        let full_path = wiki_dir.join(rel_path);
+        if let Ok(content) = fs::read_to_string(&full_path) {
+            let body = extract_markdown_body(&content).unwrap_or(&content);
+            for link in extract_wikilink_targets(body) {
+                let normalized =
+                    link.strip_prefix("wiki/").unwrap_or(link.as_str()).to_lowercase();
+                if let Some(to_idx) = self
+                    .path_to_node
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == normalized)
+                    .map(|(_, &v)| v)
+                {
+                    self.graph.add_edge(node_idx, to_idx, EdgeKind::Wikilink);
+                }
+            }
+        }
+
+        debug!(entry = rel_path, "Graph node updated incrementally");
+        Ok(true)
+    }
+
     /// Get N-hop neighbors of an entry.
     pub fn get_neighbors(&self, path: &str, max_hops: u32) -> Vec<NeighborInfo> {
         let start = match self.path_to_node.get(path) {
@@ -614,6 +707,94 @@ impl GraphIndex {
         mermaid
     }
 
+    /// Export graph data as nodes+edges JSON for interactive visualization.
+    ///
+    /// If `center_path` is provided, returns only the subgraph within `depth` hops.
+    /// Otherwise returns the full graph.
+    pub fn export_interactive_json(
+        &self,
+        center_path: Option<&str>,
+        depth: u32,
+    ) -> serde_json::Value {
+        let node_set = if let Some(path) = center_path {
+            let start = match self.path_to_node.get(path) {
+                Some(idx) => *idx,
+                None => return serde_json::json!({"nodes": [], "edges": []}),
+            };
+            let mut nodes = HashSet::new();
+            let mut queue = std::collections::VecDeque::new();
+            queue.push_back((start, 0u32));
+            nodes.insert(start);
+            while let Some((node, hops)) = queue.pop_front() {
+                if hops >= depth {
+                    continue;
+                }
+                for edge in self.graph.edges(node) {
+                    let target = edge.target();
+                    if nodes.insert(target) {
+                        queue.push_back((target, hops + 1));
+                    }
+                }
+                for edge in self.graph.edges_directed(node, petgraph::Direction::Incoming) {
+                    let source = edge.source();
+                    if nodes.insert(source) {
+                        queue.push_back((source, hops + 1));
+                    }
+                }
+            }
+            nodes
+        } else {
+            self.graph.node_indices().collect::<HashSet<_>>()
+        };
+
+        let mut node_idx_to_id = HashMap::new();
+        let nodes: Vec<serde_json::Value> = node_set
+            .iter()
+            .enumerate()
+            .map(|(i, idx)| {
+                let meta = &self.graph[*idx];
+                let id = format!("n{}", i);
+                node_idx_to_id.insert(*idx, id.clone());
+                serde_json::json!({
+                    "id": id,
+                    "label": meta.title,
+                    "domain": meta.domain,
+                    "path": meta.path,
+                    "level": meta.level,
+                    "tags": meta.tags,
+                })
+            })
+            .collect();
+
+        let mut seen = HashSet::new();
+        let edges: Vec<serde_json::Value> = self
+            .graph
+            .edge_references()
+            .filter(|e| node_set.contains(&e.source()) && node_set.contains(&e.target()))
+            .filter_map(|e| {
+                let from = node_idx_to_id.get(&e.source())?;
+                let to = node_idx_to_id.get(&e.target())?;
+                let kind = match e.weight() {
+                    EdgeKind::Related => "related",
+                    EdgeKind::Contradiction => "contradiction",
+                    EdgeKind::TagCooccurrence => "co-tags",
+                    EdgeKind::Wikilink => "wikilink",
+                };
+                let key = (from.clone(), to.clone(), kind);
+                if !seen.insert(key) {
+                    return None;
+                }
+                Some(serde_json::json!({
+                    "source": from,
+                    "target": to,
+                    "label": kind,
+                }))
+            })
+            .collect();
+
+        serde_json::json!({ "nodes": nodes, "edges": edges })
+    }
+
     /// Get all entry paths in the graph.
     pub fn all_paths(&self) -> Vec<String> {
         self.path_to_node.keys().cloned().collect()
@@ -758,5 +939,56 @@ Body B"#;
             GraphIndex::load_from_disk_or_rebuild(dir.path(), &wiki_dir).unwrap();
         assert!(rebuilt, "should rebuild on corrupt cache");
         assert_eq!(loaded.node_count(), 2);
+    }
+
+    #[test]
+    fn test_update_entry_node_existing() {
+        let (dir, mut graph) = make_test_graph();
+        let wiki = dir.path().join("wiki");
+        assert_eq!(graph.node_count(), 2);
+
+        // Update Entry A with new tags and no related link.
+        let md1_updated = r#"---
+title: "Entry A Updated"
+domain: "IT"
+tags: ["rust", "systems", "performance"]
+level: l2
+status: compiled
+created: 2026-01-01T00:00:00Z
+updated: 2026-06-01T00:00:00Z
+---
+
+Updated body with [[it/[IT] Entry_B.md]] wikilink"#;
+        fs::write(wiki.join("it/[IT] Entry_A.md"), md1_updated).unwrap();
+
+        let entry = KnowledgeEntry::from_markdown(md1_updated).unwrap();
+        let updated = graph.update_entry_node(&wiki, &entry, "it/[IT] Entry_A.md").unwrap();
+        assert!(updated, "should return true for existing node");
+
+        let meta = &graph.graph()[graph.path_to_node()["it/[IT] Entry_A.md"]];
+        assert_eq!(meta.title, "Entry A Updated");
+        assert_eq!(meta.level, "L2");
+        assert!(meta.tags.contains(&"performance".to_string()));
+        assert_eq!(graph.node_count(), 2, "node count unchanged");
+    }
+
+    #[test]
+    fn test_update_entry_node_nonexistent() {
+        let (dir, mut graph) = make_test_graph();
+        let wiki = dir.path().join("wiki");
+
+        let md_new = r#"---
+title: "Brand New Entry"
+domain: "IT"
+tags: ["new"]
+level: l1
+status: compiled
+created: 2026-06-01T00:00:00Z
+updated: 2026-06-01T00:00:00Z
+---
+New body"#;
+        let entry = KnowledgeEntry::from_markdown(md_new).unwrap();
+        let updated = graph.update_entry_node(&wiki, &entry, "it/[IT] Brand_New.md").unwrap();
+        assert!(!updated, "should return false for non-existent node");
     }
 }

@@ -54,8 +54,8 @@ pub use confidence_propagation::{
 };
 pub use engine::KnowledgeEngine;
 pub use entry::{
-    CompileStatus, EntryConfidence, EntryLevel, EntryType, KnowledgeEntry, PublishStatus,
-    extract_front_matter_yaml, extract_markdown_body,
+    CompileStatus, EntryConfidence, EntryLevel, EntryType, KnowledgeEntry, MediaAttachment,
+    MediaType, PublishStatus, extract_front_matter_yaml, extract_markdown_body,
 };
 pub use export::{ExportOptions, ExportResult, export_knowledge_base};
 pub use hash_cache::HashCache;

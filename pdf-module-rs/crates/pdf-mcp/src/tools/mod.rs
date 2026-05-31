@@ -25,7 +25,12 @@ use crate::upload::UploadStore;
 use pdf_core::knowledge::IndexCache;
 use pdf_core::management::WorkspaceRegistry;
 use pdf_core::{McpPdfPipeline, PathValidationConfig};
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::LazyLock;
+use tokio_util::sync::CancellationToken;
 
 pub fn default_path_config() -> PathValidationConfig {
     PathValidationConfig { require_absolute: true, allow_traversal: false, base_dir: None }
@@ -39,6 +44,8 @@ pub struct ToolContext {
     pub index_cache: Arc<IndexCache>,
     /// Set on stdio MCP server when sampling loop is active.
     pub sampling: Option<Arc<SamplingClient>>,
+    /// Cancellation token for graceful shutdown and tool call cancellation.
+    pub cancel: CancellationToken,
 }
 
 impl ToolContext {
@@ -54,6 +61,7 @@ impl ToolContext {
             workspace_registry,
             index_cache,
             sampling: None,
+            cancel: CancellationToken::new(),
         }
     }
 
@@ -67,6 +75,12 @@ impl ToolContext {
         self
     }
 
+    /// Set the cancellation token for this context.
+    pub fn with_cancel(mut self, cancel: CancellationToken) -> Self {
+        self.cancel = cancel;
+        self
+    }
+
     pub fn new_with_upload_store(
         pipeline: Arc<McpPdfPipeline>,
         upload_store: Option<Arc<UploadStore>>,
@@ -76,6 +90,361 @@ impl ToolContext {
         Self { upload_store, ..Self::new(pipeline, workspace_registry, index_cache) }
     }
 }
+
+// ── Tool Registry (P1-3) ──
+
+/// Boxed future returned by async tool handlers.
+type BoxFut<'a> = Pin<Box<dyn Future<Output = anyhow::Result<Vec<Content>>> + Send + 'a>>;
+
+/// Handler function type for async MCP tool calls.
+type ToolHandler = for<'a> fn(&'a ToolContext, &'a serde_json::Value) -> BoxFut<'a>;
+
+/// Declarative registry of MCP tool handlers, replacing the match-based dispatch.
+pub struct ToolRegistry {
+    handlers: HashMap<&'static str, ToolHandler>,
+}
+
+impl ToolRegistry {
+    pub fn new() -> Self {
+        Self { handlers: HashMap::new() }
+    }
+
+    /// Register a tool handler.
+    pub fn register(&mut self, name: &'static str, handler: ToolHandler) {
+        self.handlers.insert(name, handler);
+    }
+
+    /// Dispatch a tool call to the registered handler.
+    pub async fn dispatch(
+        &self,
+        ctx: &ToolContext,
+        tool_name: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<Vec<Content>> {
+        match self.handlers.get(tool_name) {
+            Some(handler) => handler(ctx, args).await,
+            None => anyhow::bail!("Unknown tool: {}", tool_name),
+        }
+    }
+
+    /// Check if a tool is registered.
+    pub fn contains(&self, tool_name: &str) -> bool {
+        self.handlers.contains_key(tool_name)
+    }
+}
+
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Wrapper functions for handlers with non-standard signatures ──
+
+fn wrap_init_knowledge_base<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(knowledge::handle_init_knowledge_base(&ctx.workspace_registry, args))
+}
+
+fn wrap_lint_wiki<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(knowledge::handle_lint_wiki(&ctx.workspace_registry, args))
+}
+
+fn wrap_detect_stale_entries<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(knowledge::handle_detect_stale_entries(&ctx.workspace_registry, args))
+}
+
+fn wrap_load_tools<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    let _ = ctx;
+    Box::pin(meta_tools::handle_load_tools(args))
+}
+
+fn wrap_archive_answer<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(knowledge::handle_archive_answer(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_entry_context<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_get_entry_context(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_wiki_entry<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_get_wiki_entry(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_agent_context<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_get_agent_context(&ctx.workspace_registry, args))
+}
+
+fn wrap_preview_wiki_patch<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(index::handle_preview_wiki_patch(&ctx.workspace_registry, args))
+}
+
+fn wrap_patch_wiki_entry<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_patch_wiki_entry(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_compilation_context<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(index::handle_get_compilation_context(&ctx.workspace_registry, args))
+}
+
+fn wrap_find_orphans<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_find_orphans(&ctx.workspace_registry, args))
+}
+
+fn wrap_suggest_links<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_suggest_links(&ctx.workspace_registry, args))
+}
+
+fn wrap_export_concept_map<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(index::handle_export_concept_map(&ctx.workspace_registry, args))
+}
+
+fn wrap_check_quality<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(index::handle_check_quality(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_config<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(management::handle_get_config(&ctx.workspace_registry, args))
+}
+
+fn wrap_set_config<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(management::handle_set_config(&ctx.workspace_registry, args))
+}
+
+fn wrap_get_compile_status<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(management::handle_get_compile_status(&ctx.workspace_registry, args))
+}
+
+fn wrap_list_quality_issues<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(management::handle_list_quality_issues(&ctx.workspace_registry, args))
+}
+
+fn wrap_fix_suggest<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(management::handle_fix_suggest(&ctx.workspace_registry, args))
+}
+
+fn wrap_apply_quality_gate<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(management::handle_apply_quality_gate(&ctx.workspace_registry, args))
+}
+
+fn wrap_show_wiki_browser<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    let _ = (ctx, args);
+    Box::pin(management::handle_show_wiki_browser())
+}
+
+fn wrap_list_workspaces<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    let _ = args;
+    Box::pin(platform::handle_list_workspaces(&ctx.workspace_registry))
+}
+
+fn wrap_set_active_workspace<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(platform::handle_set_active_workspace(&ctx.workspace_registry, args))
+}
+
+fn wrap_register_workspace<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(platform::handle_register_workspace(&ctx.workspace_registry, args))
+}
+
+fn wrap_list_extraction_plugins<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    let _ = args;
+    Box::pin(platform::handle_list_extraction_plugins(ctx))
+}
+
+fn wrap_sync_status<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(platform::handle_sync_status(&ctx.workspace_registry, args))
+}
+
+fn wrap_sync_push<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(platform::handle_sync_push(&ctx.workspace_registry, args))
+}
+
+fn wrap_sync_pull<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
+    Box::pin(platform::handle_sync_pull(&ctx.workspace_registry, args))
+}
+
+fn wrap_submit_patch_proposal<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(platform::handle_submit_patch_proposal(&ctx.workspace_registry, args))
+}
+
+fn wrap_apply_patch_proposal<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(platform::handle_apply_patch_proposal(&ctx.workspace_registry, args))
+}
+
+fn wrap_list_patch_proposals<'a>(
+    ctx: &'a ToolContext,
+    args: &'a serde_json::Value,
+) -> BoxFut<'a> {
+    Box::pin(platform::handle_list_patch_proposals(&ctx.workspace_registry, args))
+}
+
+/// Build the tool registry by registering all tool handlers.
+fn build_tool_registry() -> ToolRegistry {
+    let mut r = ToolRegistry::new();
+
+    // ── Extract tools ──
+    r.register("extract_text", |ctx, args| Box::pin(extract::handle_extract_text(ctx, args)));
+    r.register("extract_structured", |ctx, args| {
+        Box::pin(extract::handle_extract_structured(ctx, args))
+    });
+    r.register("get_page_count", |ctx, args| {
+        Box::pin(extract::handle_get_page_count(ctx, args))
+    });
+    r.register("search_keywords", |ctx, args| {
+        Box::pin(extract::handle_search_keywords(ctx, args))
+    });
+    r.register("extrude_to_server_wiki", |ctx, args| {
+        Box::pin(extract::handle_extrude_to_server_wiki(ctx, args))
+    });
+    r.register("extrude_to_agent_payload", |ctx, args| {
+        Box::pin(extract::handle_extrude_to_agent_payload(ctx, args))
+    });
+
+    // ── Knowledge tools ──
+    r.register("init_knowledge_base", wrap_init_knowledge_base);
+    r.register("lint_wiki", wrap_lint_wiki);
+    r.register("detect_stale_entries", wrap_detect_stale_entries);
+    r.register("archive_answer", wrap_archive_answer);
+    r.register("compile_to_wiki", |ctx, args| {
+        Box::pin(knowledge::handle_compile_to_wiki(ctx, args))
+    });
+    r.register("compile_image", |ctx, args| {
+        Box::pin(knowledge::handle_compile_image(ctx, args))
+    });
+    r.register("compile_uploaded_pdf", |ctx, args| {
+        Box::pin(knowledge::handle_compile_uploaded_pdf(ctx, args))
+    });
+    r.register("incremental_compile", |ctx, args| {
+        Box::pin(knowledge::handle_incremental_compile(ctx, args))
+    });
+    r.register("micro_compile", |ctx, args| {
+        Box::pin(knowledge::handle_micro_compile(ctx, args))
+    });
+    r.register("aggregate_entries", |ctx, args| {
+        Box::pin(knowledge::handle_aggregate_entries(ctx, args))
+    });
+    r.register("hypothesis_test", |ctx, args| {
+        Box::pin(knowledge::handle_hypothesis_test(ctx, args))
+    });
+    r.register("recompile_entry", |ctx, args| {
+        Box::pin(knowledge::handle_recompile_entry(ctx, args))
+    });
+    r.register("save_wiki_entry", |ctx, args| {
+        Box::pin(knowledge::handle_save_wiki_entry(ctx, args))
+    });
+    r.register("complete_compile_job", |ctx, args| {
+        Box::pin(knowledge::handle_complete_compile_job(ctx, args))
+    });
+    r.register("generate_compile_plan", |ctx, args| {
+        Box::pin(knowledge::handle_generate_compile_plan(ctx, args))
+    });
+    r.register("get_compile_plan", |ctx, args| {
+        Box::pin(knowledge::handle_get_compile_plan(ctx, args))
+    });
+    r.register("mark_plan_task_done", |ctx, args| {
+        Box::pin(knowledge::handle_mark_plan_task_done(ctx, args))
+    });
+
+    // ── Index tools ──
+    r.register("search_knowledge", |ctx, args| {
+        Box::pin(index::handle_search_knowledge(ctx, args))
+    });
+    r.register("rebuild_index", |ctx, args| {
+        Box::pin(index::handle_rebuild_index(ctx, args))
+    });
+    r.register("get_entry_context", wrap_get_entry_context);
+    r.register("get_wiki_entry", wrap_get_wiki_entry);
+    r.register("get_agent_context", wrap_get_agent_context);
+    r.register("preview_wiki_patch", wrap_preview_wiki_patch);
+    r.register("patch_wiki_entry", wrap_patch_wiki_entry);
+    r.register("apply_wiki_patch", wrap_patch_wiki_entry);
+    r.register("get_compilation_context", wrap_get_compilation_context);
+    r.register("find_orphans", wrap_find_orphans);
+    r.register("suggest_links", wrap_suggest_links);
+    r.register("export_concept_map", wrap_export_concept_map);
+    r.register("check_quality", wrap_check_quality);
+
+    // ── Management tools ──
+    r.register("get_config", wrap_get_config);
+    r.register("set_config", wrap_set_config);
+    r.register("get_health_report", |ctx, args| {
+        Box::pin(management::handle_get_health_report(ctx, args))
+    });
+    r.register("trigger_incremental_compile", |ctx, args| {
+        Box::pin(management::handle_trigger_incremental_compile(ctx, args))
+    });
+    r.register("get_compile_status", wrap_get_compile_status);
+    r.register("list_quality_issues", wrap_list_quality_issues);
+    r.register("fix_suggest", wrap_fix_suggest);
+    r.register("apply_quality_gate", wrap_apply_quality_gate);
+    r.register("show_wiki_browser", wrap_show_wiki_browser);
+
+    // ── Meta tools ──
+    r.register("ingest", |ctx, args| Box::pin(meta_tools::handle_meta_ingest(ctx, args)));
+    r.register("query", |ctx, args| Box::pin(meta_tools::handle_meta_query(ctx, args)));
+    r.register("lint", |ctx, args| Box::pin(meta_tools::handle_meta_lint(ctx, args)));
+    r.register("load_tools", wrap_load_tools);
+
+    // ── Platform tools ──
+    r.register("list_workspaces", wrap_list_workspaces);
+    r.register("set_active_workspace", wrap_set_active_workspace);
+    r.register("register_workspace", wrap_register_workspace);
+    r.register("list_extraction_plugins", wrap_list_extraction_plugins);
+    r.register("probe_extraction", |ctx, args| {
+        Box::pin(platform::handle_probe_extraction(ctx, args))
+    });
+    r.register("sync_status", wrap_sync_status);
+    r.register("sync_push", wrap_sync_push);
+    r.register("sync_pull", wrap_sync_pull);
+    r.register("submit_patch_proposal", wrap_submit_patch_proposal);
+    r.register("apply_patch_proposal", wrap_apply_patch_proposal);
+    r.register("list_patch_proposals", wrap_list_patch_proposals);
+
+    r
+}
+
+/// Global tool registry, initialized once on first access.
+static TOOL_REGISTRY: LazyLock<ToolRegistry> = LazyLock::new(build_tool_registry);
 
 pub fn all_tool_definitions() -> Vec<ToolDefinition> {
     if code_mode::is_code_mode() {
@@ -130,74 +499,7 @@ pub async fn dispatch_api_tool_inner(
     tool_name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<Content>> {
-    match tool_name {
-        "extract_text" => handle_extract_text(ctx, args).await,
-        "extract_structured" => handle_extract_structured(ctx, args).await,
-        "get_page_count" => handle_get_page_count(ctx, args).await,
-        "search_keywords" => handle_search_keywords(ctx, args).await,
-        "extrude_to_server_wiki" => handle_extrude_to_server_wiki(ctx, args).await,
-        "extrude_to_agent_payload" => handle_extrude_to_agent_payload(ctx, args).await,
-        "init_knowledge_base" => handle_init_knowledge_base(&ctx.workspace_registry, args).await,
-        "lint_wiki" => handle_lint_wiki(&ctx.workspace_registry, args).await,
-        "detect_stale_entries" => handle_detect_stale_entries(&ctx.workspace_registry, args).await,
-        "ingest" => handle_meta_ingest(ctx, args).await,
-        "query" => handle_meta_query(ctx, args).await,
-        "lint" => handle_meta_lint(ctx, args).await,
-        "load_tools" => handle_load_tools(args).await,
-        "archive_answer" => handle_archive_answer(&ctx.workspace_registry, args).await,
-        "compile_to_wiki" => handle_compile_to_wiki(ctx, args).await,
-        "compile_image" => handle_compile_image(ctx, args).await,
-        "compile_uploaded_pdf" => handle_compile_uploaded_pdf(ctx, args).await,
-        "incremental_compile" => handle_incremental_compile(ctx, args).await,
-        "search_knowledge" => handle_search_knowledge(ctx, args).await,
-        "rebuild_index" => handle_rebuild_index(ctx, args).await,
-        "get_entry_context" => handle_get_entry_context(&ctx.workspace_registry, args).await,
-        "get_wiki_entry" => handle_get_wiki_entry(&ctx.workspace_registry, args).await,
-        "get_agent_context" => handle_get_agent_context(&ctx.workspace_registry, args).await,
-        "preview_wiki_patch" => handle_preview_wiki_patch(&ctx.workspace_registry, args).await,
-        "patch_wiki_entry" | "apply_wiki_patch" => {
-            handle_patch_wiki_entry(&ctx.workspace_registry, args).await
-        }
-        "get_compilation_context" => {
-            handle_get_compilation_context(&ctx.workspace_registry, args).await
-        }
-        "find_orphans" => handle_find_orphans(&ctx.workspace_registry, args).await,
-        "suggest_links" => handle_suggest_links(&ctx.workspace_registry, args).await,
-        "export_concept_map" => handle_export_concept_map(&ctx.workspace_registry, args).await,
-        "check_quality" => handle_check_quality(&ctx.workspace_registry, args).await,
-        "micro_compile" => handle_micro_compile(ctx, args).await,
-        "aggregate_entries" => handle_aggregate_entries(ctx, args).await,
-        "hypothesis_test" => handle_hypothesis_test(ctx, args).await,
-        "recompile_entry" => handle_recompile_entry(ctx, args).await,
-        "save_wiki_entry" => handle_save_wiki_entry(ctx, args).await,
-        "complete_compile_job" => handle_complete_compile_job(ctx, args).await,
-        "generate_compile_plan" => handle_generate_compile_plan(ctx, args).await,
-        "get_compile_plan" => handle_get_compile_plan(ctx, args).await,
-        "mark_plan_task_done" => handle_mark_plan_task_done(ctx, args).await,
-        "get_config" => handle_get_config(&ctx.workspace_registry, args).await,
-        "set_config" => handle_set_config(&ctx.workspace_registry, args).await,
-        "get_health_report" => handle_get_health_report(ctx, args).await,
-        "trigger_incremental_compile" => handle_trigger_incremental_compile(ctx, args).await,
-        "get_compile_status" => handle_get_compile_status(&ctx.workspace_registry, args).await,
-        "list_quality_issues" => handle_list_quality_issues(&ctx.workspace_registry, args).await,
-        "fix_suggest" => handle_fix_suggest(&ctx.workspace_registry, args).await,
-        "apply_quality_gate" => handle_apply_quality_gate(&ctx.workspace_registry, args).await,
-        "show_wiki_browser" => handle_show_wiki_browser().await,
-        "list_workspaces" => handle_list_workspaces(&ctx.workspace_registry).await,
-        "set_active_workspace" => handle_set_active_workspace(&ctx.workspace_registry, args).await,
-        "register_workspace" => handle_register_workspace(&ctx.workspace_registry, args).await,
-        "list_extraction_plugins" => handle_list_extraction_plugins(ctx).await,
-        "probe_extraction" => handle_probe_extraction(ctx, args).await,
-        "sync_status" => handle_sync_status(&ctx.workspace_registry, args).await,
-        "sync_push" => handle_sync_push(&ctx.workspace_registry, args).await,
-        "sync_pull" => handle_sync_pull(&ctx.workspace_registry, args).await,
-        "submit_patch_proposal" => {
-            handle_submit_patch_proposal(&ctx.workspace_registry, args).await
-        }
-        "apply_patch_proposal" => handle_apply_patch_proposal(&ctx.workspace_registry, args).await,
-        "list_patch_proposals" => handle_list_patch_proposals(&ctx.workspace_registry, args).await,
-        _ => Err(anyhow::anyhow!("Unknown tool: {}", tool_name)),
-    }
+    TOOL_REGISTRY.dispatch(ctx, tool_name, args).await
 }
 
 /// Resolve knowledge base path: `kb_id` (preferred) or `knowledge_base` or active workspace.
@@ -333,5 +635,17 @@ mod tests {
         let result = dispatch_tool(&ctx, "unknown_tool_name", &args).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unknown tool"));
+    }
+
+    #[test]
+    fn test_tool_registry_contains_expected_tools() {
+        assert!(TOOL_REGISTRY.contains("extract_text"));
+        assert!(TOOL_REGISTRY.contains("compile_to_wiki"));
+        assert!(TOOL_REGISTRY.contains("search_knowledge"));
+        assert!(TOOL_REGISTRY.contains("rebuild_index"));
+        assert!(TOOL_REGISTRY.contains("list_workspaces"));
+        assert!(TOOL_REGISTRY.contains("patch_wiki_entry"));
+        assert!(TOOL_REGISTRY.contains("apply_wiki_patch"));
+        assert!(!TOOL_REGISTRY.contains("nonexistent_tool"));
     }
 }

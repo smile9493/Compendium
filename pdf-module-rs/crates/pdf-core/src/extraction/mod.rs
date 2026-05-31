@@ -2,6 +2,7 @@
 
 #[cfg(feature = "vlm")]
 pub mod image_extractor;
+pub mod plugin_sandbox;
 pub mod remote;
 #[cfg(feature = "vlm")]
 pub mod vlm;

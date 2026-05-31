@@ -202,6 +202,8 @@ impl WikiRenderer {
             .map(|e| e.quality_score)
             .or_else(|| light.as_ref().map(|m| m.quality_score))
             .unwrap_or(0.0);
+        // Round to 4 decimal places to avoid floating point precision issues
+        let quality_score = (quality_score * 10000.0).round() / 10000.0;
 
         let status = entry
             .as_ref()

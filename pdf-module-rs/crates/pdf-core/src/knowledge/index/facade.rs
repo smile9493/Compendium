@@ -8,15 +8,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use chrono::Utc;
 use jieba_rs::Jieba;
 use serde::Serialize;
 use tracing::debug;
 
 use crate::error::{PdfModuleError, PdfResult};
 use crate::knowledge::entry::{KnowledgeEntry, extract_markdown_body};
+use crate::knowledge::index::FulltextIndex;
 use crate::knowledge::index::fulltext::SearchHit;
+use crate::knowledge::index::graph::GraphIndex;
 use crate::knowledge::index::vector::{VectorHit, VectorIndex};
-use crate::knowledge::index::{FulltextIndex, GraphIndex};
+use crate::knowledge::knowledge_decay::{DECAY_HALF_LIFE_DAYS, time_decay_factor};
 use crate::knowledge::publish_gate::{GateConfig, is_searchable};
 use crate::management::config_manager::ConfigManager;
 
@@ -27,16 +30,21 @@ const RRF_K: f32 = 60.0;
 
 /// Search strategy for knowledge retrieval.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum SearchMode {
+    /// Automatic query routing based on query complexity analysis.
+    #[default]
+    Auto,
     /// Tantivy full-text only (CJK jieba tokenizer).
     Keyword,
     /// TF-IDF cosine similarity only.
     Semantic,
-    /// Reciprocal Rank Fusion of keyword + semantic (default).
-    #[default]
+    /// Reciprocal Rank Fusion of keyword + semantic.
     Hybrid,
     /// Karpathy-style: index.md + graph neighbors, no Tantivy/vector.
     WikiFirst,
+    /// Semantic to find entry nodes, then graph traversal to expand context.
+    GraphExpand,
 }
 
 impl SearchMode {
@@ -46,7 +54,9 @@ impl SearchMode {
             "semantic" | "vector" => Self::Semantic,
             "wiki_first" | "wiki-first" | "wiki" => Self::WikiFirst,
             "hybrid" => Self::Hybrid,
-            _ => Self::Hybrid,
+            "auto" => Self::Auto,
+            "graph_expand" | "graph-expand" | "graphexpand" => Self::GraphExpand,
+            _ => Self::Auto,
         }
     }
 }
@@ -69,25 +79,37 @@ pub struct SearchOptions {
     pub rebuild_if_empty: bool,
     /// Restrict keyword search to this domain (Tantivy filter).
     pub domain: Option<String>,
+    /// Weight for temporal decay boost (0.0-1.0). None disables temporal ranking.
+    pub temporal_boost: Option<f32>,
 }
 
 impl Default for SearchOptions {
     fn default() -> Self {
         let allow_fs_fallback = std::env::var("RSUT_SEARCH_ALLOW_FS_FALLBACK")
             .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-        Self { allow_fs_fallback, rebuild_if_empty: false, domain: None }
+        Self { allow_fs_fallback, rebuild_if_empty: false, domain: None, temporal_boost: None }
     }
 }
 
 impl SearchOptions {
     /// HTTP / MCP defaults: Tantivy only, no implicit rebuild.
     pub fn for_api() -> Self {
-        Self { allow_fs_fallback: false, rebuild_if_empty: false, domain: None }
+        Self {
+            allow_fs_fallback: false,
+            rebuild_if_empty: false,
+            domain: None,
+            temporal_boost: None,
+        }
     }
 
     /// CLI defaults: rebuild empty index on demand.
     pub fn for_cli() -> Self {
-        Self { allow_fs_fallback: false, rebuild_if_empty: true, domain: None }
+        Self {
+            allow_fs_fallback: false,
+            rebuild_if_empty: true,
+            domain: None,
+            temporal_boost: None,
+        }
     }
 }
 
@@ -97,6 +119,23 @@ pub struct SearchMeta {
     pub index_empty: bool,
     pub used_fallback: bool,
     pub mode: String,
+}
+
+/// Debug information about how a search hit was retrieved.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct RetrievalPath {
+    /// Which search mode was actually used (after Auto resolution).
+    pub mode_used: String,
+    /// Rank in fulltext results (if applicable).
+    pub fulltext_rank: Option<usize>,
+    /// Rank in semantic results (if applicable).
+    pub semantic_rank: Option<usize>,
+    /// RRF score (if hybrid mode was used).
+    pub rrf_score: Option<f32>,
+    /// Number of graph hops from entry point (if GraphExpand).
+    pub graph_hops: Option<usize>,
+    /// Whether this hit survived deduplication.
+    pub deduplicated: bool,
 }
 
 /// Unified search response for HTTP and MCP.
@@ -162,7 +201,38 @@ pub fn search_with_options_ft(
         });
     }
 
+    // Resolve Auto mode to a concrete mode.
+    let mode = match mode {
+        SearchMode::Auto => classify_query(query),
+        other => other,
+    };
+    let resolved_mode_str = format!("{:?}", mode).to_lowercase();
+
     let (hits, index_empty, used_fallback) = match mode {
+        SearchMode::Auto => {
+            // classify_query should never return Auto; fallback to Hybrid.
+            let kr = search_keyword(
+                knowledge_base,
+                &wd,
+                query,
+                limit.saturating_mul(2).max(limit),
+                &opts,
+                ft_override,
+            )?;
+            let index_empty = kr.index_empty;
+            let used_fallback = kr.used_fallback;
+            let semantic = match ensure_vector_index(knowledge_base) {
+                Ok(()) => {
+                    let index = load_vector_index(knowledge_base)?;
+                    index.search(query, limit.saturating_mul(2).max(limit))
+                }
+                Err(e) => {
+                    debug!(error = %e, "Vector index unavailable for hybrid search");
+                    Vec::new()
+                }
+            };
+            (rrf_merge(kr.hits, semantic, limit), index_empty, used_fallback)
+        }
         SearchMode::WikiFirst => {
             (search_wiki_first(knowledge_base, &wd, query, limit)?, false, false)
         }
@@ -194,11 +264,24 @@ pub fn search_with_options_ft(
             };
             (rrf_merge(kr.hits, semantic, limit), index_empty, used_fallback)
         }
+        SearchMode::GraphExpand => {
+            (search_graph_expand(knowledge_base, &wd, query, limit)?, false, false)
+        }
     };
 
     let hits = filter_searchable(knowledge_base, &wd, hits, limit);
     let hits = crate::knowledge::cognitive_diversity::deduplicate_search_hits(hits, knowledge_base);
-    Ok(SearchResponse { hits, meta: SearchMeta { index_empty, used_fallback, mode: mode_str } })
+
+    let hits = if let Some(alpha) = opts.temporal_boost {
+        apply_temporal_boost(hits, knowledge_base, alpha)
+    } else {
+        hits
+    };
+
+    Ok(SearchResponse {
+        hits,
+        meta: SearchMeta { index_empty, used_fallback, mode: resolved_mode_str },
+    })
 }
 
 /// Resolve default search mode from `retrieval_mode` in kb config (`wiki_first` | `hybrid`).
@@ -211,6 +294,141 @@ pub fn default_search_mode(knowledge_base: &Path) -> SearchMode {
         return SearchMode::WikiFirst;
     }
     SearchMode::Hybrid
+}
+
+/// Analyze query text and route to the most appropriate concrete search mode.
+fn classify_query(query: &str) -> SearchMode {
+    let tokens: Vec<&str> = query.split_whitespace().collect();
+    let token_count = tokens.len();
+
+    // Short queries with question words → WikiFirst (direct lookup).
+    if token_count <= 3 {
+        let question_words = ["什么", "如何", "怎么", "why", "what", "how", "which", "who"];
+        let lower = query.to_lowercase();
+        if question_words.iter().any(|w| lower.contains(w)) {
+            return SearchMode::WikiFirst;
+        }
+    }
+
+    // Relational/comparison queries → GraphExpand.
+    let comparison_words = [
+        "比较",
+        "区别",
+        "关系",
+        "vs",
+        "versus",
+        "compare",
+        "difference",
+        "relation",
+        "relationship",
+    ];
+    let lower = query.to_lowercase();
+    if comparison_words.iter().any(|w| lower.contains(w)) {
+        return SearchMode::GraphExpand;
+    }
+
+    // Long queries → Hybrid (multiple signals benefit from RRF).
+    if token_count > 6 {
+        return SearchMode::Hybrid;
+    }
+
+    SearchMode::Hybrid
+}
+
+/// Graph-expand search: semantic to find entry nodes, then graph traversal to expand context.
+fn search_graph_expand(
+    knowledge_base: &Path,
+    wiki_dir: &Path,
+    query: &str,
+    limit: usize,
+) -> PdfResult<Vec<SearchHit>> {
+    // Step 1: Semantic search to get top 3 entry points.
+    let entry_points = match ensure_vector_index(knowledge_base) {
+        Ok(()) => {
+            let index = load_vector_index(knowledge_base)?;
+            let hits = index.search(query, 3);
+            hits.into_iter().map(|h| h.path).collect::<Vec<_>>()
+        }
+        Err(e) => {
+            debug!(error = %e, "Vector index unavailable for graph expand; falling back to keyword");
+            let kr = search_keyword(
+                knowledge_base,
+                wiki_dir,
+                query,
+                3,
+                &SearchOptions::for_api(),
+                None,
+            )?;
+            kr.hits.into_iter().map(|h| h.path).collect()
+        }
+    };
+
+    if entry_points.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Step 2: Load graph, find N-hop neighbors (N=2) for each entry point.
+    let (g_idx, _) = GraphIndex::load_from_disk_or_rebuild(knowledge_base, wiki_dir)?;
+
+    let mut seen = std::collections::HashSet::new();
+    let mut hits = Vec::new();
+
+    // Entry points themselves get high scores.
+    for path in &entry_points {
+        if seen.insert(path.clone()) {
+            push_wiki_first_hit(wiki_dir, path, query, 1.0, &mut hits);
+        }
+    }
+
+    // Expand from each entry point with 2-hop neighbors.
+    let max_hops: u32 = 2;
+    for ep in &entry_points {
+        let neighbors = g_idx.get_neighbors(ep, max_hops);
+        for neighbor in neighbors {
+            if seen.insert(neighbor.path.clone()) {
+                // Score decays with hops: 1-hop = 0.7, 2-hop = 0.4.
+                let score = match neighbor.hops {
+                    1 => 0.7,
+                    2 => 0.4,
+                    _ => 0.2,
+                };
+                push_wiki_first_hit(wiki_dir, &neighbor.path, query, score, &mut hits);
+            }
+        }
+    }
+
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    hits.truncate(limit);
+    Ok(hits)
+}
+
+/// Apply temporal decay boost to search hits.
+///
+/// Blends the original relevance score with a quality×decay score:
+/// `new_score = original * (1 - alpha) + (quality * decay) * alpha`.
+fn apply_temporal_boost(
+    mut hits: Vec<SearchHit>,
+    knowledge_base: &Path,
+    alpha: f32,
+) -> Vec<SearchHit> {
+    let wd = wiki_dir(knowledge_base);
+    let alpha = alpha.clamp(0.0, 1.0);
+
+    for hit in &mut hits {
+        let full = wd.join(&hit.path);
+        if let Ok(content) = fs::read_to_string(&full)
+            && let Some(entry) = KnowledgeEntry::from_markdown(&content)
+        {
+            let reference_date = entry.last_validated.unwrap_or(entry.updated);
+            let days_stale = (Utc::now() - reference_date).num_days().max(0);
+            let decay = time_decay_factor(days_stale, DECAY_HALF_LIFE_DAYS);
+            let decay_score = entry.quality_score.clamp(0.0, 1.0) * decay;
+            hit.score = hit.score * (1.0 - alpha) + decay_score * alpha;
+        }
+    }
+
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    hits
 }
 
 fn search_wiki_first(
@@ -292,7 +510,14 @@ fn push_wiki_first_hit(
     if hits.iter().any(|h| h.path == path) {
         return;
     }
-    hits.push(SearchHit { path: path.to_string(), title, domain, score, snippet });
+    hits.push(SearchHit {
+        path: path.to_string(),
+        title,
+        domain,
+        score,
+        snippet,
+        retrieval_debug: None,
+    });
     let _ = query;
 }
 
@@ -426,6 +651,7 @@ fn rrf_merge(keyword: Vec<SearchHit>, semantic: Vec<VectorHit>, limit: usize) ->
                         domain: vhit.domain,
                         score: 0.0,
                         snippet: String::new(),
+                        retrieval_debug: None,
                     },
                 )
             },
@@ -454,7 +680,14 @@ fn vector_hits_to_search_hits(
     hits.into_iter()
         .map(|h| {
             let snippet = read_snippet_for_path(&wd, &h.path, query);
-            SearchHit { path: h.path, title: h.title, domain: h.domain, score: h.score, snippet }
+            SearchHit {
+                path: h.path,
+                title: h.title,
+                domain: h.domain,
+                score: h.score,
+                snippet,
+                retrieval_debug: None,
+            }
         })
         .collect()
 }
@@ -638,8 +871,12 @@ pub fn reindex_entry(knowledge_base: &Path, entry_path: &str) -> PdfResult<()> {
     v_idx.index_entry(rel, &entry.title, &entry.domain, &body);
     v_idx.save()?;
 
-    let mut g_idx = GraphIndex::new();
-    let _ = g_idx.rebuild(&wd)?;
+    // Incremental graph update: try loading existing graph and updating only this entry.
+    let (mut g_idx, _) = GraphIndex::load_from_disk_or_rebuild(knowledge_base, &wd)?;
+    if !g_idx.update_entry_node(&wd, &entry, rel)? {
+        // Entry not yet in graph — fall back to full rebuild to add it.
+        let _ = g_idx.rebuild(&wd)?;
+    }
     g_idx.save_to_disk(knowledge_base)?;
 
     Ok(())
@@ -766,6 +1003,7 @@ fn fs_fallback_search(
                 domain: domain.clone(),
                 score,
                 snippet,
+                retrieval_debug: None,
             });
         }
     }

@@ -11,6 +11,7 @@
 //! | GET | `/api/wiki/entries/*path` | Single entry (SSR HTML + metadata) |
 //! | GET | `/api/wiki/search?q=...` | Full-text search |
 //! | GET | `/api/wiki/graph/*path` | Concept graph (Mermaid) |
+//! | GET | `/api/wiki/graph/interactive/*path` | Interactive graph (nodes + edges JSON) |
 //! | GET | `/api/wiki/stats` | Knowledge base stats |
 //! | GET | `/api/wiki/domains` | Domain list |
 //!
@@ -20,8 +21,9 @@
 //! | GET | `/api/health` | Health report |
 //! | GET | `/api/server-info` | MCP mode and Cursor config snippet |
 //! | GET | `/api/config` | Runtime config |
-//! | POST | `/api/config` | Set config key |
-//! | DELETE | `/api/config/{key}` | Remove config key |
+    //! | POST | `/api/config` | Set config key |
+    //! | GET | `/api/config/{key}` | Get single config value |
+    //! | DELETE | `/api/config/{key}` | Remove config key |
 //! | GET | `/api/compile/status` | Compile status |
 //! | POST | `/api/index/rebuild` | Rebuild indexes |
 //! | POST | `/mcp` | MCP JSON-RPC (`tools/call`, `initialize`, `tools/list`) |
@@ -45,6 +47,7 @@ use axum::routing::{delete, get, post};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument};
 
 use pdf_core::McpPdfPipeline;
@@ -90,6 +93,44 @@ pub struct HttpState {
     pub update_cache: Arc<UpdateCache>,
 }
 
+/// Optional Bearer token authentication state.
+#[derive(Debug, Clone)]
+pub struct HttpAuth {
+    pub token: Option<String>,
+}
+
+/// Axum middleware enforcing Bearer token authentication on protected routes.
+///
+/// If no token is configured, all requests pass through. Otherwise, the
+/// `Authorization: Bearer <token>` header must match the configured value.
+async fn auth_middleware(
+    axum::Extension(auth): axum::Extension<HttpAuth>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<axum::response::Response, axum::http::StatusCode> {
+    if auth.token.is_none() {
+        return Ok(next.run(request).await);
+    }
+    let expected = auth
+        .token
+        .as_ref()
+        .ok_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let auth_header = request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+    match auth_header {
+        Some(header) if header.starts_with("Bearer ") => {
+            if &header[7..] == expected {
+                Ok(next.run(request).await)
+            } else {
+                Err(axum::http::StatusCode::UNAUTHORIZED)
+            }
+        }
+        _ => Err(axum::http::StatusCode::UNAUTHORIZED),
+    }
+}
+
 fn resolve_kb_from_request(state: &HttpState, kb_id: Option<&str>) -> Option<PathBuf> {
     if let Some(id) = kb_id {
         state.workspace_registry.path_for_id(id).ok()
@@ -129,21 +170,24 @@ pub async fn run_http_server(
 }
 
 fn build_router(state: HttpState) -> Router {
-    let mut router = Router::new()
+    // ── Protected API routes (require auth when COMPENDIUM_HTTP_TOKEN is set) ──
+    let protected_api = Router::new()
         // ── Wiki API ──
         .route("/api/wiki/tree", get(api_wiki_tree))
         .route("/api/wiki/entries/*path", get(api_wiki_entry))
         .route("/api/wiki/search", get(api_wiki_search))
         .route("/api/wiki/graph/*path", get(api_wiki_graph))
+        .route("/api/wiki/graph/interactive/*path", get(api_wiki_graph_interactive))
         .route("/api/wiki/stats", get(api_wiki_stats))
         .route("/api/wiki/domains", get(api_wiki_domains))
         // ── Management API ──
         .route("/api/config", get(api_config_get).post(api_config_set))
-        .route("/api/config/{key}", delete(api_config_remove))
+        .route("/api/config/{key}", get(api_config_get_key).delete(api_config_remove))
         .route("/api/health", get(api_health))
         .route("/api/server-info", get(api_server_info))
         .route("/api/compile/status", get(api_compile_status))
         .route("/api/compile/incremental", post(api_compile_incremental))
+        .route("/api/compile/cancel", post(api_compile_cancel))
         .route("/api/compile/upload", post(api_compile_upload))
         .route("/api/upload", post(api_upload))
         .route("/api/quality/summary", get(api_quality_summary))
@@ -152,7 +196,6 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/index/status", get(api_index_status))
         .route("/api/compile/events", get(api_compile_events))
         .route("/api/v1/shares", post(api_shares_create))
-        .route("/api/share/{token}/wiki/entries/*path", get(api_share_wiki_entry))
         .route("/api/v1/workspaces", get(api_workspaces_list).post(api_workspaces_upsert))
         .route("/api/v1/workspaces/active", post(api_workspaces_set_active))
         // ── Version & Update ──
@@ -160,12 +203,31 @@ fn build_router(state: HttpState) -> Router {
         .route("/api/update/check", get(api_update_check))
         .route("/api/update/prepare", post(api_update_prepare))
         // ── MCP over HTTP (LAN / public — same JSON-RPC as stdio) ──
-        .route("/mcp", post(api_mcp_jsonrpc))
+        .route("/mcp", post(api_mcp_jsonrpc));
+
+    // ── Exempt routes (no auth required) ──
+    let exempt_routes = Router::new()
+        // Share links are public (authenticated via share token)
+        .route("/api/share/{token}/wiki/entries/*path", get(api_share_wiki_entry))
         // ── SPA (legacy redirects) ──
         .route("/", get(|| async { Redirect::permanent("/app/") }))
         .route("/settings", get(|| async { Redirect::permanent("/app/") }))
         // ── SPA fallback (catches /app/* and serves SPA) ──
         .fallback(serve_spa);
+
+    // ── Apply auth middleware to protected routes if COMPENDIUM_HTTP_TOKEN is set ──
+    let auth_token = std::env::var("COMPENDIUM_HTTP_TOKEN").ok();
+    let auth_state = HttpAuth { token: auth_token };
+
+    let protected = if auth_state.token.is_some() {
+        protected_api
+            .layer(axum::Extension(auth_state))
+            .layer(axum::middleware::from_fn(auth_middleware))
+    } else {
+        protected_api
+    };
+
+    let mut router = Router::new().merge(protected).merge(exempt_routes);
 
     if let Some(ref metrics) = state.http_metrics {
         router = router
@@ -391,8 +453,41 @@ async fn api_wiki_graph(
         }
     };
 
-    let mermaid = indexes.graph.export_concept_map(&path, 2);
-    Json(serde_json::json!({"mermaid": mermaid, "entry": path}))
+    let entry_path = normalize_wiki_entry_path(&path);
+    let mermaid = indexes.graph.export_concept_map(&entry_path, 2);
+    Json(serde_json::json!({"mermaid": mermaid, "entry": entry_path}))
+}
+
+/// Interactive graph endpoint returning nodes + edges JSON for force-directed rendering.
+#[instrument(skip(state))]
+async fn api_wiki_graph_interactive(
+    State(state): State<Arc<HttpState>>,
+    Path(path): Path<String>,
+    Query(q): Query<KbQuery>,
+) -> Json<serde_json::Value> {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
+        None => return Json(serde_json::json!({"error": "No knowledge base configured"})),
+    };
+
+    if !kb.join("wiki").exists() {
+        return Json(serde_json::json!({"error": "Wiki directory not found"}));
+    }
+
+    let indexes = match state.index_cache.graph(&kb) {
+        Ok(g) => g,
+        Err(e) => {
+            return Json(serde_json::json!({"error": format!("Graph load failed: {}", e)}));
+        }
+    };
+
+    let entry_path = normalize_wiki_entry_path(&path);
+    let data = indexes.graph.export_interactive_json(Some(&entry_path), 2);
+    Json(serde_json::json!({
+        "entry": entry_path,
+        "nodes": data["nodes"],
+        "edges": data["edges"],
+    }))
 }
 
 #[instrument(skip(state))]
@@ -420,7 +515,7 @@ async fn api_wiki_stats(
             "index_size_bytes": report.index_size_bytes,
             "graph_node_count": report.graph_node_count,
             "graph_edge_count": report.graph_edge_count,
-            "avg_quality_score": report.avg_quality_score,
+            "avg_quality_score": (report.avg_quality_score * 10000.0).round() / 10000.0,
             "domains": report.domains,
             "last_compile": report.last_compile.map(|t| t.to_rfc3339()),
         })),
@@ -575,6 +670,41 @@ async fn api_config_get(
             .into_response();
     }
     Json(serde_json::json!({"config": cm.all(), "total_keys": cm.all().len()})).into_response()
+}
+
+#[instrument(skip(state))]
+async fn api_config_get_key(
+    State(state): State<Arc<HttpState>>,
+    Path(key): Path<String>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match resolve_kb_from_request(&state, q.kb_id.as_deref()) {
+        Some(p) => p,
+        None => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "No KB"})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut cm = ConfigManager::new(&kb);
+    if let Err(e) = cm.load() {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response();
+    }
+    match cm.get(&key) {
+        Some(value) => Json(serde_json::json!({"key": key, "value": value})).into_response(),
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("Config key '{}' not found", key)})),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -828,6 +958,36 @@ async fn api_compile_incremental(
             "job_id": job_id,
             "pipeline_status": "awaiting_agent",
             "incremental_result": result,
+        }))
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[instrument(skip(state))]
+async fn api_compile_cancel(
+    State(state): State<Arc<HttpState>>,
+    Query(q): Query<KbQuery>,
+) -> impl IntoResponse {
+    let kb = match kb_or_error(&state, q.kb_id.as_deref()) {
+        Ok(k) => k,
+        Err(r) => return *r,
+    };
+    let job_store = CompileJobStore::new(&kb);
+    match job_store.cancel_job(None) {
+        Ok(Some(job)) => Json(serde_json::json!({
+            "status": "cancelled",
+            "job_id": job.job_id,
+            "pipeline_status": "cancelled",
+        }))
+        .into_response(),
+        Ok(None) => Json(serde_json::json!({
+            "status": "no_active_job",
+            "message": "No active compile job to cancel",
         }))
         .into_response(),
         Err(e) => (
@@ -1401,12 +1561,14 @@ async fn api_mcp_jsonrpc(
         ));
     };
 
+    let cancel = CancellationToken::new();
     let tool_ctx = ToolContext::new_with_upload_store(
         pipeline,
         state.upload_store.clone(),
         Arc::clone(&state.workspace_registry),
         Arc::clone(&state.index_cache),
-    );
+    )
+    .with_cancel(cancel);
     let stats = Arc::new(ToolStats::new());
 
     match handle_request(&tool_ctx, &stats, request).await {

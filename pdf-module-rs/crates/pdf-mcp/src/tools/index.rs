@@ -49,6 +49,11 @@ pub async fn handle_rebuild_index(
     args: &serde_json::Value,
 ) -> anyhow::Result<Vec<crate::protocol::Content>> {
     let kb_path = parse_kb_path(&ctx.workspace_registry, args)?;
+    if ctx.cancel.is_cancelled() {
+        return Ok(vec![Content::text(serde_json::to_string_pretty(&serde_json::json!({
+            "status": "cancelled",
+        }))?)]);
+    }
     let policy = pdf_core::knowledge::PropagationPolicy::from_json_args(args);
     let (stats, propagation) = pdf_core::knowledge::rebuild_all_with_policy(&kb_path, &policy)?;
     ctx.index_cache.invalidate(&kb_path);
@@ -253,6 +258,8 @@ pub async fn handle_get_agent_context(
     let entry_related = entry.related.clone();
     let entry_contradictions = entry.contradictions.clone();
     let entry_quality_score = entry.quality_score;
+    // Round to 4 decimal places to avoid floating point precision issues
+    let entry_quality_score = (entry_quality_score * 10000.0).round() / 10000.0;
 
     // Clone for spawn_blocking closure, keep originals for output.
     let closure_title = entry_title.clone();

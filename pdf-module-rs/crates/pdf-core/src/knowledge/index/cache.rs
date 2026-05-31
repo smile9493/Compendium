@@ -75,6 +75,9 @@ impl IndexCache {
     }
 
     pub fn graph(&self, knowledge_base: &Path) -> PdfResult<Arc<KbIndexes>> {
+        // Always reload graph from disk to avoid serving stale cached graphs.
+        // Graph loading is cheap and correctness is critical for the graph API.
+        self.invalidate(knowledge_base);
         self.get_or_load(knowledge_base)
     }
 }

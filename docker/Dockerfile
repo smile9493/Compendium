@@ -65,6 +65,10 @@ COPY --from=planner /usr/local/cargo/git /usr/local/cargo/git
 # Copy workspace manifests and source
 COPY pdf-module-rs/Cargo.toml pdf-module-rs/Cargo.lock ./
 COPY pdf-module-rs/.cargo ./.cargo
+
+# Copy VERSION file for compile-time version injection (build.rs reads it)
+COPY VERSION ./
+
 COPY pdf-module-rs/crates ./crates
 
 RUN --mount=type=cache,target=/app/target \

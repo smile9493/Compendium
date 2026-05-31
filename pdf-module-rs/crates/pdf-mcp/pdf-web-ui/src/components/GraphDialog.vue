@@ -112,7 +112,8 @@ async function loadGraph() {
       const d = await api.getWikiGraph(wikiStore.currentPath)
       code = d.mermaid || ''
     } catch (e) {
-      code = ''
+      code = `graph TD\n  A["⚠ 加载失败: ${esc(e.message || '未知错误')}"]`
+      svgContent.value = `<span style="color:var(--error);font-size:0.8125rem">图谱加载失败: ${esc(e.message)}</span>`
     }
   } else {
     subtitle.value = '全局知识库结构'

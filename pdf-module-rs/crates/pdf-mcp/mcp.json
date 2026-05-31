@@ -1,0 +1,29 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/registry/v1.json",
+  "name": "compendium-pdf-mcp",
+  "version": "0.3.0",
+  "description": "AI-native PDF knowledge compilation engine — compiles PDFs into structured knowledge bases for AI clients",
+  "homepage": "https://github.com/smile9493/Compendium",
+  "repository": "https://github.com/smile9493/Compendium",
+  "license": "MIT",
+  "author": "smile9493",
+  "keywords": ["pdf", "knowledge-base", "mcp", "ai", "rag", "graph-rag"],
+  "categories": ["document-processing", "knowledge-management"],
+  "transport": {
+    "stdio": {
+      "command": "pdf-mcp",
+      "env": {
+        "PDFIUM_LIB_PATH": "Path to libpdfium.so"
+      }
+    },
+    "http": {
+      "url": "http://localhost:{port}/mcp",
+      "description": "Enable with MCP_HTTP_PORT environment variable"
+    }
+  },
+  "tools_count": 53,
+  "capabilities": {
+    "tools": true,
+    "resources": true
+  }
+}

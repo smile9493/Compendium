@@ -63,6 +63,9 @@ struct PersistedState {
     leaf_paths: Vec<String>,
     /// Per-file compilation metadata.
     entries: HashMap<String, CacheEntry>,
+    /// Entry-level content hashes for incremental graph updates.
+    #[serde(default)]
+    entry_hashes: HashMap<String, String>,
 }
 
 /// Merkle-based hash cache for incremental compilation.
@@ -74,6 +77,8 @@ pub struct HashCache {
     cache_path: PathBuf,
     /// The last known Merkle root (for fast "any change?" checks).
     last_merkle_root: Option<[u8; 32]>,
+    /// Entry-level content hashes for incremental graph updates.
+    entry_hashes: HashMap<String, String>,
 }
 
 impl HashCache {
@@ -89,10 +94,20 @@ impl HashCache {
             })?;
             let last_root = Self::parse_root_hex(&state.merkle_root);
             info!(entries = state.entries.len(), root = %state.merkle_root, "Loaded hash cache");
-            Ok(Self { entries: state.entries, cache_path, last_merkle_root: last_root })
+            Ok(Self {
+                entries: state.entries,
+                cache_path,
+                last_merkle_root: last_root,
+                entry_hashes: state.entry_hashes,
+            })
         } else {
             info!("No hash cache found, creating empty cache");
-            Ok(Self { entries: HashMap::new(), cache_path, last_merkle_root: None })
+            Ok(Self {
+                entries: HashMap::new(),
+                cache_path,
+                last_merkle_root: None,
+                entry_hashes: HashMap::new(),
+            })
         }
     }
 
@@ -116,8 +131,12 @@ impl HashCache {
             tree.root().map(hex::encode).unwrap_or_default()
         };
 
-        let state =
-            PersistedState { merkle_root: root_hex, leaf_paths, entries: self.entries.clone() };
+        let state = PersistedState {
+            merkle_root: root_hex,
+            leaf_paths,
+            entries: self.entries.clone(),
+            entry_hashes: self.entry_hashes.clone(),
+        };
         let json = serde_json::to_string_pretty(&state).map_err(|e| {
             PdfModuleError::Storage(format!("Failed to serialize hash cache: {}", e))
         })?;
@@ -296,6 +315,30 @@ impl HashCache {
         self.entries.iter()
     }
 
+    /// Check whether a wiki entry's content has changed since the last recorded hash.
+    /// Returns `true` if the entry is new or its content hash differs.
+    pub fn entry_needs_update(&self, entry_path: &str, current_content: &str) -> bool {
+        let current_hash = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(current_content.as_bytes());
+            hex::encode(hasher.finalize())
+        };
+        match self.entry_hashes.get(entry_path) {
+            Some(stored) => stored != &current_hash,
+            None => true,
+        }
+    }
+
+    /// Record the content hash of a wiki entry after a successful update.
+    pub fn record_entry_hash(&mut self, entry_path: String, content: &str) {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let hash = hex::encode(hasher.finalize());
+        self.entry_hashes.insert(entry_path, hash);
+    }
+
     fn parse_root_hex(hex_str: &str) -> Option<[u8; 32]> {
         let bytes = hex::decode(hex_str).ok()?;
         if bytes.len() != 32 {
@@ -325,6 +368,7 @@ mod tests {
             entries: HashMap::new(),
             cache_path: cache_path.clone(),
             last_merkle_root: None,
+            entry_hashes: HashMap::new(),
         };
 
         // Create a fake PDF
@@ -349,6 +393,7 @@ mod tests {
             entries: HashMap::new(),
             cache_path: dir.path().join(".hash_cache"),
             last_merkle_root: None,
+            entry_hashes: HashMap::new(),
         };
 
         let pdf_path = dir.path().join("test.pdf");
@@ -375,6 +420,7 @@ mod tests {
             entries: HashMap::new(),
             cache_path: dir.path().join(".hash_cache"),
             last_merkle_root: None,
+            entry_hashes: HashMap::new(),
         };
 
         let pdf1 = dir.path().join("a.pdf");
@@ -398,5 +444,35 @@ mod tests {
         loaded.entries.get_mut(&pdf1.to_string_lossy().to_string()).unwrap().source_hash =
             HashCache::hash_bytes(b"modified");
         assert!(loaded.has_changes());
+    }
+
+    #[test]
+    fn test_entry_needs_update() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut cache = HashCache {
+            entries: HashMap::new(),
+            cache_path: dir.path().join(".hash_cache"),
+            last_merkle_root: None,
+            entry_hashes: HashMap::new(),
+        };
+
+        let path = "wiki/it/test.md";
+        let content = "---\ntitle: Test\n---\nBody";
+
+        // New entry always needs update.
+        assert!(cache.entry_needs_update(path, content));
+
+        // Record hash, then it should not need update.
+        cache.record_entry_hash(path.to_string(), content);
+        assert!(!cache.entry_needs_update(path, content));
+
+        // Different content triggers update.
+        let updated = "---\ntitle: Test Updated\n---\nNew body";
+        assert!(cache.entry_needs_update(path, updated));
+
+        // Survives save/load roundtrip.
+        cache.save().unwrap();
+        let loaded = HashCache::load_or_create(dir.path()).unwrap();
+        assert!(!loaded.entry_needs_update(path, content));
     }
 }
