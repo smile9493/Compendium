@@ -21,9 +21,9 @@
 //! | GET | `/api/health` | Health report |
 //! | GET | `/api/server-info` | MCP mode and Cursor config snippet |
 //! | GET | `/api/config` | Runtime config |
-    //! | POST | `/api/config` | Set config key |
-    //! | GET | `/api/config/{key}` | Get single config value |
-    //! | DELETE | `/api/config/{key}` | Remove config key |
+//! | POST | `/api/config` | Set config key |
+//! | GET | `/api/config/{key}` | Get single config value |
+//! | DELETE | `/api/config/{key}` | Remove config key |
 //! | GET | `/api/compile/status` | Compile status |
 //! | POST | `/api/index/rebuild` | Rebuild indexes |
 //! | POST | `/mcp` | MCP JSON-RPC (`tools/call`, `initialize`, `tools/list`) |
@@ -43,7 +43,7 @@ use axum::Router;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json, Redirect};
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -73,8 +73,8 @@ use crate::tools::mcp_extraction::{extraction_health_default, extraction_health_
 use crate::tools::mcp_mode_label;
 use crate::upload::UploadStore;
 use crate::version::UpdateCache;
+use crate::version::VersionInfo;
 use crate::version::github::{GithubClient, check_for_updates as github_check};
-use crate::version::{VersionInfo};
 use pdf_mcp_contracts::{CONTRACT_VERSION, code_mode_tool_count, manifest_sha256, tool_count};
 
 #[derive(Clone)]
@@ -111,14 +111,9 @@ async fn auth_middleware(
     if auth.token.is_none() {
         return Ok(next.run(request).await);
     }
-    let expected = auth
-        .token
-        .as_ref()
-        .ok_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    let auth_header = request
-        .headers()
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok());
+    let expected = auth.token.as_ref().ok_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let auth_header =
+        request.headers().get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok());
     match auth_header {
         Some(header) if header.starts_with("Bearer ") => {
             if &header[7..] == expected {
@@ -1590,7 +1585,7 @@ async fn api_version(State(state): State<Arc<HttpState>>) -> Json<serde_json::Va
         "minor": v.minor,
         "build": v.build,
         "patch": v.patch,
-        "deployment_mode": serde_json::to_value(&v.deployment_mode).unwrap_or_default(),
+        "deployment_mode": serde_json::to_value(v.deployment_mode).unwrap_or_default(),
     });
     Json(version_json)
 }
@@ -1598,9 +1593,7 @@ async fn api_version(State(state): State<Arc<HttpState>>) -> Json<serde_json::Va
 /// Check for updates from GitHub Releases.
 /// Uses server-side cache (1h TTL) to avoid excessive GitHub API calls.
 #[instrument(skip(state))]
-async fn api_update_check(
-    State(state): State<Arc<HttpState>>,
-) -> impl IntoResponse {
+async fn api_update_check(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     // Return cached result if still valid
     if let Some(cached) = state.update_cache.get() {
         return Json(serde_json::to_value(&cached).unwrap_or_default()).into_response();
@@ -1611,14 +1604,12 @@ async fn api_update_check(
     let version = state.version_info.clone();
     let cache = Arc::clone(&state.update_cache);
 
-    let result = tokio::task::spawn_blocking(move || {
-        match github_check(&client, &version) {
-            Ok(result) => {
-                cache.set(result.clone());
-                Ok(result)
-            }
-            Err(e) => Err(e),
+    let result = tokio::task::spawn_blocking(move || match github_check(&client, &version) {
+        Ok(result) => {
+            cache.set(result.clone());
+            Ok(result)
         }
+        Err(e) => Err(e),
     })
     .await
     .map_err(|e| format!("Update check task panicked: {e}"));
@@ -1627,30 +1618,23 @@ async fn api_update_check(
         Ok(Ok(check_result)) => {
             Json(serde_json::to_value(&check_result).unwrap_or_default()).into_response()
         }
-        Ok(Err(msg)) | Err(msg) => (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": msg})),
-        )
-            .into_response(),
+        Ok(Err(msg)) | Err(msg) => {
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": msg})))
+                .into_response()
+        }
     }
 }
 
 /// Prepare an update: download the latest release asset.
 /// This is a potentially long-running operation.
 #[instrument(skip(state))]
-async fn api_update_prepare(
-    State(state): State<Arc<HttpState>>,
-) -> impl IntoResponse {
+async fn api_update_prepare(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     let client = Arc::clone(&state.github_client);
     let version = state.version_info.clone();
 
     let result = tokio::task::spawn_blocking(move || {
         crate::version::github::prepare_update(&client, &version, |downloaded, total| {
-            let pct = if total > 0 {
-                (downloaded as f64 / total as f64 * 100.0) as u32
-            } else {
-                0
-            };
+            let pct = if total > 0 { (downloaded as f64 / total as f64 * 100.0) as u32 } else { 0 };
             tracing::info!(
                 downloaded_bytes = downloaded,
                 total_bytes = total,
@@ -1666,10 +1650,9 @@ async fn api_update_prepare(
         Ok(prepare_result) => {
             Json(serde_json::to_value(&prepare_result).unwrap_or_default()).into_response()
         }
-        Err(msg) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": msg})),
-        )
-            .into_response(),
+        Err(msg) => {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": msg})))
+                .into_response()
+        }
     }
 }

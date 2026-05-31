@@ -71,7 +71,7 @@ impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
             max_memory_bytes: 64 * 1024 * 1024, // 64MB
-            max_fuel: 1_000_000_000,             // 1B instructions
+            max_fuel: 1_000_000_000,            // 1B instructions
             plugin_dir: None,
         }
     }
@@ -82,6 +82,7 @@ impl Default for SandboxConfig {
 /// Replace with actual wasmtime/wasmer implementation when the dependency
 /// is added to the workspace.
 pub struct StubSandbox {
+    #[allow(dead_code)]
     config: SandboxConfig,
 }
 
@@ -103,9 +104,7 @@ impl PluginSandbox for StubSandbox {
     }
 
     fn load_plugin(&mut self, _name: &str, _wasm_bytes: &[u8]) -> PdfResult<()> {
-        Err(PdfModuleError::Extraction(
-            "WASM plugin sandbox not yet implemented".to_string(),
-        ))
+        Err(PdfModuleError::Extraction("WASM plugin sandbox not yet implemented".to_string()))
     }
 
     fn unload_plugin(&mut self, _name: &str) -> PdfResult<()> {
