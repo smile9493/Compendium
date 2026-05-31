@@ -32,7 +32,7 @@
 
 use crate::version::UpdateCache;
 use crate::version::github::GithubClient;
-use crate::version::{detect_deployment_mode, current_version};
+use crate::version::{current_version, detect_deployment_mode};
 use pdf_core::ServerConfig;
 use pdf_core::management::WorkspaceRegistry;
 use std::sync::Arc;

@@ -389,8 +389,7 @@ impl GraphIndex {
         if let Ok(content) = fs::read_to_string(&full_path) {
             let body = extract_markdown_body(&content).unwrap_or(&content);
             for link in extract_wikilink_targets(body) {
-                let normalized =
-                    link.strip_prefix("wiki/").unwrap_or(link.as_str()).to_lowercase();
+                let normalized = link.strip_prefix("wiki/").unwrap_or(link.as_str()).to_lowercase();
                 if let Some(to_idx) = self
                     .path_to_node
                     .iter()

@@ -11,12 +11,19 @@ mod platform;
 pub mod post_compile;
 mod resources;
 
+#[allow(unused_imports)]
 pub use extract::*;
+#[allow(unused_imports)]
 pub use index::*;
+#[allow(unused_imports)]
 pub use knowledge::*;
+#[allow(unused_imports)]
 pub use management::*;
+#[allow(unused_imports)]
 pub use meta_tools::*;
+#[allow(unused_imports)]
 pub use platform::*;
+#[allow(unused_imports)]
 pub use resources::*;
 
 use crate::protocol::{Content, ToolDefinition};
@@ -141,10 +148,7 @@ impl Default for ToolRegistry {
 
 // ── Wrapper functions for handlers with non-standard signatures ──
 
-fn wrap_init_knowledge_base<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_init_knowledge_base<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(knowledge::handle_init_knowledge_base(&ctx.workspace_registry, args))
 }
 
@@ -152,10 +156,7 @@ fn wrap_lint_wiki<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxF
     Box::pin(knowledge::handle_lint_wiki(&ctx.workspace_registry, args))
 }
 
-fn wrap_detect_stale_entries<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_detect_stale_entries<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(knowledge::handle_detect_stale_entries(&ctx.workspace_registry, args))
 }
 
@@ -180,10 +181,7 @@ fn wrap_get_agent_context<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value)
     Box::pin(index::handle_get_agent_context(&ctx.workspace_registry, args))
 }
 
-fn wrap_preview_wiki_patch<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_preview_wiki_patch<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(index::handle_preview_wiki_patch(&ctx.workspace_registry, args))
 }
 
@@ -206,10 +204,7 @@ fn wrap_suggest_links<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> 
     Box::pin(index::handle_suggest_links(&ctx.workspace_registry, args))
 }
 
-fn wrap_export_concept_map<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_export_concept_map<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(index::handle_export_concept_map(&ctx.workspace_registry, args))
 }
 
@@ -225,17 +220,11 @@ fn wrap_set_config<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> Box
     Box::pin(management::handle_set_config(&ctx.workspace_registry, args))
 }
 
-fn wrap_get_compile_status<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_get_compile_status<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(management::handle_get_compile_status(&ctx.workspace_registry, args))
 }
 
-fn wrap_list_quality_issues<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_list_quality_issues<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(management::handle_list_quality_issues(&ctx.workspace_registry, args))
 }
 
@@ -243,17 +232,11 @@ fn wrap_fix_suggest<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> Bo
     Box::pin(management::handle_fix_suggest(&ctx.workspace_registry, args))
 }
 
-fn wrap_apply_quality_gate<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_apply_quality_gate<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(management::handle_apply_quality_gate(&ctx.workspace_registry, args))
 }
 
-fn wrap_show_wiki_browser<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_show_wiki_browser<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     let _ = (ctx, args);
     Box::pin(management::handle_show_wiki_browser())
 }
@@ -263,17 +246,11 @@ fn wrap_list_workspaces<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -
     Box::pin(platform::handle_list_workspaces(&ctx.workspace_registry))
 }
 
-fn wrap_set_active_workspace<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_set_active_workspace<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(platform::handle_set_active_workspace(&ctx.workspace_registry, args))
 }
 
-fn wrap_register_workspace<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_register_workspace<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(platform::handle_register_workspace(&ctx.workspace_registry, args))
 }
 
@@ -297,24 +274,15 @@ fn wrap_sync_pull<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxF
     Box::pin(platform::handle_sync_pull(&ctx.workspace_registry, args))
 }
 
-fn wrap_submit_patch_proposal<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_submit_patch_proposal<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(platform::handle_submit_patch_proposal(&ctx.workspace_registry, args))
 }
 
-fn wrap_apply_patch_proposal<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_apply_patch_proposal<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(platform::handle_apply_patch_proposal(&ctx.workspace_registry, args))
 }
 
-fn wrap_list_patch_proposals<'a>(
-    ctx: &'a ToolContext,
-    args: &'a serde_json::Value,
-) -> BoxFut<'a> {
+fn wrap_list_patch_proposals<'a>(ctx: &'a ToolContext, args: &'a serde_json::Value) -> BoxFut<'a> {
     Box::pin(platform::handle_list_patch_proposals(&ctx.workspace_registry, args))
 }
 
@@ -327,12 +295,8 @@ fn build_tool_registry() -> ToolRegistry {
     r.register("extract_structured", |ctx, args| {
         Box::pin(extract::handle_extract_structured(ctx, args))
     });
-    r.register("get_page_count", |ctx, args| {
-        Box::pin(extract::handle_get_page_count(ctx, args))
-    });
-    r.register("search_keywords", |ctx, args| {
-        Box::pin(extract::handle_search_keywords(ctx, args))
-    });
+    r.register("get_page_count", |ctx, args| Box::pin(extract::handle_get_page_count(ctx, args)));
+    r.register("search_keywords", |ctx, args| Box::pin(extract::handle_search_keywords(ctx, args)));
     r.register("extrude_to_server_wiki", |ctx, args| {
         Box::pin(extract::handle_extrude_to_server_wiki(ctx, args))
     });
@@ -348,18 +312,14 @@ fn build_tool_registry() -> ToolRegistry {
     r.register("compile_to_wiki", |ctx, args| {
         Box::pin(knowledge::handle_compile_to_wiki(ctx, args))
     });
-    r.register("compile_image", |ctx, args| {
-        Box::pin(knowledge::handle_compile_image(ctx, args))
-    });
+    r.register("compile_image", |ctx, args| Box::pin(knowledge::handle_compile_image(ctx, args)));
     r.register("compile_uploaded_pdf", |ctx, args| {
         Box::pin(knowledge::handle_compile_uploaded_pdf(ctx, args))
     });
     r.register("incremental_compile", |ctx, args| {
         Box::pin(knowledge::handle_incremental_compile(ctx, args))
     });
-    r.register("micro_compile", |ctx, args| {
-        Box::pin(knowledge::handle_micro_compile(ctx, args))
-    });
+    r.register("micro_compile", |ctx, args| Box::pin(knowledge::handle_micro_compile(ctx, args)));
     r.register("aggregate_entries", |ctx, args| {
         Box::pin(knowledge::handle_aggregate_entries(ctx, args))
     });
@@ -386,12 +346,8 @@ fn build_tool_registry() -> ToolRegistry {
     });
 
     // ── Index tools ──
-    r.register("search_knowledge", |ctx, args| {
-        Box::pin(index::handle_search_knowledge(ctx, args))
-    });
-    r.register("rebuild_index", |ctx, args| {
-        Box::pin(index::handle_rebuild_index(ctx, args))
-    });
+    r.register("search_knowledge", |ctx, args| Box::pin(index::handle_search_knowledge(ctx, args)));
+    r.register("rebuild_index", |ctx, args| Box::pin(index::handle_rebuild_index(ctx, args)));
     r.register("get_entry_context", wrap_get_entry_context);
     r.register("get_wiki_entry", wrap_get_wiki_entry);
     r.register("get_agent_context", wrap_get_agent_context);

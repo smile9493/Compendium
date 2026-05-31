@@ -394,12 +394,11 @@ impl WikiStorage {
         filename: &str,
         data: &[u8],
     ) -> PdfResult<PathBuf> {
-        let attachments_dir = self
-            .wiki_dir()
-            .join(domain)
-            .join(format!("{entry_name}_attachments"));
-        fs::create_dir_all(&attachments_dir)
-            .map_err(|e| PdfModuleError::Storage(format!("Failed to create attachments dir: {e}")))?;
+        let attachments_dir =
+            self.wiki_dir().join(domain).join(format!("{entry_name}_attachments"));
+        fs::create_dir_all(&attachments_dir).map_err(|e| {
+            PdfModuleError::Storage(format!("Failed to create attachments dir: {e}"))
+        })?;
         let path = attachments_dir.join(filename);
         fs::write(&path, data)
             .map_err(|e| PdfModuleError::Storage(format!("Failed to write attachment: {e}")))?;

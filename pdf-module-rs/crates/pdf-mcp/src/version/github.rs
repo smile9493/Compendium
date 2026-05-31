@@ -63,9 +63,8 @@ impl GithubClient {
             .call()
             .map_err(|e| format!("GitHub API request failed: {e}"))?;
 
-        let release: GithubRelease = response
-            .into_json()
-            .map_err(|e| format!("Failed to parse GitHub response: {e}"))?;
+        let release: GithubRelease =
+            response.into_json().map_err(|e| format!("Failed to parse GitHub response: {e}"))?;
 
         Ok(ReleaseInfo {
             tag_name: release.tag_name,
@@ -109,9 +108,8 @@ pub fn check_for_updates(
     let current_parts = [current.major, current.minor, current.build, current.patch];
     let latest_parts = parse_version_tag(&release.tag_name);
 
-    let update_available = latest_parts
-        .as_ref()
-        .is_some_and(|parts| is_newer(&current_parts, parts));
+    let update_available =
+        latest_parts.as_ref().is_some_and(|parts| is_newer(&current_parts, parts));
 
     Ok(UpdateCheckResult {
         current_version: current.clone(),
@@ -144,10 +142,8 @@ pub fn download_release_asset(
         .call()
         .map_err(|e| format!("Download failed: {e}"))?;
 
-    let total_size = response
-        .header("Content-Length")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(asset.size);
+    let total_size =
+        response.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(asset.size);
 
     let mut reader = response.into_reader();
     let mut file = std::fs::File::create(&output_path)
@@ -190,9 +186,7 @@ pub fn prepare_update(
     let current_parts = [current.major, current.minor, current.build, current.patch];
     let latest_parts = parse_version_tag(&release.tag_name);
 
-    let is_update = latest_parts
-        .as_ref()
-        .is_some_and(|parts| is_newer(&current_parts, parts));
+    let is_update = latest_parts.as_ref().is_some_and(|parts| is_newer(&current_parts, parts));
 
     if !is_update {
         return UpdatePrepareResult {
@@ -217,10 +211,7 @@ pub fn prepare_update(
                 path.display()
             ),
         },
-        Err(e) => UpdatePrepareResult {
-            status: UpdatePrepareStatus::Error,
-            message: e,
-        },
+        Err(e) => UpdatePrepareResult { status: UpdatePrepareStatus::Error, message: e },
     }
 }
 

@@ -121,27 +121,17 @@ struct CachedCheck {
 
 impl UpdateCache {
     pub fn new(ttl_secs: u64) -> Self {
-        Self {
-            inner: ParkingLotMutex::new(None),
-            ttl: Duration::from_secs(ttl_secs),
-        }
+        Self { inner: ParkingLotMutex::new(None), ttl: Duration::from_secs(ttl_secs) }
     }
 
     pub fn get(&self) -> Option<UpdateCheckResult> {
         let guard = self.inner.lock();
         let cached = guard.as_ref()?;
-        if cached.cached_at.elapsed() > self.ttl {
-            None
-        } else {
-            Some(cached.result.clone())
-        }
+        if cached.cached_at.elapsed() > self.ttl { None } else { Some(cached.result.clone()) }
     }
 
     pub fn set(&self, result: UpdateCheckResult) {
-        *self.inner.lock() = Some(CachedCheck {
-            result,
-            cached_at: Instant::now(),
-        });
+        *self.inner.lock() = Some(CachedCheck { result, cached_at: Instant::now() });
     }
 
     pub fn invalidate(&self) {
@@ -153,30 +143,14 @@ impl UpdateCache {
 ///
 /// Environment vars are set by `build.rs` (VERSION file) and Cargo itself.
 pub fn current_version(deployment_mode: DeploymentMode) -> VersionInfo {
-    let major: u32 = option_env!("VERSION_MAJOR")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let minor: u32 = option_env!("VERSION_MINOR")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let build: u32 = option_env!("VERSION_BUILD")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let patch: u32 = option_env!("VERSION_PATCH")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let major: u32 = option_env!("VERSION_MAJOR").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor: u32 = option_env!("VERSION_MINOR").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let build: u32 = option_env!("VERSION_BUILD").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let patch: u32 = option_env!("VERSION_PATCH").and_then(|s| s.parse().ok()).unwrap_or(0);
     let display = format!("{major}.{minor}.{build}.{patch}");
     let semver = env!("CARGO_PKG_VERSION").to_string();
 
-    VersionInfo {
-        major,
-        minor,
-        build,
-        patch,
-        display,
-        semver,
-        deployment_mode,
-    }
+    VersionInfo { major, minor, build, patch, display, semver, deployment_mode }
 }
 
 /// Detect the deployment mode from environment or runtime signals.
